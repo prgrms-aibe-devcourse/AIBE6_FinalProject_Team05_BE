@@ -15,5 +15,8 @@ out/
 Thumbs.db
 
 ### AI Tools ###
-.claude/
 .omc/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.md

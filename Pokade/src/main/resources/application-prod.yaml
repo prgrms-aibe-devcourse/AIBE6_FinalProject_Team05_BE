@@ -12,6 +12,10 @@ spring:
       ddl-auto: validate
     show-sql: false
 
+  sql:
+    init:
+      mode: never
+
   data:
     redis:
       host: ${REDIS_HOST}
