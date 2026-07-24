@@ -1,12 +1,12 @@
-package com.pokade.card.service;
+package com.pokade.domain.card.service;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.pokade.card.dto.CardResponse;
-import com.pokade.card.repository.CardRepository;
+import com.pokade.domain.card.dto.CardResponse;
+import com.pokade.domain.card.repository.CardRepository;
 
 import lombok.RequiredArgsConstructor;
 

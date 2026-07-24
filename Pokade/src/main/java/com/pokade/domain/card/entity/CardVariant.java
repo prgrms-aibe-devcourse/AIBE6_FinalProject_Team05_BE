@@ -1,4 +1,4 @@
-package com.pokade.card.entity;
+package com.pokade.domain.card.entity;
 
 import java.time.LocalDateTime;
 
