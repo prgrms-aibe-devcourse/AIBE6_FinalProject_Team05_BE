@@ -1,6 +1,8 @@
 package com.pokade.domain.trade;
 
 import com.pokade.domain.listing.Listing;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -74,7 +76,7 @@ public class Trade {
 
     public void complete() {
         if (FINAL_STATUSES.contains(this.status)) {
-            throw new IllegalStateException("이미 확정되었거나 취소된 거래입니다.");
+            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "이미 확정되었거나 취소된 거래입니다.");
         }
         this.status = TradeStatus.COMPLETED;
         this.confirmedAt = LocalDateTime.now();
@@ -83,7 +85,7 @@ public class Trade {
 
     public void cancel() {
         if (!CANCELLABLE_STATUSES.contains(this.status)) {
-            throw new IllegalStateException("체결 확정 전 단계의 거래만 취소할 수 있습니다.");
+            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "체결 확정 전 단계의 거래만 취소할 수 있습니다.");
         }
         this.status = TradeStatus.CANCELLED;
     }

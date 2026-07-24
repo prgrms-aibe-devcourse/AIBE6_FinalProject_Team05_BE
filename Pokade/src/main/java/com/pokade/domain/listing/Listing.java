@@ -8,6 +8,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -85,7 +87,7 @@ public class Listing {
 
     private void requireActive() {
         if (this.status != ListingStatus.ACTIVE) {
-            throw new IllegalStateException("ACTIVE 상태의 매물만 처리할 수 있습니다.");
+            throw new BusinessException(ErrorCode.INVALID_LISTING_STATUS);
         }
     }
 }
