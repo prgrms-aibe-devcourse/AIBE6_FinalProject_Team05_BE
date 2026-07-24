@@ -5,7 +5,7 @@
 
 -- ---------- 1. Scrydex 연동 카드 도메인 ----------
 
-CREATE TABLE expansions (
+CREATE TABLE IF NOT EXISTS expansions (
     id             VARCHAR(50) PRIMARY KEY,                 -- Scrydex 세트 ID(예: base1), AUTO_INCREMENT 아님
     name           VARCHAR(100) NOT NULL,                   -- 예: 'Base'
     series         VARCHAR(100),
@@ -19,7 +19,7 @@ CREATE TABLE expansions (
     synced_at      TIMESTAMP NOT NULL
 );
 
-CREATE TABLE cards (
+CREATE TABLE IF NOT EXISTS cards (
     id                        BIGSERIAL PRIMARY KEY,
     external_id               VARCHAR(50) UNIQUE,             -- Pokemon TCG API 원본 ID → Scrydex ID(예: base1-4)로 재사용
     name                      VARCHAR(200) NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE cards (
     synced_at                 TIMESTAMP
 );
 
-CREATE TABLE card_variants (
+CREATE TABLE IF NOT EXISTS card_variants (
     id            BIGSERIAL PRIMARY KEY,
     card_id       BIGINT NOT NULL REFERENCES cards(id),
     variant_name  VARCHAR(100) NOT NULL,                      -- 예: unlimitedHolofoil, firstEditionShadowlessHolofoil
@@ -56,9 +56,9 @@ CREATE TABLE card_variants (
 );
 
 -- 대표 변형은 카드당 정확히 1개만 허용 (dbdiagram.io는 부분 인덱스 미지원이라 그림엔 표현 불가했던 제약)
-CREATE UNIQUE INDEX uk_variants_one_primary ON card_variants(card_id) WHERE is_primary = TRUE;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_variants_one_primary ON card_variants(card_id) WHERE is_primary = TRUE;
 
-CREATE TABLE card_prices (
+CREATE TABLE IF NOT EXISTS card_prices (
     id                BIGSERIAL PRIMARY KEY,
     variant_id        BIGINT NOT NULL REFERENCES card_variants(id),
     price_type        VARCHAR(10) NOT NULL,                   -- 'raw' | 'graded'
@@ -80,7 +80,7 @@ CREATE TABLE card_prices (
     UNIQUE (variant_id, price_type, grade, company)
 );
 
-CREATE TABLE price_snapshots (
+CREATE TABLE IF NOT EXISTS price_snapshots (
     id             BIGSERIAL PRIMARY KEY,
     variant_id     BIGINT NOT NULL REFERENCES card_variants(id),
     price_type     VARCHAR(10) NOT NULL,
@@ -93,7 +93,7 @@ CREATE TABLE price_snapshots (
     UNIQUE (variant_id, price_type, grade, company, snapshot_date)
 );
 
-CREATE TABLE sync_logs (
+CREATE TABLE IF NOT EXISTS sync_logs (
     id              BIGSERIAL PRIMARY KEY,
     sync_type       VARCHAR(20) NOT NULL,                     -- EXPANSION / CARD / PRICE / SNAPSHOT
     target          VARCHAR(100),                              -- 세트 ID 등
@@ -107,7 +107,7 @@ CREATE TABLE sync_logs (
 
 -- ---------- 2. 회원 ----------
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id                    BIGSERIAL PRIMARY KEY,
     email                 VARCHAR(255) UNIQUE NOT NULL,
     password              VARCHAR(255),                        -- 소셜 로그인 시 null 가능
@@ -130,7 +130,7 @@ CREATE TABLE users (
 
 -- ---------- 3. 거래 ----------
 
-CREATE TABLE listings (
+CREATE TABLE IF NOT EXISTS listings (
     id                  BIGSERIAL PRIMARY KEY,
     card_id             BIGINT NOT NULL REFERENCES cards(id),
     seller_id           BIGINT NOT NULL REFERENCES users(id),
@@ -143,14 +143,14 @@ CREATE TABLE listings (
     updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE listing_images (
+CREATE TABLE IF NOT EXISTS listing_images (
     id           BIGSERIAL PRIMARY KEY,
     listing_id   BIGINT NOT NULL REFERENCES listings(id),
     image_url    VARCHAR(255) NOT NULL,
     sort_order   INTEGER DEFAULT 0
 );
 
-CREATE TABLE trades (
+CREATE TABLE IF NOT EXISTS trades (
     id             BIGSERIAL PRIMARY KEY,
     listing_id     BIGINT NOT NULL REFERENCES listings(id),
     buyer_id       BIGINT NOT NULL REFERENCES users(id),
@@ -162,7 +162,7 @@ CREATE TABLE trades (
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE payments (
+CREATE TABLE IF NOT EXISTS payments (
     id            BIGSERIAL PRIMARY KEY,
     trade_id      BIGINT NOT NULL UNIQUE REFERENCES trades(id),
     buyer_id      BIGINT NOT NULL REFERENCES users(id),
@@ -176,7 +176,7 @@ CREATE TABLE payments (
 
 -- ---------- 4. 포트폴리오 / AI 진단 / 포인트 ----------
 
-CREATE TABLE portfolio_items (
+CREATE TABLE IF NOT EXISTS portfolio_items (
     id               BIGSERIAL PRIMARY KEY,
     user_id          BIGINT NOT NULL REFERENCES users(id),
     card_id          BIGINT NOT NULL REFERENCES cards(id),
@@ -187,7 +187,7 @@ CREATE TABLE portfolio_items (
     trade_id         BIGINT UNIQUE REFERENCES trades(id)
 );
 
-CREATE TABLE grade_results (
+CREATE TABLE IF NOT EXISTS grade_results (
     id                  BIGSERIAL PRIMARY KEY,
     user_id             BIGINT NOT NULL REFERENCES users(id),
     card_id             BIGINT NOT NULL REFERENCES cards(id),
@@ -205,14 +205,14 @@ CREATE TABLE grade_results (
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE grade_result_images (
+CREATE TABLE IF NOT EXISTS grade_result_images (
     id                 BIGSERIAL PRIMARY KEY,
     grade_result_id    BIGINT NOT NULL REFERENCES grade_results(id),
     photo_type         VARCHAR(20),                             -- FRONT/BACK/CORNER_TL/CORNER_TR/CORNER_BL/CORNER_BR
     image_url          VARCHAR(255) NOT NULL
 );
 
-CREATE TABLE point_transactions (
+CREATE TABLE IF NOT EXISTS point_transactions (
     id                        BIGSERIAL PRIMARY KEY,
     user_id                   BIGINT NOT NULL REFERENCES users(id),
     type                      VARCHAR(20) NOT NULL,             -- CHARGE / USE / REFUND
@@ -224,7 +224,7 @@ CREATE TABLE point_transactions (
 
 -- ---------- 5. 워치리스트 / 알림 / 챗봇 ----------
 
-CREATE TABLE watchlist (
+CREATE TABLE IF NOT EXISTS watchlist (
     id                  BIGSERIAL PRIMARY KEY,
     user_id             BIGINT NOT NULL REFERENCES users(id),
     card_id             BIGINT NOT NULL REFERENCES cards(id),
@@ -237,7 +237,7 @@ CREATE TABLE watchlist (
 );
 -- 참고: 워치리스트 유저당 20개 제한은 애플리케이션 레벨에서 검증(DB 제약 아님)
 
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
     id           BIGSERIAL PRIMARY KEY,
     user_id      BIGINT NOT NULL REFERENCES users(id),
     type         VARCHAR(30) NOT NULL,                          -- PRICE_TARGET / TRADE_CONFIRMED / LISTING_STALE 등
@@ -246,7 +246,7 @@ CREATE TABLE notifications (
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE chat_messages (
+CREATE TABLE IF NOT EXISTS chat_messages (
     id           BIGSERIAL PRIMARY KEY,
     session_id   VARCHAR(100) NOT NULL,
     user_id      BIGINT REFERENCES users(id),
@@ -257,7 +257,7 @@ CREATE TABLE chat_messages (
 
 -- ---------- 6. 신고 / 제재 ----------
 
-CREATE TABLE reports (
+CREATE TABLE IF NOT EXISTS reports (
     id            BIGSERIAL PRIMARY KEY,
     target_type   VARCHAR(20) NOT NULL,                         -- LISTING / USER / TRADE
     target_id     BIGINT NOT NULL,
@@ -269,7 +269,7 @@ CREATE TABLE reports (
     -- 🔴 DISMISSED된 신고도 이 유니크 제약상 영구 재신고 불가 - 팀 확인 필요
 );
 
-CREATE TABLE user_sanctions (
+CREATE TABLE IF NOT EXISTS user_sanctions (
     id           BIGSERIAL PRIMARY KEY,
     user_id      BIGINT NOT NULL REFERENCES users(id),
     type         VARCHAR(30),                                    -- WARNING / LISTING_BAN / ACCOUNT_SUSPEND
