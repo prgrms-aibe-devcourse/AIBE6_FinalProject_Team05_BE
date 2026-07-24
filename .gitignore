@@ -13,3 +13,10 @@ out/
 ### OS ###
 .DS_Store
 Thumbs.db
+
+### AI Tools ###
+.omc/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.md

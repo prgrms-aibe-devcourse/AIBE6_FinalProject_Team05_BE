@@ -4,12 +4,16 @@ spring:
     username: ${DB_USER:pokade}
     password: ${DB_PASSWORD:pokade}
     driver-class-name: org.postgresql.Driver
-  
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: true
+    defer-datasource-initialization: true
+
+  sql:
+    init:
+       mode: always
 
   data:
     redis:
