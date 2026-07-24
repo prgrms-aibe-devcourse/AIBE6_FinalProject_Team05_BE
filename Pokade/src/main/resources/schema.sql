@@ -143,6 +143,23 @@ CREATE TABLE IF NOT EXISTS listings (
     updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS buy_offers (
+    id                  BIGSERIAL PRIMARY KEY,
+    card_id             BIGINT NOT NULL REFERENCES cards(id),
+    buyer_id            BIGINT NOT NULL REFERENCES users(id),
+    variant_id          BIGINT REFERENCES card_variants(id),
+    price               INTEGER NOT NULL,
+    grade               VARCHAR(10),
+    status              VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',  -- ACTIVE/MATCHED/PARTIAL/EXPIRED/CANCELLED
+    expires_at          TIMESTAMP,                              -- 입찰 유효기간
+    price_updated_at    TIMESTAMP,                              -- 매칭 시간우선순위 기준(가격 정정 시 갱신)
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+CREATE INDEX IF NOT EXISTS idx_buy_offers_orderbook
+    ON buy_offers(card_id, variant_id, status, price DESC);
+
 CREATE TABLE IF NOT EXISTS listing_images (
     id           BIGSERIAL PRIMARY KEY,
     listing_id   BIGINT NOT NULL REFERENCES listings(id),
