@@ -41,3 +41,7 @@ out/
 .env.local
 *.env
 !.env.example
+
+### AI Tools ###
+.claude/
+.omc/
