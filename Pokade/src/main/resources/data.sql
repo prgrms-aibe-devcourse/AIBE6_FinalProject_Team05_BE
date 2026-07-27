@@ -86,3 +86,9 @@ INSERT INTO cards (external_id, name, set_name, type, rarity, image_url, superty
 INSERT INTO card_variants (card_id, variant_name, is_primary, synced_at) VALUES ((SELECT id FROM cards WHERE external_id = 'sv10_ja-1'), 'normal', TRUE, now()) ON CONFLICT (card_id, variant_name) DO NOTHING;
 INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high, market, currency, change_1d_pct, change_7d_pct, change_14d_pct, change_30d_pct, change_90d_pct, change_180d_pct, change_7d_amount, updated_at) VALUES ((SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv10_ja-1') AND variant_name = 'normal'), 'graded', '10', 'PSA', 5.0, 5.6, 6.2, 5.7, 'JPY', NULL, 0.0, NULL, 1.79, 3.64, NULL, 0.0, now()) ON CONFLICT (variant_id, price_type, grade, company) DO NOTHING;
 INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high, market, currency, change_1d_pct, change_7d_pct, change_14d_pct, change_30d_pct, change_90d_pct, change_180d_pct, change_7d_amount, updated_at) VALUES ((SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv10_ja-1') AND variant_name = 'normal'), 'graded', '9', 'PSA', 2.0, 2.3, 2.6, 2.35, 'JPY', NULL, 0.0, NULL, 2.22, 4.44, NULL, 0.0, now()) ON CONFLICT (variant_id, price_type, grade, company) DO NOTHING;
+
+-- ---------- 테스트용 유저 (id=1, AI 등급 진단 로컬 테스트용) ----------
+INSERT INTO users (id, email, password, nickname, provider, role, status, terms_agreed_at)
+VALUES (1, 'test@pokade.local', NULL, 'tester', 'LOCAL', 'USER', 'ACTIVE', now())
+ON CONFLICT (id) DO NOTHING;
+SELECT setval('users_id_seq', GREATEST((SELECT MAX(id) FROM users), 1));

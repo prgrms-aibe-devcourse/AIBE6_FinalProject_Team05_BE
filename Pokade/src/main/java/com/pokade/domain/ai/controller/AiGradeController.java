@@ -71,7 +71,8 @@ public class AiGradeController {
     private Long extractUserId(Principal principal) {
         // TODO: OAuth2 UserDetails에서 userId 추출로 교체
         if (principal == null) {
-            throw new IllegalStateException("인증이 필요합니다.");
+            // TODO: 로컬 테스트용 임시 고정 userId — 인증 연동 후 제거할 것
+            return 1L;
         }
         // 임시: principal.getName()이 userId인 경우 (개발 단계)
         try {
