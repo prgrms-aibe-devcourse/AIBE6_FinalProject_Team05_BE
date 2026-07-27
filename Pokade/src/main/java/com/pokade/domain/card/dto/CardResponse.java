@@ -1,8 +1,8 @@
-package com.pokade.card.dto;
+package com.pokade.domain.card.dto;
 
 import java.util.List;
 
-import com.pokade.card.entity.Card;
+import com.pokade.domain.card.entity.Card;
 
 public record CardResponse(
         Long id,

@@ -1,4 +1,4 @@
-package com.pokade.card.controller;
+package com.pokade.domain.card.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -19,8 +19,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
-import com.pokade.card.dto.CardResponse;
-import com.pokade.card.service.CardService;
+import com.pokade.domain.card.dto.CardResponse;
+import com.pokade.domain.card.service.CardService;
 
 @WebMvcTest(CardController.class)
 @AutoConfigureMockMvc(addFilters = false)
