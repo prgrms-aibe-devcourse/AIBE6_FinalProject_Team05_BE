@@ -12,8 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -140,7 +142,7 @@ public class AiGradeService {
                     .user(u -> {
                         u.text(buildPrompt());
                         files.forEach(file -> u.media(
-                                org.springframework.util.MimeTypeUtils.IMAGE_JPEG,
+                                MimeTypeUtils.IMAGE_JPEG,
                                 resizeForVision(file)));
                     })
                     .options(OpenAiChatOptions.builder().model(gradeModel))
@@ -155,7 +157,7 @@ public class AiGradeService {
         }
     }
 
-    private org.springframework.core.io.Resource resizeForVision(MultipartFile file) {
+    private Resource resizeForVision(MultipartFile file) {
         try {
             return imageResizer.resizeForVision(file);
         } catch (IOException e) {
