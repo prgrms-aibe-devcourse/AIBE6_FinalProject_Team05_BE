@@ -16,9 +16,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -32,6 +34,8 @@ public class AiGradeService {
 
     private final ChatClient chatClient;
     private final S3UploadService s3UploadService;
+    private final ImageResizer imageResizer;
+    private final ImageQualityChecker imageQualityChecker;
     private final GradeResultRepository gradeResultRepository;
     private final GradeResultImageRepository gradeResultImageRepository;
 
@@ -82,7 +86,7 @@ public class AiGradeService {
         Map<PhotoType, String> imageUrls = uploadImages(request);
 
         // ── Vision API 호출 → 등급 산출 ──────────────────────────────────────
-        VisionResult visionResult = callVisionApi(request);
+        VisionResult visionResult = evaluateQuality(request);
 
         // ── 결과 저장 ────────────────────────────────────────────────────────
         GradeResult gradeResult = buildGradeResult(
@@ -116,6 +120,15 @@ public class AiGradeService {
         return urls;
     }
 
+    private VisionResult evaluateQuality(GradeRequest request) {
+        Optional<String> localFailReason = imageQualityChecker.checkAll(request);
+        if (localFailReason.isPresent()) {
+            log.info("로컬 이미지 품질 사전 검사 실패로 Vision 호출 생략(토큰 절약): {}", localFailReason.get());
+            return VisionResult.localQualityFail(localFailReason.get());
+        }
+        return callVisionApi(request);
+    }
+
     private VisionResult callVisionApi(GradeRequest request) {
         List<MultipartFile> files = List.of(
                 request.front(), request.back(),
@@ -128,7 +141,7 @@ public class AiGradeService {
                         u.text(buildPrompt());
                         files.forEach(file -> u.media(
                                 org.springframework.util.MimeTypeUtils.IMAGE_JPEG,
-                                file.getResource()));
+                                resizeForVision(file)));
                     })
                     .options(OpenAiChatOptions.builder().model(gradeModel))
                     .call()
@@ -139,6 +152,14 @@ public class AiGradeService {
         } catch (Exception e) {
             log.error("Vision API 호출 실패", e);
             throw new AiServiceUnavailableException("AI 등급 진단 서비스에 일시적인 오류가 발생했습니다.");
+        }
+    }
+
+    private org.springframework.core.io.Resource resizeForVision(MultipartFile file) {
+        try {
+            return imageResizer.resizeForVision(file);
+        } catch (IOException e) {
+            throw new RuntimeException("이미지 리사이즈 실패: " + file.getOriginalFilename(), e);
         }
     }
 
