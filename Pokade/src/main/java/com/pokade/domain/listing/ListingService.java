@@ -2,6 +2,7 @@ package com.pokade.domain.listing;
 
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
+import com.pokade.domain.listing.dto.ListingSummaryResponse;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,13 @@ public class ListingService {
 
         Listing saved = listingRepository.save(listing);
         return ListingResponse.of(saved, imageUrls);
+    }
+
+    public List<ListingSummaryResponse> getActiveListings(Long cardId) {
+        return listingRepository.findByCardIdAndStatusOrderByPriceAsc(cardId, ListingStatus.ACTIVE)
+                .stream()
+                .map(ListingSummaryResponse::of)
+                .toList();
     }
 
     private void validateNotDuplicate(Long sellerId, Long cardId, Long variantId) {
