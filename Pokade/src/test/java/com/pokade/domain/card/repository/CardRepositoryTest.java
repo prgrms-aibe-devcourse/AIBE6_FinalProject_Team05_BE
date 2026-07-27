@@ -1,4 +1,4 @@
-package com.pokade.card.repository;
+package com.pokade.domain.card.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -13,8 +13,8 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
-import com.pokade.card.entity.Card;
-import com.pokade.card.entity.Expansion;
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.entity.Expansion;
 import com.pokade.support.AbstractIntegrationTest;
 
 import jakarta.persistence.EntityManager;

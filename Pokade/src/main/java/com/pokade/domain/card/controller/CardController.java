@@ -1,4 +1,4 @@
-package com.pokade.card.controller;
+package com.pokade.domain.card.controller;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -8,8 +8,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.pokade.card.dto.CardResponse;
-import com.pokade.card.service.CardService;
+import com.pokade.domain.card.dto.CardResponse;
+import com.pokade.domain.card.service.CardService;
 
 import lombok.RequiredArgsConstructor;
 

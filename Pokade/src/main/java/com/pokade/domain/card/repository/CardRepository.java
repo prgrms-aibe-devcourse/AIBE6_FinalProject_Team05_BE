@@ -1,4 +1,4 @@
-package com.pokade.card.repository;
+package com.pokade.domain.card.repository;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import com.pokade.card.entity.Card;
+import com.pokade.domain.card.entity.Card;
 
 public interface CardRepository extends JpaRepository<Card, Long> {
 
