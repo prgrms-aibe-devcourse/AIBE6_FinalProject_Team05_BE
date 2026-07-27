@@ -38,4 +38,13 @@ public class ListingController {
     public ResponseEntity<List<ListingSummaryResponse>> getActiveListings(@RequestParam Long cardId) {
         return ResponseEntity.ok(listingService.getActiveListings(cardId));
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<List<ListingSummaryResponse>> getMyListings(
+            // TODO: 인증 파트 완성되면 SecurityContext에서 sellerId 추출하는 방식으로 교체
+            @RequestHeader("X-USER-ID") Long sellerId,
+            @RequestParam(required = false) ListingStatus status
+    ) {
+        return ResponseEntity.ok(listingService.getMyListings(sellerId, status));
+    }
 }

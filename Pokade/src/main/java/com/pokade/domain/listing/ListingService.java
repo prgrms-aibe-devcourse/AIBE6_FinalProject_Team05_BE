@@ -46,6 +46,16 @@ public class ListingService {
                 .toList();
     }
 
+    public List<ListingSummaryResponse> getMyListings(Long sellerId, ListingStatus status) {
+        List<Listing> listings = status != null
+                ? listingRepository.findBySellerIdAndStatus(sellerId, status)
+                : listingRepository.findBySellerId(sellerId);
+
+        return listings.stream()
+                .map(ListingSummaryResponse::of)
+                .toList();
+    }
+
     private void validateNotDuplicate(Long sellerId, Long cardId, Long variantId) {
         // TODO: "중복 등록" 기준 팀 확정 필요 (현재는 동일 판매자가 같은 카드/variant에 ACTIVE 매물을 이미 가진 경우로 간주)
         boolean exists = listingRepository.existsBySellerIdAndCardIdAndVariantIdAndStatus(
