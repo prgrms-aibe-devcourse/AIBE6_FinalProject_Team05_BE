@@ -1,4 +1,4 @@
-package com.pokade.global;
+package com.pokade.global.config;
 
 import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
