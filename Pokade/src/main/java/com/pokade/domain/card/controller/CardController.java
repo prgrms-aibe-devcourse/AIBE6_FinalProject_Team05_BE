@@ -1,5 +1,7 @@
 package com.pokade.domain.card.controller;
 
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -25,16 +27,27 @@ public class CardController {
 
     @GetMapping
     public ApiResponse<Page<CardResponse>> search(
-            @RequestParam(required = false) String name,
             @RequestParam(required = false) String types,
             @RequestParam(required = false) String rarity,
             @RequestParam(required = false) String expansionId,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ApiResponse.ok(cardService.search(name, types, rarity, expansionId, pageable));
+        return ApiResponse.ok(cardService.search(types, rarity, expansionId, pageable));
+    }
+
+    @GetMapping("/search")
+    public ApiResponse<Page<CardResponse>> searchByKeyword(
+            @RequestParam(required = false) String q,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ApiResponse.ok(cardService.searchByKeyword(q, pageable));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<CardDetailResponse> detail(@PathVariable Long id) {
         return ApiResponse.ok(cardService.getDetail(id));
+    }
+
+    @GetMapping("/{id}/related")
+    public ApiResponse<List<CardResponse>> related(@PathVariable Long id) {
+        return ApiResponse.ok(cardService.getRelated(id));
     }
 }
