@@ -6,11 +6,11 @@ import com.pokade.domain.listing.ListingRepository;
 import com.pokade.domain.listing.ListingStatus;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.repository.BuyOfferRepository;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -26,14 +26,13 @@ public class PriceService {
 
     public PriceSummaryResponse getSummary(Long cardId, Long variantId) {
         if (!cardRepository.existsById(cardId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다: " + cardId);
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
         }
 
         Long resolvedVariantId = variantId != null
                 ? variantId
                 : cardVariantRepository.findPrimaryVariantId(cardId)
-                        .orElseThrow(() -> new ResponseStatusException(
-                                HttpStatus.NOT_FOUND, "대표 변형이 지정되지 않은 카드입니다: " + cardId));
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
 
         Integer buyPrice = listingRepository
                 .findLowestActivePrice(cardId, resolvedVariantId, ListingStatus.ACTIVE)
