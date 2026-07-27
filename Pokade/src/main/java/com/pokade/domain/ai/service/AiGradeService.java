@@ -82,8 +82,8 @@ public class AiGradeService {
         //             .build());
         // }
 
-        // ── S3 이미지 업로드 ─────────────────────────────────────────────────
-        Map<PhotoType, String> imageUrls = uploadImages(request);
+        // ── S3 이미지 업로드 (imageKeys는 S3 key — 버킷이 프라이빗이라 조회 시 presigned URL로 변환 필요) ──
+        Map<PhotoType, String> imageKeys = uploadImages(request);
 
         // ── Vision API 호출 → 등급 산출 ──────────────────────────────────────
         VisionResult visionResult = evaluateQuality(request);
@@ -94,12 +94,12 @@ public class AiGradeService {
                 isFreeRetry ? request.retryOfId() : null);
         gradeResultRepository.save(gradeResult);
 
-        // 이미지 URL 연결 저장
-        imageUrls.forEach((type, url) ->
+        // 이미지 key 연결 저장 (imageUrl 컬럼에는 S3 key를 저장 — 프라이빗 버킷이라 고정 URL이 아님)
+        imageKeys.forEach((type, key) ->
                 gradeResultImageRepository.save(GradeResultImage.builder()
                         .gradeResultId(gradeResult.getId())
                         .photoType(type)
-                        .imageUrl(url)
+                        .imageUrl(key)
                         .build()));
 
         return GradeResponse.from(gradeResult);
