@@ -211,6 +211,19 @@ class CardServiceTest {
     }
 
     @Test
+    @DisplayName("t12 트레이너 카드인데 세트 정보(expansion)가 없으면 빈 목록을 반환한다")
+    void t12() {
+        Card card = Card.builder().id(1L).name("Professor's Research").build();
+        given(cardRepository.findById(1L)).willReturn(Optional.of(card));
+
+        List<CardResponse> result = cardService.getRelated(1L);
+
+        assertThat(result).isEmpty();
+        verify(cardRepository, never()).findRelatedByPokedexNumber(any());
+        verify(cardRepository, never()).findRelatedByExpansion(any(), any());
+    }
+
+    @Test
     @DisplayName("t11 존재하지 않는 id로 유사 카드를 조회하면 CARD_NOT_FOUND 예외가 발생한다")
     void t11() {
         given(cardRepository.findById(999L)).willReturn(Optional.empty());

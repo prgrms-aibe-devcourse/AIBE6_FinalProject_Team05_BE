@@ -52,9 +52,14 @@ public class CardService {
     public List<CardResponse> getRelated(Long id) {
         Card card = cardRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
-        List<Card> related = hasPokedexNumber(card)
-                ? cardRepository.findRelatedByPokedexNumber(id)
-                : cardRepository.findRelatedByExpansion(card.getExpansion().getId(), id);
+        List<Card> related;
+        if (hasPokedexNumber(card)) {
+            related = cardRepository.findRelatedByPokedexNumber(id);
+        } else if (card.getExpansion() != null) {
+            related = cardRepository.findRelatedByExpansion(card.getExpansion().getId(), id);
+        } else {
+            related = List.of();
+        }
         return related.stream()
                 .map(CardResponse::from)
                 .toList();
