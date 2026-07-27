@@ -3,7 +3,8 @@ package com.pokade.global.exception;
 import com.pokade.domain.ai.service.AiGradeService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MultipartException;
@@ -12,40 +13,47 @@ import org.springframework.web.multipart.MultipartException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // 멀티파트 오류 - 사진 누락 등 (400)
-    @ExceptionHandler(MultipartException.class)
-    public ProblemDetail handleMultipart(MultipartException e) {
-        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
-        detail.setTitle("파일 업로드 오류");
-        detail.setDetail("사진 6장(앞면, 뒷면, 모서리 4장)이 모두 필요합니다.");
-        return detail;
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
+        ErrorCode errorCode = e.getErrorCode();
+        return ResponseEntity.status(errorCode.getStatus())
+                .body(ErrorResponse.of(errorCode, e.getMessage()));
     }
 
-    // 포인트 부족 (402)
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException e) {
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .orElse(ErrorCode.INVALID_INPUT.getMessage());
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, message));
+    }
+
     @ExceptionHandler(IllegalStateException.class)
-    public ProblemDetail handleIllegalState(IllegalStateException e) {
-        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.PAYMENT_REQUIRED);
-        detail.setTitle("포인트 부족");
-        detail.setDetail(e.getMessage());
-        return detail;
+    public ResponseEntity<ErrorResponse> handleIllegalStateException(IllegalStateException e) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, e.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException e) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, e.getMessage()));
+    }
+
+    // 멀티파트 오류 - 사진 누락 등 (400)
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ErrorResponse> handleMultipart(MultipartException e) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, "사진 6장(앞면, 뒷면, 모서리 4장)이 모두 필요합니다."));
     }
 
     // AI 서비스 오류 (503)
     @ExceptionHandler(AiGradeService.AiServiceUnavailableException.class)
-    public ProblemDetail handleAiUnavailable(AiGradeService.AiServiceUnavailableException e) {
+    public ResponseEntity<ErrorResponse> handleAiUnavailable(AiGradeService.AiServiceUnavailableException e) {
         log.error("AI 서비스 일시 불가", e);
-        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.SERVICE_UNAVAILABLE);
-        detail.setTitle("AI 서비스 일시 중단");
-        detail.setDetail(e.getMessage());
-        return detail;
-    }
-
-    // 잘못된 요청 파라미터 (400)
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ProblemDetail handleIllegalArg(IllegalArgumentException e) {
-        ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
-        detail.setTitle("잘못된 요청");
-        detail.setDetail(e.getMessage());
-        return detail;
+        return ResponseEntity.status(ErrorCode.AI_SERVICE_UNAVAILABLE.getStatus())
+                .body(ErrorResponse.of(ErrorCode.AI_SERVICE_UNAVAILABLE, e.getMessage()));
     }
 }

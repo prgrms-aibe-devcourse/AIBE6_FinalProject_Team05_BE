@@ -87,8 +87,112 @@ INSERT INTO card_variants (card_id, variant_name, is_primary, synced_at) VALUES 
 INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high, market, currency, change_1d_pct, change_7d_pct, change_14d_pct, change_30d_pct, change_90d_pct, change_180d_pct, change_7d_amount, updated_at) VALUES ((SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv10_ja-1') AND variant_name = 'normal'), 'graded', '10', 'PSA', 5.0, 5.6, 6.2, 5.7, 'JPY', NULL, 0.0, NULL, 1.79, 3.64, NULL, 0.0, now()) ON CONFLICT (variant_id, price_type, grade, company) DO NOTHING;
 INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high, market, currency, change_1d_pct, change_7d_pct, change_14d_pct, change_30d_pct, change_90d_pct, change_180d_pct, change_7d_amount, updated_at) VALUES ((SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv10_ja-1') AND variant_name = 'normal'), 'graded', '9', 'PSA', 2.0, 2.3, 2.6, 2.35, 'JPY', NULL, 0.0, NULL, 2.22, 4.44, NULL, 0.0, now()) ON CONFLICT (variant_id, price_type, grade, company) DO NOTHING;
 
--- ---------- 테스트용 유저 (id=1, AI 등급 진단 로컬 테스트용) ----------
-INSERT INTO users (id, email, password, nickname, provider, role, status, terms_agreed_at)
-VALUES (1, 'test@pokade.local', NULL, 'tester', 'LOCAL', 'USER', 'ACTIVE', now())
-ON CONFLICT (id) DO NOTHING;
-SELECT setval('users_id_seq', GREATEST((SELECT MAX(id) FROM users), 1));
+
+-- =========================================================
+-- FR-PRICE-01 검증용 시드 (users / listings / buy_offers)
+-- =========================================================
+
+-- 재기동 시 중복 방지 (테스트 데이터만 정리)
+DELETE FROM buy_offers;
+DELETE FROM listings;
+
+-- ---------- users (테스트 유저 2명) ----------
+INSERT INTO users (email, password, nickname, provider, role, status, terms_agreed_at, created_at, updated_at)
+VALUES ('seller1@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '민준테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now(), now())
+    ON CONFLICT (email) DO NOTHING;
+
+INSERT INTO users (email, password, nickname, provider, role, status, terms_agreed_at, created_at, updated_at)
+VALUES ('seller2@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '지호테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now(), now())
+    ON CONFLICT (email) DO NOTHING;
+
+-- ---------- listings (매도호가) ----------
+
+-- Charizard base1-4 : 매도 2건 → 최저가 2,950,000이 즉시구매가
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3200000, 'A', 'ACTIVE', now(), now()
+       );
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2950000, 'B', 'ACTIVE', now(), now()
+       );
+
+-- Charizard base1-4 : CANCELLED 1건 (status 필터링 검증용, 조회에 잡히면 안 됨)
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           1000000, 'S', 'CANCELLED', now(), now()
+       );
+
+-- Pikachu base1-58 : 매도 1건 (단일 매물 케이스)
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-58'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-58') AND variant_name = 'unlimited'),
+           280000, 'S', 'ACTIVE', now(), now()
+       );
+
+-- Blastoise base1-2 : 매도만 있고 매수 없음 (sellPrice 빈 값 검증용)
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-2'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-2') AND variant_name = 'unlimitedHolofoil'),
+           950000, 'A', 'ACTIVE', now(), now()
+       );
+
+-- ---------- buy_offers (매수호가) ----------
+
+-- Charizard base1-4 : 매수 2건 → 최고가 2,850,000이 즉시판매가
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2700000, NULL, 'ACTIVE', now() + interval '30 days', now(), now(), now()
+       );
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2850000, NULL, 'ACTIVE', now() + interval '30 days', now(), now(), now()
+       );
+
+-- Charizard base1-4 : EXPIRED 1건 (status 필터링 검증용)
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           9999000, NULL, 'EXPIRED', now() - interval '1 day', now() - interval '10 days', now() - interval '40 days', now()
+       );
+
+-- Pikachu base1-58 : 매수 1건
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-58'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-58') AND variant_name = 'unlimited'),
+           260000, NULL, 'ACTIVE', now() + interval '30 days', now(), now(), now()
+       );
+
+-- Blastoise ex sv3pt5-54 : 매수만 있고 매도 없음 (buyPrice 빈 값 검증용)
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'sv3pt5-54'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv3pt5-54') AND variant_name = 'holofoil'),
+           180000, NULL, 'ACTIVE', now() + interval '30 days', now(), now(), now()
+       );
+
+-- Charizard ex sv3pt5-6 : 매도·매수 모두 없음 (양쪽 빈 값 검증용, 의도적으로 데이터 없음)
