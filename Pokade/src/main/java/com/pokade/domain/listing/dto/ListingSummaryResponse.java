@@ -1,0 +1,34 @@
+package com.pokade.domain.listing.dto;
+
+import com.pokade.domain.listing.Listing;
+import com.pokade.domain.listing.ListingGrade;
+import com.pokade.domain.listing.ListingStatus;
+
+import java.time.LocalDateTime;
+
+public record ListingSummaryResponse(
+        Long id,
+        Long sellerId,
+        Integer price,
+        ListingGrade grade,
+        ListingStatus status,
+        String thumbnailUrl,
+        LocalDateTime createdAt
+) {
+
+    public static ListingSummaryResponse of(Listing listing) {
+        String thumbnailUrl = listing.getImages().isEmpty()
+                ? null
+                : listing.getImages().get(0).getImageUrl();
+
+        return new ListingSummaryResponse(
+                listing.getId(),
+                listing.getSellerId(),
+                listing.getPrice(),
+                listing.getGrade(),
+                listing.getStatus(),
+                thumbnailUrl,
+                listing.getCreatedAt()
+        );
+    }
+}
