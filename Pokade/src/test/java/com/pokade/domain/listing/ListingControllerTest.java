@@ -3,6 +3,7 @@ package com.pokade.domain.listing;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
+import com.pokade.domain.listing.dto.ListingSummaryResponse;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -81,5 +83,35 @@ class ListingControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("DUPLICATE_LISTING"));
+    }
+
+    @Test
+    void 활성_매물이_있으면_200과_가격순_목록을_반환한다() throws Exception {
+        ListingSummaryResponse summary = new ListingSummaryResponse(
+                1L, 100L, 10000, ListingGrade.A, ListingStatus.ACTIVE,
+                "https://example.com/a.png", LocalDateTime.now());
+
+        given(listingService.getActiveListings(1L)).willReturn(List.of(summary));
+
+        mockMvc.perform(get("/api/listings").param("cardId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(1L));
+    }
+
+    @Test
+    void 활성_매물이_없으면_200과_빈_목록을_반환한다() throws Exception {
+        given(listingService.getActiveListings(1L)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/listings").param("cardId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void cardId가_없으면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/listings"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }
 }
