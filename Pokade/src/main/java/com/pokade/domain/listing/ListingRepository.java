@@ -11,4 +11,7 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
     List<Listing> findBySellerId(Long sellerId);
 
     List<Listing> findBySellerIdAndStatus(Long sellerId, ListingStatus status);
+
+    boolean existsBySellerIdAndCardIdAndVariantIdAndStatus(
+            Long sellerId, Long cardId, Long variantId, ListingStatus status);
 }
