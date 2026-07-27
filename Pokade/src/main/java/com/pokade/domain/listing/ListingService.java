@@ -69,6 +69,12 @@ public class ListingService {
         return ListingResponse.of(listing, imageUrls);
     }
 
+    @Transactional
+    public void deleteListing(Long sellerId, Long listingId) {
+        Listing listing = getOwnedListing(sellerId, listingId);
+        listing.cancel();
+    }
+
     private Listing getOwnedListing(Long sellerId, Long listingId) {
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
