@@ -22,7 +22,7 @@ spring:
 
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY}
+      api-key: ${OPENAI_API_KEY:}
       chat:
         options:
           model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
@@ -38,6 +38,20 @@ spring:
           auth: true
           starttls:
             enable: true
+
+sync:
+  enabled: false
+
+pokade:
+  ai:
+    grade:
+      model: ${OPENAI_GRADE_MODEL:gpt-4o}
+  aws:
+    access-key-id: ${AWS_ACCESS_KEY_ID:}
+    secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
+    region: ${AWS_REGION:ap-northeast-2}
+    s3:
+      bucket: ${AWS_S3_BUCKET:}
 
 logging:
   level:

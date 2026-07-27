@@ -207,9 +207,10 @@ CREATE TABLE IF NOT EXISTS portfolio_items (
 CREATE TABLE IF NOT EXISTS grade_results (
     id                  BIGSERIAL PRIMARY KEY,
     user_id             BIGINT NOT NULL REFERENCES users(id),
-    card_id             BIGINT NOT NULL REFERENCES cards(id),
+    card_id             BIGINT REFERENCES cards(id),            -- Vision 식별 후 매핑; 미식별 시 NULL 허용
     variant_id          BIGINT REFERENCES card_variants(id),   -- Vision이 식별한 변형(선택)
-    grade               VARCHAR(10),                            -- S / A / B
+    status              VARCHAR(20) NOT NULL DEFAULT 'SUCCESS', -- SUCCESS / QUALITY_FAIL
+    grade               VARCHAR(10),                            -- S / A / B (QUALITY_FAIL 시 NULL)
     centering_score     NUMERIC(6,2),
     edge_score          NUMERIC(6,2),
     surface_score       NUMERIC(6,2),
@@ -218,7 +219,10 @@ CREATE TABLE IF NOT EXISTS grade_results (
     point_used          INTEGER NOT NULL DEFAULT 0,
     confidence          NUMERIC(5,2),                           -- AI 카드 자동식별 신뢰도(0~100), 정책 80% 기준 분기에 사용
     vision_card_id      VARCHAR(50),                            -- Vision이 식별한 카드의 Scrydex ID, 신뢰도 80% 미만이면 NULL 가능
-    vision_confidence   NUMERIC(5,2),                            -- Vision 응답 원본 신뢰도값, 추후 임계값 조정 근거
+    vision_confidence   NUMERIC(5,2),                           -- Vision 응답 원본 신뢰도값, 추후 임계값 조정 근거
+    retry_allowed       BOOLEAN NOT NULL DEFAULT FALSE,         -- QUALITY_FAIL 시 무료 재업로드 1회 허용 여부
+    retry_used          BOOLEAN NOT NULL DEFAULT FALSE,         -- 무료 재업로드 사용 여부
+    retry_of_id         BIGINT REFERENCES grade_results(id),   -- 재업로드인 경우 원본 요청 ID
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
