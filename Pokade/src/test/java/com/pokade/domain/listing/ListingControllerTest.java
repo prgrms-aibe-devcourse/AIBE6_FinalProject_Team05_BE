@@ -114,4 +114,42 @@ class ListingControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }
+
+    @Test
+    void 내_매물이_있으면_200과_목록을_반환한다() throws Exception {
+        ListingSummaryResponse summary = new ListingSummaryResponse(
+                1L, 100L, 10000, ListingGrade.A, ListingStatus.ACTIVE,
+                "https://example.com/a.png", LocalDateTime.now());
+
+        given(listingService.getMyListings(100L, null)).willReturn(List.of(summary));
+
+        mockMvc.perform(get("/api/listings/me").header("X-USER-ID", 100L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(1L));
+    }
+
+    @Test
+    void 등록한_매물이_없으면_200과_빈_목록을_반환한다() throws Exception {
+        given(listingService.getMyListings(100L, null)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/listings/me").header("X-USER-ID", 100L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void status_파라미터로_필터링해서_조회한다() throws Exception {
+        ListingSummaryResponse summary = new ListingSummaryResponse(
+                2L, 100L, 5000, ListingGrade.B, ListingStatus.SOLD,
+                null, LocalDateTime.now());
+
+        given(listingService.getMyListings(100L, ListingStatus.SOLD)).willReturn(List.of(summary));
+
+        mockMvc.perform(get("/api/listings/me")
+                        .header("X-USER-ID", 100L)
+                        .param("status", "SOLD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("SOLD"));
+    }
 }
