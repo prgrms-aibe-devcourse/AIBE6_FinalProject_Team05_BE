@@ -3,12 +3,15 @@ package com.pokade.domain.listing;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
+import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -46,5 +49,15 @@ public class ListingController {
             @RequestParam(required = false) ListingStatus status
     ) {
         return ResponseEntity.ok(listingService.getMyListings(sellerId, status));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ListingResponse> updateListing(
+            // TODO: 인증 파트 완성되면 SecurityContext에서 sellerId 추출하는 방식으로 교체
+            @RequestHeader("X-USER-ID") Long sellerId,
+            @PathVariable Long id,
+            @Valid @RequestBody ListingUpdateRequest request
+    ) {
+        return ResponseEntity.ok(listingService.updatePrice(sellerId, id, request));
     }
 }
