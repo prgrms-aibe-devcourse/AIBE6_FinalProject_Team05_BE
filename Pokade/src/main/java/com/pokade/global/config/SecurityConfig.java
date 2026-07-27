@@ -28,7 +28,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.GET, "/cards").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/cards", "/api/cards/**").permitAll()
                         .requestMatchers(AUTH_WHITELIST).permitAll()
                         .requestMatchers("/api/prices/**").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
