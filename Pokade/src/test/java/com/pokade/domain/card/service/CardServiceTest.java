@@ -1,4 +1,4 @@
-package com.pokade.card.service;
+package com.pokade.domain.card.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -16,9 +16,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
-import com.pokade.card.dto.CardResponse;
-import com.pokade.card.entity.Card;
-import com.pokade.card.repository.CardRepository;
+import com.pokade.domain.card.dto.CardResponse;
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.repository.CardRepository;
 
 @ExtendWith(MockitoExtension.class)
 class CardServiceTest {
