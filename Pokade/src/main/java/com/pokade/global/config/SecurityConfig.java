@@ -20,7 +20,8 @@ public class SecurityConfig {
             "/swagger-ui.html",
             "/v3/api-docs/**",
             "/actuator/health",
-            "/actuator/prometheus"
+            "/actuator/prometheus",
+            "/api/ai/grade" // TODO: 로컬 테스트용 임시 permitAll — 인증 연동 후 제거할 것
     };
 
     @Bean
