@@ -31,8 +31,8 @@ public class User {
     @Column(nullable = false, length = 20)
     private String nickname;
 
-    @Column(name = "nickname_change_at")
-    private LocalDateTime nicknameChangeAt;
+    @Column(name = "nickname_changed_at")
+    private LocalDateTime nicknameChangedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -58,6 +58,9 @@ public class User {
     @Column(name = "terms_agreed_at", nullable = false)
     private LocalDateTime termsAgreedAt;
 
+    @Column(name = "marketing_opt_in", nullable = false)
+    private boolean marketingOptIn;
+
     @Column(name = "point_balance", nullable = false)
     private Integer pointBalance;
 
@@ -72,4 +75,17 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updated_At;
 
+    public static User createLocalUser(String email, String encodedPassword, String nickname) {
+        return User.builder()
+                .email(email)
+                .password(encodedPassword)
+                .nickname(nickname)
+                .provider(Provider.LOCAL)
+                .role(Role.USER)
+                .status(UserStatus.PENDING)
+                .termsAgreedAt(LocalDateTime.now())
+                .marketingOptIn(false)
+                .pointBalance(0)
+                .build();
+    }
 }
