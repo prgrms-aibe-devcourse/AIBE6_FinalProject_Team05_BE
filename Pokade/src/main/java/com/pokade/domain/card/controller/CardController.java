@@ -4,17 +4,19 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.service.CardService;
 
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/cards")
+@RequestMapping("/api/cards")
 @RequiredArgsConstructor
 public class CardController {
 
@@ -28,5 +30,10 @@ public class CardController {
             @RequestParam(required = false) String expansionId,
             @PageableDefault(size = 20) Pageable pageable) {
         return cardService.search(name, types, rarity, expansionId, pageable);
+    }
+
+    @GetMapping("/{id}")
+    public CardDetailResponse detail(@PathVariable Long id) {
+        return cardService.getDetail(id);
     }
 }
