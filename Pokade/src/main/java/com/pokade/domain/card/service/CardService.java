@@ -26,8 +26,8 @@ public class CardService {
     private final CardVariantRepository cardVariantRepository;
 
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(String name, String types, String rarity, String expansionId, Pageable pageable) {
-        return cardRepository.search(name, types, rarity, expansionId, pageable)
+    public Page<CardResponse> search(String types, String rarity, String expansionId, Pageable pageable) {
+        return cardRepository.search(types, rarity, expansionId, pageable)
                 .map(CardResponse::from);
     }
 
@@ -37,5 +37,30 @@ public class CardService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
         return CardDetailResponse.of(card, variants);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CardResponse> searchByKeyword(String q, Pageable pageable) {
+        if (q == null || q.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        return cardRepository.findByNameContainingIgnoreCase(q.trim(), pageable)
+                .map(CardResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CardResponse> getRelated(Long id) {
+        Card card = cardRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
+        List<Card> related = hasPokedexNumber(card)
+                ? cardRepository.findRelatedByPokedexNumber(id)
+                : cardRepository.findRelatedByExpansion(card.getExpansion().getId(), id);
+        return related.stream()
+                .map(CardResponse::from)
+                .toList();
+    }
+
+    private boolean hasPokedexNumber(Card card) {
+        return card.getNationalPokedexNumbers() != null && !card.getNationalPokedexNumbers().isEmpty();
     }
 }
