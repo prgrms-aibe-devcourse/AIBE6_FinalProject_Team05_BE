@@ -1,6 +1,6 @@
-package com.pokade.price.repository;
+package com.pokade.domain.price.repository;
 
-import com.pokade.price.entity.BuyOffer;
+import com.pokade.domain.price.entity.BuyOffer;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

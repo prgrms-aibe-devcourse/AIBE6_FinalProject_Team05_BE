@@ -1,4 +1,4 @@
-package com.pokade.price.dto;
+package com.pokade.domain.price.dto;
 
 public record PriceSummaryResponse(
         Integer buyPrice,

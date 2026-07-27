@@ -1,10 +1,11 @@
-package com.pokade.price.service;
+package com.pokade.domain.price.service;
 
-import com.pokade.card.repository.CardRepository;
-import com.pokade.card.repository.CardVariantRepository;
-import com.pokade.price.dto.PriceSummaryResponse;
-import com.pokade.price.repository.BuyOfferRepository;
-import com.pokade.price.repository.ListingRepository;
+import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.listing.ListingRepository;
+import com.pokade.domain.listing.ListingStatus;
+import com.pokade.domain.price.dto.PriceSummaryResponse;
+import com.pokade.domain.price.repository.BuyOfferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -34,7 +35,9 @@ public class PriceService {
                         .orElseThrow(() -> new ResponseStatusException(
                                 HttpStatus.NOT_FOUND, "대표 변형이 지정되지 않은 카드입니다: " + cardId));
 
-        Integer buyPrice = listingRepository.findLowestActivePrice(cardId, resolvedVariantId).orElse(null);
+        Integer buyPrice = listingRepository
+                .findLowestActivePrice(cardId, resolvedVariantId, ListingStatus.ACTIVE)
+                .orElse(null);
         Integer sellPrice = buyOfferRepository.findHighestActivePrice(cardId, resolvedVariantId).orElse(null);
 
         return new PriceSummaryResponse(buyPrice, sellPrice, CURRENCY);

@@ -1,7 +1,7 @@
-package com.pokade.price.controller;
+package com.pokade.domain.price.controller;
 
-import com.pokade.price.dto.PriceSummaryResponse;
-import com.pokade.price.service.PriceService;
+import com.pokade.domain.price.dto.PriceSummaryResponse;
+import com.pokade.domain.price.service.PriceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
