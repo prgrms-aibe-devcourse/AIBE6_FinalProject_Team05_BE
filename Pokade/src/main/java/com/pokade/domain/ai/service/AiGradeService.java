@@ -1,0 +1,219 @@
+package com.pokade.domain.ai.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pokade.domain.ai.dto.GradeRequest;
+import com.pokade.domain.ai.dto.GradeResponse;
+import com.pokade.domain.ai.dto.VisionResult;
+import com.pokade.domain.ai.entity.*;
+import com.pokade.domain.ai.repository.GradeResultImageRepository;
+import com.pokade.domain.ai.repository.GradeResultRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AiGradeService {
+
+    private static final int FREE_LIMIT = 3;
+
+    // TODO: User 파트 개발 완료 후 포인트 차감 연동 예정
+    // private static final int GRADE_COST = 100;
+
+    private final ChatClient chatClient;
+    private final S3UploadService s3UploadService;
+    private final GradeResultRepository gradeResultRepository;
+    private final GradeResultImageRepository gradeResultImageRepository;
+
+    // TODO: User 파트 개발 완료 후 아래 Repository 주입 및 포인트 차감 로직 연동 예정
+    // private final UserRepository userRepository;
+    // private final PointTransactionRepository pointTransactionRepository;
+
+    @Value("${pokade.ai.grade.model}")
+    private String gradeModel;
+
+    @Transactional
+    public GradeResponse grade(Long userId, GradeRequest request) {
+
+        // ── 재업로드 요청 검증 ───────────────────────────────────────────────
+        GradeResult originalResult = null;
+        boolean isFreeRetry = false;
+        if (request.retryOfId() != null) {
+            boolean retryable = gradeResultRepository.existsRetryableResult(request.retryOfId(), userId);
+            if (retryable) {
+                originalResult = gradeResultRepository.findById(request.retryOfId()).orElseThrow();
+                originalResult.markRetryUsed(); // retry_used = true (재사용 방지)
+                isFreeRetry = true;
+            }
+            // retryable하지 않으면 새 요청으로 처리 (유료 가능)
+        }
+
+        // ── 무료/유료 판단 ───────────────────────────────────────────────────
+        long successCount = gradeResultRepository.countByUserIdAndStatus(userId, GradeStatus.SUCCESS);
+        boolean isFree = isFreeRetry || successCount < FREE_LIMIT;
+
+        // TODO: User 파트 개발 완료 후 포인트 차감 연동 예정
+        // 유료(isFree=false)인 경우 users.point_balance에서 GRADE_COST(100) 차감 후
+        // point_transactions에 type=USE 이력 저장 필요.
+        // 동시 요청 방지를 위해 UserRepository.findByIdWithLock(userId) 사용할 것.
+        // if (!isFree) {
+        //     User user = userRepository.findByIdWithLock(userId).orElseThrow();
+        //     user.deductPoints(GRADE_COST);
+        //     pointTransactionRepository.save(PointTransaction.builder()
+        //             .userId(userId)
+        //             .type("USE")
+        //             .amount(GRADE_COST)
+        //             .balanceAfter(user.getPointBalance())
+        //             .relatedGradeResultId(savedResult.getId())
+        //             .build());
+        // }
+
+        // ── S3 이미지 업로드 ─────────────────────────────────────────────────
+        Map<PhotoType, String> imageUrls = uploadImages(request);
+
+        // ── Vision API 호출 → 등급 산출 ──────────────────────────────────────
+        VisionResult visionResult = callVisionApi(request);
+
+        // ── 결과 저장 ────────────────────────────────────────────────────────
+        GradeResult gradeResult = buildGradeResult(
+                userId, visionResult, isFree,
+                isFreeRetry ? request.retryOfId() : null);
+        gradeResultRepository.save(gradeResult);
+
+        // 이미지 URL 연결 저장
+        imageUrls.forEach((type, url) ->
+                gradeResultImageRepository.save(GradeResultImage.builder()
+                        .gradeResultId(gradeResult.getId())
+                        .photoType(type)
+                        .imageUrl(url)
+                        .build()));
+
+        return GradeResponse.from(gradeResult);
+    }
+
+    private Map<PhotoType, String> uploadImages(GradeRequest request) {
+        Map<PhotoType, MultipartFile> files = new LinkedHashMap<>();
+        files.put(PhotoType.FRONT,     request.front());
+        files.put(PhotoType.BACK,      request.back());
+        files.put(PhotoType.CORNER_TL, request.cornerTl());
+        files.put(PhotoType.CORNER_TR, request.cornerTr());
+        files.put(PhotoType.CORNER_BL, request.cornerBl());
+        files.put(PhotoType.CORNER_BR, request.cornerBr());
+
+        Map<PhotoType, String> urls = new LinkedHashMap<>();
+        files.forEach((type, file) ->
+                urls.put(type, s3UploadService.upload(file, "ai-grade")));
+        return urls;
+    }
+
+    private VisionResult callVisionApi(GradeRequest request) {
+        List<MultipartFile> files = List.of(
+                request.front(), request.back(),
+                request.cornerTl(), request.cornerTr(),
+                request.cornerBl(), request.cornerBr());
+
+        try {
+            String response = chatClient.prompt()
+                    .user(u -> {
+                        u.text(buildPrompt());
+                        files.forEach(file -> u.media(
+                                org.springframework.util.MimeTypeUtils.IMAGE_JPEG,
+                                file.getResource()));
+                    })
+                    .options(OpenAiChatOptions.builder().model(gradeModel))
+                    .call()
+                    .content();
+
+            return new ObjectMapper().readValue(extractJson(response), VisionResult.class);
+
+        } catch (Exception e) {
+            log.error("Vision API 호출 실패", e);
+            throw new AiServiceUnavailableException("AI 등급 진단 서비스에 일시적인 오류가 발생했습니다.");
+        }
+    }
+
+    private String buildPrompt() {
+        return """
+                당신은 포켓몬 트레이딩 카드 등급 전문가입니다.
+                제공된 카드 이미지 6장(앞면 1장, 뒷면 1장, 모서리 클로즈업 4장)을 분석하여 등급을 산출하세요.
+
+                등급 기준:
+                - S (PSA 9-10 상당): 민트~민트 상태. 결함 없음. 날카로운 모서리, 깨끗한 엣지, 중앙 정렬.
+                - A (PSA 7-8 상당): 엑셀런트~니어민트. 경미한 결함 허용. 약간의 모서리/엣지 마모.
+                - B (PSA 5-6 상당): 굿~엑셀런트. 보통 수준 마모. 눈에 띄는 결함 있으나 감상 가능.
+
+                사진 품질이 너무 낮아 평가 불가능한 경우(흐림, 어둠, 잘못된 각도 등)는 quality_issue를 true로 설정하세요.
+
+                반드시 아래 JSON 형식으로만 응답하세요 (다른 텍스트 없이):
+                {
+                  "grade": "S" 또는 "A" 또는 "B" 또는 null,
+                  "centering_score": 0.00~10.00,
+                  "edge_score": 0.00~10.00,
+                  "surface_score": 0.00~10.00,
+                  "corner_score": 0.00~10.00,
+                  "overall_confidence": 0.00~100.00,
+                  "quality_issue": true 또는 false,
+                  "quality_issue_reason": "사유 또는 null",
+                  "card_external_id": "Scrydex 카드 ID(예: base1-4) 또는 null",
+                  "card_confidence": 0.00~100.00
+                }
+                """;
+    }
+
+    private String extractJson(String raw) {
+        int start = raw.indexOf('{');
+        int end = raw.lastIndexOf('}');
+        if (start == -1 || end == -1) {
+            throw new RuntimeException("Vision 응답에서 JSON을 추출할 수 없습니다: " + raw);
+        }
+        return raw.substring(start, end + 1);
+    }
+
+    private GradeResult buildGradeResult(Long userId, VisionResult vision,
+                                         boolean isFree, Long retryOfId) {
+        if (vision.qualityIssue()) {
+            return GradeResult.builder()
+                    .userId(userId)
+                    .status(GradeStatus.QUALITY_FAIL)
+                    .isFree(true)        // 품질 실패는 과금하지 않음
+                    .pointUsed(0)
+                    .retryAllowed(true)  // 무료 재업로드 1회 부여
+                    .retryOfId(retryOfId)
+                    .build();
+        }
+
+        // TODO: User 파트 개발 완료 후 isFree=false 시 pointUsed=GRADE_COST 로 변경 예정
+        return GradeResult.builder()
+                .userId(userId)
+                .status(GradeStatus.SUCCESS)
+                .grade(vision.grade())
+                .centeringScore(vision.centeringScore())
+                .edgeScore(vision.edgeScore())
+                .surfaceScore(vision.surfaceScore())
+                .cornerScore(vision.cornerScore())
+                .confidence(vision.overallConfidence())
+                .visionCardId(vision.cardExternalId())
+                .visionConfidence(vision.cardConfidence())
+                .isFree(isFree)
+                .pointUsed(0) // TODO: User 파트 완료 후 !isFree 시 GRADE_COST 로 교체
+                .retryAllowed(false)
+                .retryOfId(retryOfId)
+                .build();
+    }
+
+    public static class AiServiceUnavailableException extends RuntimeException {
+        public AiServiceUnavailableException(String message) {
+            super(message);
+        }
+    }
+}
