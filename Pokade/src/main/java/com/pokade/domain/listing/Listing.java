@@ -1,5 +1,6 @@
 package com.pokade.domain.listing;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -7,6 +8,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
@@ -18,6 +20,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "listings")
@@ -60,6 +64,9 @@ public class Listing {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @OneToMany(mappedBy = "listing", cascade = CascadeType.ALL, orphanRemoval = true)
+    private final List<ListingImage> images = new ArrayList<>();
+
     @Builder
     public Listing(Long cardId, Long sellerId, Long variantId, Integer price, ListingGrade grade) {
         this.cardId = cardId;
@@ -69,6 +76,14 @@ public class Listing {
         this.grade = grade;
         this.status = ListingStatus.ACTIVE;
         this.staleNoticeSent = false;
+    }
+
+    public void addImage(String imageUrl, int sortOrder) {
+        images.add(ListingImage.builder()
+                .listing(this)
+                .imageUrl(imageUrl)
+                .sortOrder(sortOrder)
+                .build());
     }
 
     public void changePrice(Integer newPrice) {
