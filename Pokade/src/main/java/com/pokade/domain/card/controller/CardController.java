@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.service.CardService;
+import com.pokade.global.response.ApiResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -23,17 +24,17 @@ public class CardController {
     private final CardService cardService;
 
     @GetMapping
-    public Page<CardResponse> search(
+    public ApiResponse<Page<CardResponse>> search(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String types,
             @RequestParam(required = false) String rarity,
             @RequestParam(required = false) String expansionId,
             @PageableDefault(size = 20) Pageable pageable) {
-        return cardService.search(name, types, rarity, expansionId, pageable);
+        return ApiResponse.ok(cardService.search(name, types, rarity, expansionId, pageable));
     }
 
     @GetMapping("/{id}")
-    public CardDetailResponse detail(@PathVariable Long id) {
-        return cardService.getDetail(id);
+    public ApiResponse<CardDetailResponse> detail(@PathVariable Long id) {
+        return ApiResponse.ok(cardService.getDetail(id));
     }
 }

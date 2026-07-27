@@ -53,7 +53,7 @@ class CardControllerTest {
                 .assertThat()
                 .hasStatusOk()
                 .bodyJson()
-                .extractingPath("$.content[0].name").isEqualTo("Charizard");
+                .extractingPath("$.data.content[0].name").isEqualTo("Charizard");
     }
 
     @Test
@@ -87,9 +87,30 @@ class CardControllerTest {
                 .uri("/api/cards/1")
                 .assertThat()
                 .hasStatusOk();
-        result.bodyJson().extractingPath("$.name").isEqualTo("Charizard");
-        result.bodyJson().extractingPath("$.expansion.id").isEqualTo("base1");
-        result.bodyJson().extractingPath("$.variants[0].variantName").isEqualTo("unlimitedHolofoil");
+        result.bodyJson().extractingPath("$.data.name").isEqualTo("Charizard");
+        result.bodyJson().extractingPath("$.data.expansion.id").isEqualTo("base1");
+        result.bodyJson().extractingPath("$.data.variants[0].variantName").isEqualTo("unlimitedHolofoil");
+    }
+
+    @Test
+    @DisplayName("t5 카드 상세조회 응답은 status/code/msg/data 형태의 ApiResponse 구조를 따른다")
+    void t5() {
+        CardDetailResponse.ExpansionSummary expansion = new CardDetailResponse.ExpansionSummary(
+                "base1", "Base", "Base", "BS", 102, LocalDate.of(1999, 1, 9), null, null);
+        CardDetailResponse detail = new CardDetailResponse(
+                1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+                List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
+                expansion, List.of());
+        given(cardService.getDetail(1L)).willReturn(detail);
+
+        var result = mockMvcTester.get()
+                .uri("/api/cards/1")
+                .assertThat()
+                .hasStatusOk();
+        result.bodyJson().extractingPath("$.status").isEqualTo(200);
+        result.bodyJson().extractingPath("$.code").isEqualTo("OK");
+        result.bodyJson().extractingPath("$.msg").isNotNull();
+        result.bodyJson().extractingPath("$.data.name").isEqualTo("Charizard");
     }
 
     @Test

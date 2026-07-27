@@ -27,6 +27,9 @@ spring:
         options:
           model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
 
+sync:
+  enabled: false
+
 pokade:
   ai:
     grade:
