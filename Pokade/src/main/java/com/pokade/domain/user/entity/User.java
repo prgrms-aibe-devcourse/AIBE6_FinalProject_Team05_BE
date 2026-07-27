@@ -31,8 +31,8 @@ public class User {
     @Column(nullable = false, length = 20)
     private String nickname;
 
-    @Column(name = "nickname_change_at")
-    private LocalDateTime nicknameChangeAt;
+    @Column(name = "nickname_changed_at")
+    private LocalDateTime nicknameChangedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
