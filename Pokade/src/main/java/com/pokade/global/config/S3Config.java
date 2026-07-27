@@ -1,13 +1,17 @@
 package com.pokade.global.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
+@Slf4j
 @Configuration
 public class S3Config {
 
@@ -22,10 +26,17 @@ public class S3Config {
 
     @Bean
     public S3Client s3Client() {
+        AwsCredentialsProvider credentialsProvider;
+        if (accessKeyId.isBlank() || secretAccessKey.isBlank()) {
+            log.warn("AWS 자격증명이 설정되지 않았습니다. S3 업로드 기능은 동작하지 않습니다.");
+            credentialsProvider = AnonymousCredentialsProvider.create();
+        } else {
+            credentialsProvider = StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(accessKeyId, secretAccessKey));
+        }
         return S3Client.builder()
                 .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKeyId, secretAccessKey)))
+                .credentialsProvider(credentialsProvider)
                 .build();
     }
 }
