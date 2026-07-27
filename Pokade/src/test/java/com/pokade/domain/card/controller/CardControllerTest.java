@@ -4,7 +4,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -16,11 +18,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
+import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.service.CardService;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 
 @WebMvcTest(CardController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -43,7 +49,7 @@ class CardControllerTest {
                 .willReturn(page);
 
         mockMvcTester.get()
-                .uri("/cards?name=char&types=Fire&rarity=Rare Holo&expansionId=base1")
+                .uri("/api/cards?name=char&types=Fire&rarity=Rare Holo&expansionId=base1")
                 .assertThat()
                 .hasStatusOk()
                 .bodyJson()
@@ -59,8 +65,43 @@ class CardControllerTest {
                 .willReturn(page);
 
         mockMvcTester.get()
-                .uri("/cards")
+                .uri("/api/cards")
                 .assertThat()
                 .hasStatusOk();
+    }
+
+    @Test
+    @DisplayName("t3 존재하는 카드 id로 상세조회하면 200과 확장팩·변형 정보를 포함한 응답을 반환한다")
+    void t3() {
+        CardDetailResponse.ExpansionSummary expansion = new CardDetailResponse.ExpansionSummary(
+                "base1", "Base", "Base", "BS", 102, LocalDate.of(1999, 1, 9), null, null);
+        CardDetailResponse.VariantSummary variant = new CardDetailResponse.VariantSummary(
+                1L, "unlimitedHolofoil", true, null, null);
+        CardDetailResponse detail = new CardDetailResponse(
+                1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+                List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
+                expansion, List.of(variant));
+        given(cardService.getDetail(1L)).willReturn(detail);
+
+        var result = mockMvcTester.get()
+                .uri("/api/cards/1")
+                .assertThat()
+                .hasStatusOk();
+        result.bodyJson().extractingPath("$.name").isEqualTo("Charizard");
+        result.bodyJson().extractingPath("$.expansion.id").isEqualTo("base1");
+        result.bodyJson().extractingPath("$.variants[0].variantName").isEqualTo("unlimitedHolofoil");
+    }
+
+    @Test
+    @DisplayName("t4 존재하지 않는 카드 id로 상세조회하면 404를 반환한다")
+    void t4() {
+        willThrow(new BusinessException(ErrorCode.CARD_NOT_FOUND)).given(cardService).getDetail(999L);
+
+        mockMvcTester.get()
+                .uri("/api/cards/999")
+                .assertThat()
+                .hasStatus(HttpStatus.NOT_FOUND)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("CARD_NOT_FOUND");
     }
 }
