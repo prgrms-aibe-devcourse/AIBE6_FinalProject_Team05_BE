@@ -93,6 +93,8 @@ INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high,
 -- =========================================================
 
 -- 재기동 시 중복 방지 (테스트 데이터만 정리)
+-- trades가 listings를 FK로 참조하므로 자식(trades)부터 삭제
+DELETE FROM trades;
 DELETE FROM buy_offers;
 DELETE FROM listings;
 
@@ -196,3 +198,64 @@ VALUES (
        );
 
 -- Charizard ex sv3pt5-6 : 매도·매수 모두 없음 (양쪽 빈 값 검증용, 의도적으로 데이터 없음)
+
+-- =========================================================
+-- FR-PRICE-02 검증용 시드 (trades — status='COMPLETED')
+-- =========================================================
+
+-- ---------- listings (체결 완료된 매물 3건, 등급별 확인용) ----------
+
+-- Charizard base1-4 : PSA10 등급, 5,000,000원에 체결
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           5000000, 'PSA10', 'SOLD', now() - interval '1 day', now() - interval '1 day'
+       );
+
+-- Charizard base1-4 : 자체 AI등급 S, 3,000,000원에 체결
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3000000, 'S', 'SOLD', now() - interval '3 days', now() - interval '3 days'
+       );
+
+-- Charizard base1-4 : 등급 없음(RAW), 2,500,000원에 체결
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2500000, NULL, 'SOLD', now() - interval '10 days', now() - interval '10 days'
+       );
+
+-- ---------- trades (체결 완료, 최신순 정렬 검증용으로 confirmed_at 스태거) ----------
+
+-- PSA10 매물 체결 (1일 전 - 가장 최근)
+INSERT INTO trades (listing_id, buyer_id, price, status, confirmed_at, settled_at, created_at)
+VALUES (
+           (SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 5000000 AND grade = 'PSA10'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           5000000, 'COMPLETED', now() - interval '1 day', now() - interval '1 day', now() - interval '1 day'
+       );
+
+-- S등급 매물 체결 (3일 전)
+INSERT INTO trades (listing_id, buyer_id, price, status, confirmed_at, settled_at, created_at)
+VALUES (
+           (SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 3000000 AND grade = 'S'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           3000000, 'COMPLETED', now() - interval '3 days', now() - interval '3 days', now() - interval '3 days'
+       );
+
+-- RAW(등급 없음) 매물 체결 (10일 전 - 가장 오래됨)
+INSERT INTO trades (listing_id, buyer_id, price, status, confirmed_at, settled_at, created_at)
+VALUES (
+           (SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2500000 AND grade IS NULL),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           2500000, 'COMPLETED', now() - interval '10 days', now() - interval '10 days', now() - interval '10 days'
+       );
+
+-- Charizard ex sv3pt5-6 : 체결 이력 없음 (빈 목록 검증용, 의도적으로 데이터 없음)

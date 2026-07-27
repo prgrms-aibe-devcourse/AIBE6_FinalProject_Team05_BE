@@ -179,6 +179,10 @@ CREATE TABLE IF NOT EXISTS trades (
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 카드별 체결 내역 조회(FR-PRICE-02, listings.card_id 조인) 최적화
+CREATE INDEX IF NOT EXISTS idx_listings_card_id ON listings(card_id);
+CREATE INDEX IF NOT EXISTS idx_trades_listing_status ON trades(listing_id, status, confirmed_at DESC);
+
 CREATE TABLE IF NOT EXISTS payments (
     id            BIGSERIAL PRIMARY KEY,
     trade_id      BIGINT NOT NULL UNIQUE REFERENCES trades(id),
