@@ -22,6 +22,17 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD}
 
+pokade:
+  ai:
+    grade:
+      model: ${OPENAI_GRADE_MODEL:gpt-4o}
+  aws:
+    access-key-id: ${AWS_ACCESS_KEY_ID}
+    secret-access-key: ${AWS_SECRET_ACCESS_KEY}
+    region: ${AWS_REGION:ap-northeast-2}
+    s3:
+      bucket: ${AWS_S3_BUCKET}
+
 logging:
   level:
     root: info
