@@ -5,6 +5,7 @@ import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
 import com.pokade.domain.listing.dto.OrderbookEntryResponse;
+import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -21,8 +22,12 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willDoNothing;
+import static org.mockito.BDDMockito.willThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -203,5 +208,118 @@ class ListingControllerTest {
                         .param("status", "SOLD"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].status").value("SOLD"));
+    }
+
+    @Test
+    void 매물_수정에_성공하면_200과_수정된_매물을_반환한다() throws Exception {
+        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+        ListingResponse response = new ListingResponse(
+                1L, 1L, 100L, null, 20000, ListingGrade.A, ListingStatus.ACTIVE,
+                List.of("https://example.com/a.png"), LocalDateTime.now());
+
+        given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
+                .willReturn(response);
+
+        mockMvc.perform(put("/api/listings/1")
+                        .header("X-USER-ID", 100L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.price").value(20000));
+    }
+
+    @Test
+    void 수정시_가격이_없으면_400을_반환한다() throws Exception {
+        ListingUpdateRequest invalidRequest = new ListingUpdateRequest(null);
+
+        mockMvc.perform(put("/api/listings/1")
+                        .header("X-USER-ID", 100L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(invalidRequest)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void ACTIVE_상태가_아니면_수정시_400을_반환한다() throws Exception {
+        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+
+        given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.INVALID_LISTING_STATUS));
+
+        mockMvc.perform(put("/api/listings/1")
+                        .header("X-USER-ID", 100L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_LISTING_STATUS"));
+    }
+
+    @Test
+    void 본인_매물이_아니면_수정시_403을_반환한다() throws Exception {
+        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+
+        given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
+
+        mockMvc.perform(put("/api/listings/1")
+                        .header("X-USER-ID", 999L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 존재하지_않는_매물_수정시_404를_반환한다() throws Exception {
+        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+
+        given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+
+        mockMvc.perform(put("/api/listings/999")
+                        .header("X-USER-ID", 100L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
+    }
+
+    @Test
+    void 매물_삭제에_성공하면_204를_반환한다() throws Exception {
+        willDoNothing().given(listingService).deleteListing(anyLong(), anyLong());
+
+        mockMvc.perform(delete("/api/listings/1").header("X-USER-ID", 100L))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void ACTIVE_상태가_아니면_삭제시_400을_반환한다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.INVALID_LISTING_STATUS))
+                .given(listingService).deleteListing(anyLong(), anyLong());
+
+        mockMvc.perform(delete("/api/listings/1").header("X-USER-ID", 100L))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_LISTING_STATUS"));
+    }
+
+    @Test
+    void 본인_매물이_아니면_삭제시_403을_반환한다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.ACCESS_DENIED))
+                .given(listingService).deleteListing(anyLong(), anyLong());
+
+        mockMvc.perform(delete("/api/listings/1").header("X-USER-ID", 999L))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 존재하지_않는_매물_삭제시_404를_반환한다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND))
+                .given(listingService).deleteListing(anyLong(), anyLong());
+
+        mockMvc.perform(delete("/api/listings/999").header("X-USER-ID", 100L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
     }
 }
