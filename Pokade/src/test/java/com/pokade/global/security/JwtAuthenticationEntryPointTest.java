@@ -5,14 +5,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JwtAuthenticationEntryPointTest {
 
-    private final JwtAuthenticationEntryPoint entryPoint =
-            new JwtAuthenticationEntryPoint(new ObjectMapper());
+    private final JwtAuthenticationEntryPoint entryPoint = new JwtAuthenticationEntryPoint();
 
     @Test
     @DisplayName("인증되지 않은 요청에 401과 UNAUTHORIZED JSON 응답을 반환한다")
