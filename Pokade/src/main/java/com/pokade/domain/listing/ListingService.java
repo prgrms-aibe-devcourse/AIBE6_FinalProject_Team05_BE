@@ -3,6 +3,7 @@ package com.pokade.domain.listing;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
+import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +55,34 @@ public class ListingService {
         return listings.stream()
                 .map(ListingSummaryResponse::of)
                 .toList();
+    }
+
+    @Transactional
+    public ListingResponse updatePrice(Long sellerId, Long listingId, ListingUpdateRequest request) {
+        Listing listing = getOwnedListing(sellerId, listingId);
+
+        listing.changePrice(request.price());
+
+        List<String> imageUrls = listing.getImages().stream()
+                .map(ListingImage::getImageUrl)
+                .toList();
+        return ListingResponse.of(listing, imageUrls);
+    }
+
+    @Transactional
+    public void deleteListing(Long sellerId, Long listingId) {
+        Listing listing = getOwnedListing(sellerId, listingId);
+        listing.cancel();
+    }
+
+    private Listing getOwnedListing(Long sellerId, Long listingId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+
+        if (!listing.getSellerId().equals(sellerId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        return listing;
     }
 
     private void validateNotDuplicate(Long sellerId, Long cardId, Long variantId) {
