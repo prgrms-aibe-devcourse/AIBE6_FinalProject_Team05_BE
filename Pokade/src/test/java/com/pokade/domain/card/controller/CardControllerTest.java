@@ -45,7 +45,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1");
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(eq("Fire"), eq("Rare Holo"), eq("base1"), any(Pageable.class)))
+        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), eq("base1"), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -54,6 +54,21 @@ class CardControllerTest {
                 .hasStatusOk()
                 .bodyJson()
                 .extractingPath("$.data.content[0].name").isEqualTo("Charizard");
+    }
+
+    @Test
+    @DisplayName("t11 types를 콤마로, rarity를 반복 파라미터로 넘기면 둘 다 다중 값 목록으로 위임한다")
+    void t11() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
+        given(cardService.search(
+                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), any(Pageable.class)))
+                .willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards?types=Fire,Water&rarity=Common&rarity=Rare Holo")
+                .assertThat()
+                .hasStatusOk();
     }
 
     @Test

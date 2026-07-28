@@ -93,7 +93,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t2 types 배열에 검색 타입이 포함된 카드만 조회한다")
     void t2() {
-        Page<Card> result = cardRepository.search("Fire", null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -103,7 +103,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t3 rarity가 정확히 일치하는 카드만 조회한다")
     void t3() {
-        Page<Card> result = cardRepository.search(null, "Common", null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, List.of("Common"), null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -123,7 +123,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t5 여러 조건을 조합하면 AND로 필터링된다")
     void t5() {
-        Page<Card> result = cardRepository.search("Fire", null, "base1", PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Fire"), null, "base1", PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -138,6 +138,55 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         assertThat(result.getContent()).hasSize(2);
         assertThat(result.getTotalElements()).isEqualTo(6);
         assertThat(result.getTotalPages()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("t12 타입을 여러 개 선택하면 하나라도 포함된 카드를 OR로 조회한다")
+    void t12() {
+        Page<Card> result = cardRepository.search(List.of("Fire", "Water"), null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactlyInAnyOrder("Charizard", "Blastoise", "Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t13 레어도를 여러 개 선택하면 하나라도 일치하는 카드를 OR로 조회한다")
+    void t13() {
+        Page<Card> result = cardRepository.search(null, List.of("Common", "Double Rare"), null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactlyInAnyOrder("Pikachu", "Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t14 타입·레어도·세트를 동시에 지정하면 AND로 결합되어 모두 만족하는 카드만 조회한다")
+    void t14() {
+        Page<Card> result = cardRepository.search(
+                List.of("Fire"), List.of("Rare Holo"), "base1", PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Charizard");
+    }
+
+    @Test
+    @DisplayName("t15 조건을 모두 만족하는 카드가 없으면 빈 페이지를 반환한다")
+    void t15() {
+        Page<Card> result = cardRepository.search(List.of("Water"), List.of("Common"), null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
+    }
+
+    @Test
+    @DisplayName("t16 존재하지 않는 타입 값으로 조회해도 예외 없이 빈 페이지를 반환한다")
+    void t16() {
+        Page<Card> result = cardRepository.search(List.of("NonExistentType"), null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
     }
 
     @Test

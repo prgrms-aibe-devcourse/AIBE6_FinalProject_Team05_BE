@@ -54,12 +54,32 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search("Fire", "Rare Holo", "base1", pageable)).willReturn(page);
+        given(cardRepository.search(List.of("Fire"), List.of("Rare Holo"), "base1", pageable)).willReturn(page);
 
-        Page<CardResponse> result = cardService.search("Fire", "Rare Holo", "base1", pageable);
+        Page<CardResponse> result = cardService.search(List.of("Fire"), List.of("Rare Holo"), "base1", pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
+    }
+
+    @Test
+    @DisplayName("t13 타입·레어도를 여러 개 선택해도 리포지토리에 그대로 위임한다")
+    void t13() {
+        Card card = Card.builder()
+                .id(1L)
+                .name("Blastoise")
+                .types(List.of("Water"))
+                .build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardRepository.search(List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, pageable))
+                .willReturn(page);
+
+        Page<CardResponse> result = cardService.search(
+                List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).name()).isEqualTo("Blastoise");
     }
 
     @Test

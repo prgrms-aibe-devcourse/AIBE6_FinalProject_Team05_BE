@@ -27,8 +27,8 @@ public class CardController {
 
     @GetMapping
     public ApiResponse<Page<CardResponse>> search(
-            @RequestParam(required = false) String types,
-            @RequestParam(required = false) String rarity,
+            @RequestParam(required = false) List<String> types,
+            @RequestParam(required = false) List<String> rarity,
             @RequestParam(required = false) String expansionId,
             @PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok(cardService.search(types, rarity, expansionId, pageable));
