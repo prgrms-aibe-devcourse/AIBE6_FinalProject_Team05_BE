@@ -42,10 +42,10 @@ class PriceControllerTest {
 
         mockMvc.perform(get("/api/prices/1/trades"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(3))
-                .andExpect(jsonPath("$[0].grade").value("PSA10"))
-                .andExpect(jsonPath("$[0].price").value(5000000))
-                .andExpect(jsonPath("$[2].grade").value(nullValue()));
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[0].grade").value("PSA10"))
+                .andExpect(jsonPath("$.data[0].price").value(5000000))
+                .andExpect(jsonPath("$.data[2].grade").value(nullValue()));
     }
 
     @Test
@@ -54,7 +54,7 @@ class PriceControllerTest {
 
         mockMvc.perform(get("/api/prices/1/trades"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 
     @Test
