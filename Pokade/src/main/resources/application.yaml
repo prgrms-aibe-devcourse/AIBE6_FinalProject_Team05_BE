@@ -16,5 +16,5 @@ spring:
         format_sql: true
 
 jwt:
-  secret: ${JWT_SECRET:}
+  secret: ${JWT_SECRET}            # .env(spring.config.import)로 주입 — 미설정 시 부팅 실패(fail-fast)
   access-expiration: 30m
