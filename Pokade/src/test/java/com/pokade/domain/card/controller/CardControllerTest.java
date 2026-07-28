@@ -27,6 +27,8 @@ import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.service.CardService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.security.JwtAuthenticationEntryPoint;
+import com.pokade.global.security.JwtTokenProvider;
 
 @WebMvcTest(CardController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -37,6 +39,12 @@ class CardControllerTest {
 
     @MockitoBean
     private CardService cardService;
+
+    @MockitoBean
+    private JwtTokenProvider jwtTokenProvider;
+
+    @MockitoBean
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     @Test
     @DisplayName("t1 쿼리 파라미터로 카드를 검색하면 200과 페이지 결과를 반환한다")

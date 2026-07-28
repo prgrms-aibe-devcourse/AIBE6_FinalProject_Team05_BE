@@ -8,6 +8,8 @@ import com.pokade.domain.listing.dto.OrderbookEntryResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.security.JwtAuthenticationEntryPoint;
+import com.pokade.global.security.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -42,6 +44,12 @@ class ListingControllerTest {
 
     @MockitoBean
     private ListingService listingService;
+
+    @MockitoBean
+    private JwtTokenProvider jwtTokenProvider;
+
+    @MockitoBean
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     @Test
     void 매물_등록에_성공하면_201과_등록된_매물을_반환한다() throws Exception {
