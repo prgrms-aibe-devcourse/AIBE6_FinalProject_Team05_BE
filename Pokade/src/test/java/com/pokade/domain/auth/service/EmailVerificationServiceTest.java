@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -117,5 +118,92 @@ public class EmailVerificationServiceTest {
         emailVerificationService.send(email);
 
         then(mailSender).should().send(eq(email), anyString(), contains("123456"));
+    }
+
+    @Test
+    @DisplayName("코드가 일치하면 회원 상태를 ACTIVE로 전환하고 저장된 코드를 삭제한다")
+    void verify_activatesUserAndDeletesCode() {
+        String email = "user@pokade.com";
+        User user = pendingUser(email);
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(user));
+        given(codeStore.find(email)).willReturn(Optional.of("123456"));
+
+        emailVerificationService.verify(email, "123456");
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        then(codeStore).should().delete(email);
+    }
+
+    @Test
+    @DisplayName("가입되지 않은 이메일이면 USER_NOT_FOUND 예외를 던지고 코드를 삭제하지 않는다")
+    void verify_rejectsWhenUserNotFound() {
+        String email = "unknown@pokade.com";
+        given(userRepository.findByEmail(email)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> emailVerificationService.verify(email, "123456"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+        then(codeStore).should(never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("이미 인증 완료(ACTIVE)된 회원이면 EMAIL_ALREADY_VERIFIED 예외를 던지고 코드를 삭제하지 않는다")
+    void verify_rejectsWhenAlreadyVerified() {
+        String email = "active@pokade.com";
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(activeUser(email)));
+
+        assertThatThrownBy(() -> emailVerificationService.verify(email, "123456"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_ALREADY_VERIFIED);
+
+        then(codeStore).should(never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("저장된 코드가 없으면(만료·미발송) EMAIL_CODE_EXPIRED 예외를 던지고 코드를 삭제하지 않는다")
+    void verify_rejectsWhenCodeExpired() {
+        String email = "user@pokade.com";
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(pendingUser(email)));
+        given(codeStore.find(email)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> emailVerificationService.verify(email, "123456"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_CODE_EXPIRED);
+
+        then(codeStore).should(never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("저장된 코드와 다르면 EMAIL_CODE_MISMATCH 예외를 던지고 상태 전환·삭제를 하지 않는다")
+    void verify_rejectsWhenCodeMismatch() {
+        String email = "user@pokade.com";
+        User user = pendingUser(email);
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(user));
+        given(codeStore.find(email)).willReturn(Optional.of("999999"));
+
+        assertThatThrownBy(() -> emailVerificationService.verify(email, "123456"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_CODE_MISMATCH);
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.PENDING);
+        then(codeStore).should().incrementAttempt(email);
+        then(codeStore).should(never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("실패 횟수가 최대치 이상이면 EMAIL_VERIFY_ATTEMPT_EXCEEDED 예외를 던지고 코드 조회조차 하지 않는다")
+    void verify_rejectsWhenAttemptExceeded() {
+        String email = "user@pokade.com";
+        given(userRepository.findByEmail(email)).willReturn(Optional.of(pendingUser(email)));
+        given(codeStore.getAttemptCount(email)).willReturn(5L);
+
+        assertThatThrownBy(() -> emailVerificationService.verify(email, "123456"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
+
+        then(codeStore).should(never()).find(any());
+        then(codeStore).should(never()).incrementAttempt(any());
+        then(codeStore).should(never()).delete(any());
     }
 }
