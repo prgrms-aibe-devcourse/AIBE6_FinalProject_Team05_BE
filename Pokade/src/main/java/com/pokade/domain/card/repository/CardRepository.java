@@ -14,21 +14,33 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     @Query(value = """
             SELECT c.* FROM cards c WHERE
-            (:types IS NULL OR CAST(:types AS text) = ANY(c.types)) AND
-            (:rarity IS NULL OR c.rarity = :rarity) AND
+            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
+            (:hasRarities = false OR c.rarity IN (:rarities)) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
             """,
             countQuery = """
             SELECT COUNT(*) FROM cards c WHERE
-            (:types IS NULL OR CAST(:types AS text) = ANY(c.types)) AND
-            (:rarity IS NULL OR c.rarity = :rarity) AND
+            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
+            (:hasRarities = false OR c.rarity IN (:rarities)) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
             """,
             nativeQuery = true)
-    Page<Card> search(@Param("types") String types,
-                       @Param("rarity") String rarity,
-                       @Param("expansionId") String expansionId,
-                       Pageable pageable);
+    Page<Card> searchInternal(@Param("hasTypes") boolean hasTypes,
+                               @Param("types") List<String> types,
+                               @Param("hasRarities") boolean hasRarities,
+                               @Param("rarities") List<String> rarities,
+                               @Param("expansionId") String expansionId,
+                               Pageable pageable);
+
+    default Page<Card> search(List<String> types, List<String> rarities, String expansionId, Pageable pageable) {
+        boolean hasTypes = types != null && !types.isEmpty();
+        boolean hasRarities = rarities != null && !rarities.isEmpty();
+        return searchInternal(
+                hasTypes, hasTypes ? types : List.of(""),
+                hasRarities, hasRarities ? rarities : List.of(""),
+                expansionId,
+                pageable);
+    }
 
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
 
