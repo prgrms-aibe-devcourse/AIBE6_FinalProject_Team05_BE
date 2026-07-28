@@ -50,4 +50,30 @@ class EmailVerificationControllerTest {
 
         then(emailVerificationService).should(never()).send(any());
     }
+
+    @Test
+    @DisplayName("유효한 이메일과 6자리 코드면 200과 함께 인증 서비스를 호출한다.")
+    void verify_ok() {
+        mockMvcTester.post()
+                .uri("/api/auth/email/verify")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"user@pokade.com\",\"code\":\"123456\"}")
+                .assertThat()
+                .hasStatusOk();
+
+        then(emailVerificationService).should().verify("user@pokade.com", "123456");
+    }
+
+    @Test
+    @DisplayName("코드 형식이 6자리 숫자가 아니면 400을 반환하고 서비스를 호출하지 않는다.")
+    void verify_invalidCode() {
+        mockMvcTester.post()
+                .uri("/api/auth/email/verify")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"user@pokade.com\",\"code\":\"12ab\"}")
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST);
+
+        then(emailVerificationService).should(never()).verify(any(), any());
+    }
 }

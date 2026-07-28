@@ -88,4 +88,8 @@ public class User {
                 .pointBalance(0)
                 .build();
     }
+
+    public void verifyEmail() {
+        this.status = UserStatus.ACTIVE;
+    }
 }
