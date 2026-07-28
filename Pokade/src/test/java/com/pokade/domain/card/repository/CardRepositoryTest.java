@@ -190,6 +190,17 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("t17 타입을 여러 개, 레어도를 여러 개 동시에 선택하면 각 조건 내부는 OR, 조건 간에는 AND로 결합된다")
+    void t17() {
+        Page<Card> result = cardRepository.search(
+                List.of("Fire", "Water"), List.of("Rare Holo", "Double Rare"), null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactlyInAnyOrder("Charizard", "Blastoise", "Charizard ex");
+    }
+
+    @Test
     @DisplayName("t7 같은 포켓몬 도감번호를 가진 다른 카드를 유사 카드로 조회한다")
     void t7() {
         List<Card> result = cardRepository.findRelatedByPokedexNumber(charizard.getId());
