@@ -259,3 +259,86 @@ VALUES (
        );
 
 -- Charizard ex sv3pt5-6 : 체결 이력 없음 (빈 목록 검증용, 의도적으로 데이터 없음)
+
+-- =========================================================
+-- 매도 호가창(orderbook) 검증용 추가 시드
+-- Charizard base1-4 : 기존 ACTIVE 2건(2,950,000 / 3,200,000)에 2건 추가 → 총 4건, 가격 오름차순 검증용
+-- =========================================================
+
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2700000, NULL, 'ACTIVE', now(), now()
+       );
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3600000, 'PSA9', 'ACTIVE', now(), now()
+       );
+
+-- Charizard base1-4 : 나머지 등급(S / PSA10 / PSA8)도 grade 필터 테스트가 가능하도록 추가
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2800000, 'PSA8', 'ACTIVE', now(), now()
+       );
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3050000, 'S', 'ACTIVE', now(), now()
+       );
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           4000000, 'PSA10', 'ACTIVE', now(), now()
+       );
+
+-- Charizard base1-4 : 등급(A, PSA9)별로 매물을 여러 건 추가 — grade 필터 적용 시에도
+-- 가격 오름차순 정렬이 유지되는지 확인용 (일부러 오름차순이 아닌 순서로 INSERT)
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3450000, 'A', 'ACTIVE', now(), now()
+       );
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2900000, 'A', 'ACTIVE', now(), now()
+       );
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3900000, 'PSA9', 'ACTIVE', now(), now()
+       );
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3350000, 'PSA9', 'ACTIVE', now(), now()
+       );
+
+-- Charizard base1-4 : HIDDEN 1건 (status 필터링 검증용, 조회에 잡히면 안 됨)
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2600000, NULL, 'HIDDEN', now(), now()
+       );

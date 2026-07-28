@@ -1,8 +1,11 @@
 package com.pokade.domain.listing;
 
+import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
+import com.pokade.domain.listing.dto.OrderbookEntryResponse;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +20,8 @@ import java.util.List;
 public class ListingService {
 
     private final ListingRepository listingRepository;
+    private final CardRepository cardRepository;
+    private final CardVariantRepository cardVariantRepository;
 
     @Transactional
     public ListingResponse createListing(Long sellerId, ListingCreateRequest request) {
@@ -43,6 +48,23 @@ public class ListingService {
         return listingRepository.findByCardIdAndStatusOrderByPriceAsc(cardId, ListingStatus.ACTIVE)
                 .stream()
                 .map(ListingSummaryResponse::of)
+                .toList();
+    }
+
+    public List<OrderbookEntryResponse> getOrderbook(Long cardId, Long variantId, ListingGrade grade) {
+        if (!cardRepository.existsById(cardId)) {
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+        }
+
+        Long resolvedVariantId = variantId != null
+                ? variantId
+                : cardVariantRepository.findPrimaryVariantId(cardId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
+
+        return listingRepository
+                .findOrderbook(cardId, resolvedVariantId, ListingStatus.ACTIVE, grade)
+                .stream()
+                .map(OrderbookEntryResponse::of)
                 .toList();
     }
 
