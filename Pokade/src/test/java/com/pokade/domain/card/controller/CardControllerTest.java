@@ -27,6 +27,7 @@ import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.service.CardService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.security.JwtTokenProvider;
 
 @WebMvcTest(CardController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -38,6 +39,11 @@ class CardControllerTest {
     @MockitoBean
     private CardService cardService;
 
+    // JwtAuthenticationFilter가 OncePerRequestFilter라 슬라이스에 자동 포함되는데,
+    // 그 생성자가 요구하는 JwtTokenProvider가 없으면 컨텍스트 로딩 자체가 실패한다.
+    @MockitoBean
+    private JwtTokenProvider jwtTokenProvider;
+
     @Test
     @DisplayName("t1 쿼리 파라미터로 카드를 검색하면 200과 페이지 결과를 반환한다")
     void t1() {
@@ -45,7 +51,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1");
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(eq("Fire"), eq("Rare Holo"), eq("base1"), any(Pageable.class)))
+        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), eq("base1"), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -54,6 +60,21 @@ class CardControllerTest {
                 .hasStatusOk()
                 .bodyJson()
                 .extractingPath("$.data.content[0].name").isEqualTo("Charizard");
+    }
+
+    @Test
+    @DisplayName("t11 types를 콤마로, rarity를 반복 파라미터로 넘기면 둘 다 다중 값 목록으로 위임한다")
+    void t11() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
+        given(cardService.search(
+                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), any(Pageable.class)))
+                .willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards?types=Fire,Water&rarity=Common&rarity=Rare Holo")
+                .assertThat()
+                .hasStatusOk();
     }
 
     @Test
