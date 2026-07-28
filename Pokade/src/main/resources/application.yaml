@@ -3,9 +3,18 @@ spring:
     name: Pokade
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:Pokade/.env[.properties]
+      - optional:file:BE/Pokade/.env[.properties]
 
   jpa:
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
+
+jwt:
+  secret: ${JWT_SECRET:}
+  access-expiration: 30m
