@@ -1,5 +1,7 @@
 package com.pokade.global.security;
 
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -9,7 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import javax.crypto.SecretKey;
 import java.time.Duration;
+import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -87,5 +91,47 @@ class JwtAuthenticationFilterTest {
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(chain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("서명은 유효하지만 subject가 숫자가 아니면 인증 없이 통과한다")
+    void doFilterInternal_skipsAuthenticationWhenSubjectNotNumeric() throws Exception {
+        String token = signedToken("not-a-number", "USER");
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        FilterChain chain = mock(FilterChain.class);
+        given(request.getHeader("Authorization")).willReturn("Bearer " + token);
+
+        filter.doFilterInternal(request, response, chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(chain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("서명은 유효하지만 role 클레임이 없으면 인증 없이 통과한다")
+    void doFilterInternal_skipsAuthenticationWhenRoleMissing() throws Exception {
+        String token = signedToken("42", null);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        FilterChain chain = mock(FilterChain.class);
+        given(request.getHeader("Authorization")).willReturn("Bearer " + token);
+
+        filter.doFilterInternal(request, response, chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(chain).doFilter(request, response);
+    }
+
+    // 같은 시크릿으로 서명하되 클레임을 임의 구성한 토큰 생성 (role=null이면 role 클레임 생략)
+    private String signedToken(String subject, String role) {
+        SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes());
+        var builder = Jwts.builder()
+                .subject(subject)
+                .expiration(new Date(System.currentTimeMillis() + 60_000));
+        if (role != null) {
+            builder.claim("role", role);
+        }
+        return builder.signWith(key).compact();
     }
 }
