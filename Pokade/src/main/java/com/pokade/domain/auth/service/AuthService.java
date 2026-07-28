@@ -1,11 +1,15 @@
 package com.pokade.domain.auth.service;
 
+import com.pokade.domain.auth.dto.TokenPair;
+import com.pokade.domain.auth.dto.request.LoginRequest;
 import com.pokade.domain.auth.dto.request.SignupRequest;
 import com.pokade.domain.auth.dto.response.SignupResponse;
 import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -17,6 +21,9 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final RefreshTokenStore refreshTokenStore;
+
 
     @Transactional
     public SignupResponse signup(SignupRequest request) {
@@ -32,5 +39,26 @@ public class AuthService {
         );
 
         return SignupResponse.from(user);
+    }
+
+    @Transactional
+    public TokenPair login(LoginRequest request) {
+        User user = userRepository.findByEmail(request.email())
+                .orElseThrow(() -> new BusinessException(ErrorCode.LOGIN_FAILED));
+
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.LOGIN_FAILED);
+        }
+
+        if(user.getStatus() != UserStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
+        }
+
+        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole().name());
+        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId());
+
+        refreshTokenStore.save(user.getId(), refreshToken);
+
+        return new TokenPair(accessToken, refreshToken);
     }
 }
