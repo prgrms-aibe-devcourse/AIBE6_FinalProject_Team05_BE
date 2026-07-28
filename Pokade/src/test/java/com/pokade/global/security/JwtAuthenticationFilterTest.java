@@ -21,7 +21,7 @@ class JwtAuthenticationFilterTest {
     private static final String SECRET = "pokade-local-dev-jwt-secret-key-change-in-prod-0123456789";
 
     private final JwtTokenProvider jwtTokenProvider =
-            new JwtTokenProvider(new JwtProperties(SECRET, Duration.ofMinutes(30)));
+            new JwtTokenProvider(new JwtProperties(SECRET, Duration.ofMinutes(30), Duration.ofDays(14)));
     private final JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider);
 
     @AfterEach
