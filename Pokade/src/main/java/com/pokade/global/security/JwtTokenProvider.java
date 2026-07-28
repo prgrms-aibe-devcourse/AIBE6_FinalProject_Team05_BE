@@ -29,6 +29,15 @@ public class JwtTokenProvider {
                 .compact();
     }
 
+    // refresh token 발급 (subject=userId만, role 없이 최소 구성)
+    public String createRefreshToken(Long userId) {
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .expiration(new Date(System.currentTimeMillis() + jwtProperties.refreshExpiration().toMillis()))
+                .signWith(secretKey)
+                .compact();
+    }
+
     // 토큰의 서명·만료를 검증 (유효하면 true, 아니면 false)
     public boolean isValid(String token) {
         try {
