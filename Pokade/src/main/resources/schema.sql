@@ -181,6 +181,10 @@ CREATE TABLE IF NOT EXISTS trades (
 
 -- 카드별 체결 내역 조회(FR-PRICE-02, listings.card_id 조인) 최적화
 CREATE INDEX IF NOT EXISTS idx_listings_card_id ON listings(card_id);
+
+-- 매도 호가창(orderbook) 조회 최적화 (카드/변형 기준 ACTIVE 매물 가격 오름차순)
+CREATE INDEX IF NOT EXISTS idx_listings_orderbook
+    ON listings(card_id, variant_id, status, price ASC);
 CREATE INDEX IF NOT EXISTS idx_trades_listing_status ON trades(listing_id, status, confirmed_at DESC);
 
 CREATE TABLE IF NOT EXISTS payments (
