@@ -53,7 +53,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1");
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(eq("Fire"), eq("Rare Holo"), eq("base1"), any(Pageable.class)))
+        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), eq("base1"), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
