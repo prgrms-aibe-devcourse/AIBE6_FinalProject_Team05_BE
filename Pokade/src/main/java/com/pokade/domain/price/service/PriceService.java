@@ -4,6 +4,7 @@ import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.ListingRepository;
 import com.pokade.domain.listing.ListingStatus;
+import com.pokade.domain.price.ChartPeriod;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.repository.BuyOfferRepository;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -57,6 +59,21 @@ public class PriceService {
 
         return tradeRepository
                 .findRecentCompletedTrades(cardId, TradeStatus.COMPLETED, PageRequest.of(0, RECENT_TRADES_LIMIT))
+                .stream()
+                .map(TradeSummaryResponse::of)
+                .toList();
+    }
+
+    public List<TradeSummaryResponse> getPriceChart(Long cardId, String period) {
+        if (!cardRepository.existsById(cardId)) {
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+        }
+
+        ChartPeriod chartPeriod = ChartPeriod.from(period);
+        LocalDateTime from = LocalDateTime.now().minusDays(chartPeriod.getDays());
+
+        return tradeRepository
+                .findCompletedTradesSince(cardId, TradeStatus.COMPLETED, from)
                 .stream()
                 .map(TradeSummaryResponse::of)
                 .toList();
