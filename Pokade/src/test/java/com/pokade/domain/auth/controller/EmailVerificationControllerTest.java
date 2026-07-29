@@ -1,6 +1,8 @@
 package com.pokade.domain.auth.controller;
 
 import com.pokade.domain.auth.service.EmailVerificationService;
+import com.pokade.global.security.JwtAuthenticationEntryPoint;
+import com.pokade.global.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +26,12 @@ class EmailVerificationControllerTest {
 
     @MockitoBean
     private EmailVerificationService emailVerificationService;
+
+    @MockitoBean
+    private JwtTokenProvider jwtTokenProvider;
+
+    @MockitoBean
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     @Test
     @DisplayName("유효한 이메일이면 200과 함께 인증 코드 발송 서비스를 호출한다.")
