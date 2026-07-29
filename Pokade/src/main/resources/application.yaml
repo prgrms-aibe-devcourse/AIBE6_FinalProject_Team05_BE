@@ -15,6 +15,11 @@ spring:
       hibernate:
         format_sql: true
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 50MB
+
 jwt:
   secret: ${JWT_SECRET}            # .env(spring.config.import)로 주입 — 미설정 시 부팅 실패(fail-fast)
   access-expiration: 30m
