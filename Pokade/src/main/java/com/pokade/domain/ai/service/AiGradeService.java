@@ -12,9 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,7 +38,6 @@ public class AiGradeService {
 
     private final ChatClient chatClient;
     private final S3UploadService s3UploadService;
-    private final ImageResizer imageResizer;
     private final ImageQualityChecker imageQualityChecker;
     private final GradeResultRepository gradeResultRepository;
     private final GradeResultImageRepository gradeResultImageRepository;
@@ -142,8 +143,8 @@ public class AiGradeService {
                     .user(u -> {
                         u.text(buildPrompt());
                         files.forEach(file -> u.media(
-                                MimeTypeUtils.IMAGE_JPEG,
-                                resizeForVision(file)));
+                                mimeTypeOf(file),
+                                toResource(file)));
                     })
                     .options(OpenAiChatOptions.builder().model(gradeModel))
                     .call()
@@ -157,11 +158,20 @@ public class AiGradeService {
         }
     }
 
-    private Resource resizeForVision(MultipartFile file) {
+    // 저해상도 축소 시 표면 스크래치·모서리 화이트닝 등 미세 결함이 뭉개져 판단 정확도가 떨어질 수 있어 원본 화질 그대로 전송
+    private Resource toResource(MultipartFile file) {
         try {
-            return imageResizer.resizeForVision(file);
+            return new InputStreamResource(file.getInputStream());
         } catch (IOException e) {
-            throw new RuntimeException("이미지 리사이즈 실패: " + file.getOriginalFilename(), e);
+            throw new RuntimeException("이미지를 읽을 수 없습니다: " + file.getOriginalFilename(), e);
+        }
+    }
+
+    private MimeType mimeTypeOf(MultipartFile file) {
+        try {
+            return MimeTypeUtils.parseMimeType(file.getContentType());
+        } catch (Exception e) {
+            return MimeTypeUtils.IMAGE_JPEG;
         }
     }
 
