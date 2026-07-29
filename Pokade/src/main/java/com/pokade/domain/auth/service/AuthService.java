@@ -30,7 +30,7 @@ public class AuthService {
         if (userRepository.existsByEmail(request.email())) {
             throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
-        if(userRepository.existsByNickname(request.nickname())) {
+        if (userRepository.existsByNickname(request.nickname())) {
             throw new BusinessException(ErrorCode.DUPLICATE_NICKNAME);
         }
         String encodedPassword = passwordEncoder.encode(request.password());
@@ -50,7 +50,7 @@ public class AuthService {
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
 
-        if(user.getStatus() != UserStatus.ACTIVE) {
+        if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
 
@@ -60,5 +60,54 @@ public class AuthService {
         refreshTokenStore.save(user.getId(), refreshToken);
 
         return new TokenPair(accessToken, refreshToken);
+    }
+
+    public void logout(String accessToken) {
+        Long userId = jwtTokenProvider.getUserId(accessToken);
+        if (userId != null) {
+            refreshTokenStore.delete(userId);
+        }
+    }
+
+    @Transactional
+    public TokenPair reissue(String refreshToken) {
+        if (!jwtTokenProvider.isValid(refreshToken)) {
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        Long userId = jwtTokenProvider.getUserId(refreshToken);
+        String stored = refreshTokenStore.find(userId);
+
+        if (stored == null) {
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        if (!stored.equals(refreshToken)) {
+            String grace = refreshTokenStore.findGrace(userId);
+
+            if (refreshToken.equals(grace)) {
+                String accessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
+                return new TokenPair(accessToken, stored);
+            }
+            refreshTokenStore.delete(userId);
+            throw new BusinessException(ErrorCode.TOKEN_STOLEN);
+        }
+        String newAccessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
+
+        refreshTokenStore.saveGrace(userId, refreshToken);
+        refreshTokenStore.save(userId, newRefreshToken);
+
+        return new TokenPair(newAccessToken, newRefreshToken);
+    }
+
+
+    private String findRole(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> {
+                    refreshTokenStore.delete(userId);
+                    return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+                })
+                .getRole().name();
     }
 }
