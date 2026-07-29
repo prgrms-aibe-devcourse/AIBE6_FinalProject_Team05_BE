@@ -22,6 +22,11 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD}
 
+# 운영: refresh 쿠키 Secure 플래그 on (HTTPS 전송 강제) — dev는 기본값 false 유지
+app:
+  cookie:
+    secure: true
+
 pokade:
   ai:
     grade:
