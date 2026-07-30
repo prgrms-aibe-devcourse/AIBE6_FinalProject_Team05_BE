@@ -31,10 +31,11 @@ public class CardService {
                 .map(CardResponse::from);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CardDetailResponse getDetail(Long id) {
         Card card = cardRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
+        cardRepository.incrementViewCount(id);
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
         return CardDetailResponse.of(card, variants);
     }

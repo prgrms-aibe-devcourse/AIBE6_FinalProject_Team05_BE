@@ -1,9 +1,15 @@
 package com.pokade.domain.card.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +18,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.Expansion;
@@ -27,6 +36,9 @@ class CardRepositoryTest extends AbstractIntegrationTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private Card charizard;
     private Card charizardEx;
@@ -238,6 +250,90 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         assertThat(result.getContent())
                 .extracting(Card::getName)
                 .containsExactly("Blastoise", "Charizard", "Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t22 sort=popular이면 조회수 내림차순으로 정렬한다")
+    void t22() {
+        Expansion popExpansion = persistExpansion("popTest", "Popularity Test");
+        persistCardWithViewCount("Mewtwo", popExpansion, 50);
+        persistCardWithViewCount("Squirtle", popExpansion, 10);
+        persistCardWithViewCount("Bulbasaur", popExpansion, 0);
+
+        Page<Card> result = cardRepository.search(null, null, "popTest", "popular", PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Mewtwo", "Squirtle", "Bulbasaur");
+    }
+
+    @Test
+    @DisplayName("t23 필터와 sort=popular를 함께 적용해도 필터링된 결과 안에서 조회수순으로 정렬한다")
+    void t23() {
+        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, "popular", PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactlyInAnyOrder("Charizard", "Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t24 상세 조회 시 view_count를 원자적 UPDATE로 1 증가시킨다")
+    void t24() {
+        cardRepository.incrementViewCount(charizard.getId());
+        entityManager.flush();
+        entityManager.clear();
+
+        Card reloaded = cardRepository.findById(charizard.getId()).orElseThrow();
+        assertThat(reloaded.getViewCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("t25 여러 커넥션에서 동시에 조회수를 증가시켜도 유실 없이 정확히 누적된다")
+    void t25() throws InterruptedException {
+        // setUp()이 만든 데이터는 이 테스트 메서드가 끝나면 롤백되는 트랜잭션에 속해 있어 다른 커넥션에서 보이지 않는다.
+        // 동시성 검증을 위해 REQUIRES_NEW로 별도 트랜잭션을 커밋해 전용 카드를 만들고, 검증 후 직접 정리한다.
+        TransactionTemplate requiresNew = new TransactionTemplate(transactionManager);
+        requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        Long cardId = requiresNew.execute(status -> {
+            Card card = Card.builder().name("Concurrency Test Card").build();
+            entityManager.persist(card);
+            entityManager.flush();
+            return card.getId();
+        });
+
+        int threadCount = 20;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < threadCount; i++) {
+            futures.add(executor.submit(() -> cardRepository.incrementViewCount(cardId)));
+        }
+        executor.shutdown();
+        executor.awaitTermination(10, TimeUnit.SECONDS);
+        // future.get()으로 각 스레드의 예외를 즉시 드러낸다. submit()만 하고 get()을 부르지 않으면
+        // TransactionRequiredException 등이 조용히 삼켜져 view_count가 증가하지 않은 원인을 놓치게 된다.
+        for (Future<?> future : futures) {
+            assertThatCode(future::get).doesNotThrowAnyException();
+        }
+
+        try {
+            Integer finalViewCount = requiresNew.execute(status ->
+                    cardRepository.findById(cardId).orElseThrow().getViewCount());
+            assertThat(finalViewCount).isEqualTo(threadCount);
+        } finally {
+            requiresNew.executeWithoutResult(status -> cardRepository.deleteById(cardId));
+        }
+    }
+
+    private Card persistCardWithViewCount(String name, Expansion expansion, int viewCount) {
+        Card card = Card.builder()
+                .name(name)
+                .expansion(expansion)
+                .viewCount(viewCount)
+                .build();
+        entityManager.persist(card);
+        return card;
     }
 
     @Test

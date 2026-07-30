@@ -139,6 +139,7 @@ class CardServiceTest {
         assertThat(result.expansion().id()).isEqualTo("base1");
         assertThat(result.variants()).hasSize(2);
         assertThat(result.variants().get(0).variantName()).isEqualTo("unlimitedHolofoil");
+        verify(cardRepository).incrementViewCount(1L);
     }
 
     @Test
@@ -150,6 +151,7 @@ class CardServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CARD_NOT_FOUND);
+        verify(cardRepository, never()).incrementViewCount(any());
     }
 
     @Test

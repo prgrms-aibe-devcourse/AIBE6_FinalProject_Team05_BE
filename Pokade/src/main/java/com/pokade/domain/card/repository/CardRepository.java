@@ -7,8 +7,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.pokade.domain.card.entity.Card;
 
@@ -16,6 +18,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     String SORT_LATEST = "latest";
     String SORT_NAME = "name";
+    String SORT_POPULAR = "popular";
 
     /**
      * sort 요청 파라미터 화이트리스트. 값은 실제 실행할 SQL을 선택하는 키로만 쓰이고
@@ -23,7 +26,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
      */
     Map<String, String> SORT_COLUMN_WHITELIST = Map.of(
             SORT_LATEST, "synced_at",
-            SORT_NAME, "name"
+            SORT_NAME, "name",
+            SORT_POPULAR, "view_count"
     );
 
     @Query(value = """
@@ -68,6 +72,32 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                   @Param("expansionId") String expansionId,
                                   Pageable pageable);
 
+    @Query(value = """
+            SELECT c.* FROM cards c WHERE
+            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
+            (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:expansionId IS NULL OR c.expansion_id = :expansionId)
+            ORDER BY c.view_count DESC, c.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM cards c WHERE
+            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
+            (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:expansionId IS NULL OR c.expansion_id = :expansionId)
+            """,
+            nativeQuery = true)
+    Page<Card> searchOrderByPopular(@Param("hasTypes") boolean hasTypes,
+                                     @Param("types") List<String> types,
+                                     @Param("hasRarities") boolean hasRarities,
+                                     @Param("rarities") List<String> rarities,
+                                     @Param("expansionId") String expansionId,
+                                     Pageable pageable);
+
+    @Transactional
+    @Modifying
+    @Query(value = "UPDATE cards SET view_count = view_count + 1 WHERE id = :id", nativeQuery = true)
+    void incrementViewCount(@Param("id") Long id);
+
     default Page<Card> search(List<String> types, List<String> rarities, String expansionId, String sort, Pageable pageable) {
         boolean hasTypes = types != null && !types.isEmpty();
         boolean hasRarities = rarities != null && !rarities.isEmpty();
@@ -82,6 +112,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
         if (SORT_NAME.equals(resolvedSort)) {
             return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, expansionId, unsortedPageable);
+        }
+        if (SORT_POPULAR.equals(resolvedSort)) {
+            return searchOrderByPopular(hasTypes, safeTypes, hasRarities, safeRarities, expansionId, unsortedPageable);
         }
         return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, expansionId, unsortedPageable);
     }
