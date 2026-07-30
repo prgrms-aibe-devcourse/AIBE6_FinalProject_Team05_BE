@@ -163,4 +163,115 @@ class AuthServiceTest {
 
         then(refreshTokenStore).should(never()).save(any(), any());
     }
+
+    @Test
+    @DisplayName("저장된 refresh와 일치하면 회전(새 access+새 refresh)하고 직전 refresh를 grace에 보관한다")
+    void reissue_success() {
+        String oldRefresh = "old-refresh";
+        given(jwtTokenProvider.isValid(oldRefresh)).willReturn(true);
+        given(jwtTokenProvider.getUserId(oldRefresh)).willReturn(1L);
+        given(refreshTokenStore.find(1L)).willReturn(oldRefresh);
+        given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
+        given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
+
+        TokenPair result = authService.reissue(oldRefresh);
+
+        assertThat(result.accessToken()).isEqualTo("new-access");
+        assertThat(result.refreshToken()).isEqualTo("new-refresh");
+        then(refreshTokenStore).should().saveGrace(1L, oldRefresh);
+        then(refreshTokenStore).should().save(1L, "new-refresh");
+    }
+
+    @Test
+    @DisplayName("refresh 서명·만료가 유효하지 않으면 INVALID_REFRESH_TOKEN 예외를 던진다")
+    void reissue_invalidToken() {
+        given(jwtTokenProvider.isValid("bad")).willReturn(false);
+
+        assertThatThrownBy(() -> authService.reissue("bad"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+
+    @Test
+    @DisplayName("저장된 refresh가 없으면 INVALID_REFRESH_TOKEN 예외를 던진다")
+    void reissue_noStoredToken() {
+        given(jwtTokenProvider.isValid("r")).willReturn(true);
+        given(jwtTokenProvider.getUserId("r")).willReturn(1L);
+        given(refreshTokenStore.find(1L)).willReturn(null);
+
+        assertThatThrownBy(() -> authService.reissue("r"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+
+    @Test
+    @DisplayName("저장값과 불일치하고 grace도 아니면 TOKEN_STOLEN 예외를 던지고 저장 토큰을 삭제한다")
+    void reissue_stolen() {
+        String presented = "stale-refresh";
+        given(jwtTokenProvider.isValid(presented)).willReturn(true);
+        given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
+        given(refreshTokenStore.find(1L)).willReturn("current-refresh");
+        given(refreshTokenStore.findGrace(1L)).willReturn(null);
+
+        assertThatThrownBy(() -> authService.reissue(presented))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TOKEN_STOLEN);
+
+        then(refreshTokenStore).should().delete(1L);
+    }
+
+    @Test
+    @DisplayName("저장값과 불일치해도 grace와 일치하면 재회전 없이 새 access만 발급하고 현재 refresh로 수렴한다")
+    void reissue_graceConverges() {
+        String presented = "old-refresh";
+        given(jwtTokenProvider.isValid(presented)).willReturn(true);
+        given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
+        given(refreshTokenStore.find(1L)).willReturn("current-refresh");
+        given(refreshTokenStore.findGrace(1L)).willReturn(presented);
+        given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
+        given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
+
+        TokenPair result = authService.reissue(presented);
+
+        assertThat(result.accessToken()).isEqualTo("new-access");
+        assertThat(result.refreshToken()).isEqualTo("current-refresh");
+        then(refreshTokenStore).should(never()).save(any(), any());
+    }
+
+    @Test
+    @DisplayName("refresh는 유효하나 유저가 존재하지 않으면 INVALID_REFRESH_TOKEN 예외를 던지고 저장 토큰을 삭제한다")
+    void reissue_userDeleted() {
+        String presented = "current-refresh";
+        given(jwtTokenProvider.isValid(presented)).willReturn(true);
+        given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
+        given(refreshTokenStore.find(1L)).willReturn(presented);
+        given(userRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.reissue(presented))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+
+        then(refreshTokenStore).should().delete(1L);
+    }
+
+    @Test
+    @DisplayName("로그아웃하면 userId로 refresh와 grace 토큰을 삭제한다")
+    void logout_deletesTokens() {
+        given(jwtTokenProvider.getUserId("refresh")).willReturn(1L);
+
+        authService.logout("refresh");
+
+        then(refreshTokenStore).should().delete(1L);
+    }
+
+    @Test
+    @DisplayName("refresh가 무효·만료여서 userId를 못 구하면 아무것도 삭제하지 않고 예외 없이 넘어간다(멱등)")
+    void logout_idempotentWhenInvalid() {
+        given(jwtTokenProvider.getUserId("bad")).willReturn(null);
+
+        authService.logout("bad");
+
+        then(refreshTokenStore).should(never()).delete(any());
+    }
 }
