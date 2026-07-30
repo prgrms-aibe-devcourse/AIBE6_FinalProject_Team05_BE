@@ -1,6 +1,7 @@
 package com.pokade.domain.listing.repository;
 
 import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -13,6 +14,15 @@ import java.util.Optional;
 public interface ListingRepository extends JpaRepository<Listing, Long> {
 
     List<Listing> findByCardIdAndStatusOrderByPriceAsc(Long cardId, ListingStatus status);
+
+    @Query("SELECT l FROM Listing l "
+            + "WHERE l.cardId = :cardId AND l.variantId = :variantId AND l.status = :status "
+            + "AND (:grade IS NULL OR l.grade = :grade) "
+            + "ORDER BY l.price ASC")
+    List<Listing> findOrderbook(@Param("cardId") Long cardId,
+                                 @Param("variantId") Long variantId,
+                                 @Param("status") ListingStatus status,
+                                 @Param("grade") ListingGrade grade);
 
     List<Listing> findBySellerId(Long sellerId);
 

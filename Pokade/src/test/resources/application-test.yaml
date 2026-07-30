@@ -9,3 +9,7 @@ spring:
     init:
       mode: always
       data-locations: optional:classpath:no-data.sql
+
+jwt:
+  secret: test-only-jwt-secret-key-for-unit-tests-not-a-real-secret-1234567890
+  access-expiration: 30m

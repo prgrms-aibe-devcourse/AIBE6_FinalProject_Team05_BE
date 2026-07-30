@@ -3,7 +3,10 @@ package com.pokade.domain.listing.controller;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
+import com.pokade.domain.listing.dto.OrderbookEntryResponse;
+import com.pokade.global.response.ApiResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
+import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.service.ListingService;
 import jakarta.validation.Valid;
@@ -43,6 +46,15 @@ public class ListingController {
     @GetMapping
     public ResponseEntity<List<ListingSummaryResponse>> getActiveListings(@RequestParam Long cardId) {
         return ResponseEntity.ok(listingService.getActiveListings(cardId));
+    }
+
+    @GetMapping("/{cardId}/orderbook")
+    public ApiResponse<List<OrderbookEntryResponse>> getOrderbook(
+            @PathVariable Long cardId,
+            @RequestParam(required = false) Long variantId,
+            @RequestParam(required = false) ListingGrade grade
+    ) {
+        return ApiResponse.ok(listingService.getOrderbook(cardId, variantId, grade));
     }
 
     @GetMapping("/me")
