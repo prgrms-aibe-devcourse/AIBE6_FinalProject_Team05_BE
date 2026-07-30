@@ -15,6 +15,15 @@ spring:
       hibernate:
         format_sql: true
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 70MB   # AI 등급 진단은 6장 필수 업로드 — 파일당 한도(10MB) × 6장을 여유있게 수용
+
+server:
+  tomcat:
+    max-swallow-size: 70MB     # 요청 용량 초과로 거부될 때 Tomcat이 남은 본문을 완전히 버릴 수 있도록 요청 한도와 맞춤(기본 2MB로는 413 응답 전에 연결이 끊김)
+
 jwt:
   secret: ${JWT_SECRET}            # .env(spring.config.import)로 주입 — 미설정 시 부팅 실패(fail-fast)
   access-expiration: 30m
