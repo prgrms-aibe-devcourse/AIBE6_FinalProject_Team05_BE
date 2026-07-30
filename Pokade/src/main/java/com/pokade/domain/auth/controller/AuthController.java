@@ -7,24 +7,20 @@ import com.pokade.domain.auth.dto.response.LoginResponse;
 import com.pokade.domain.auth.dto.response.SignupResponse;
 import com.pokade.domain.auth.service.AuthService;
 import com.pokade.global.response.ApiResponse;
-import com.pokade.global.security.JwtProperties;
+import com.pokade.global.web.RefreshTokenCookieFactory;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-    @Value("${app.cookie.secure:false}")
-    private boolean cookieSecure;
 
     private final AuthService authService;
-    private final JwtProperties jwtProperties;
+    private final RefreshTokenCookieFactory refreshTokenCookieFactory;
 
     @PostMapping("/signup")
     public ApiResponse<SignupResponse> signup(
@@ -42,16 +38,8 @@ public class AuthController {
             HttpServletResponse response
     ) {
         TokenPair tokens = authService.login(request);
-
-        ResponseCookie cookie = ResponseCookie.from("refreshToken", tokens.refreshToken())
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/api/auth")
-                .maxAge(jwtProperties.refreshExpiration()) // 토큰 만료와 동기화
-                .sameSite("Lax") //CSRF 관련 로컬(3000)/API(8080)가 같은 site(localhost)로 인식되도록 lax로 설정
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                refreshTokenCookieFactory.create(tokens.refreshToken()).toString());
         return ApiResponse.ok("로그인 성공", LoginResponse.of(tokens.accessToken()));
     }
 
@@ -61,16 +49,8 @@ public class AuthController {
             HttpServletResponse response
     ) {
         TokenPair tokens = authService.reissue(refreshToken);
-
-        ResponseCookie cookie = ResponseCookie.from("refreshToken", tokens.refreshToken())
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/api/auth")
-                .maxAge(jwtProperties.refreshExpiration()) // 토큰 만료와 동기화
-                .sameSite("Lax")
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                refreshTokenCookieFactory.create(tokens.refreshToken()).toString());
         return ApiResponse.ok("토큰 재발급 성공", LoginResponse.of(tokens.accessToken()));
     }
 
@@ -80,17 +60,8 @@ public class AuthController {
             HttpServletResponse response
     ){
         authService.logout(refreshToken);
-
-        ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/api/auth")
-                .maxAge(0)
-                .sameSite("Lax")
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                refreshTokenCookieFactory.expired().toString());
         return ApiResponse.ok("로그아웃 성공");
-
     }
 }
