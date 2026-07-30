@@ -55,6 +55,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/cards", "/api/cards/**").permitAll()
                         .requestMatchers(AUTH_WHITELIST).permitAll()
                         .requestMatchers("/api/prices/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/listings").permitAll()
                         // TODO: 로컬 테스트용 임시 permitAll — 인증 연동 후 제거하거나 정식 공개 여부 팀 결정 필요
                         .requestMatchers(HttpMethod.GET, "/api/listings/*/orderbook").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()

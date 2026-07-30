@@ -1,7 +1,7 @@
 package com.pokade.domain.trade.dto;
 
-import com.pokade.domain.trade.Trade;
-import com.pokade.domain.trade.TradeStatus;
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.entity.TradeStatus;
 
 import java.time.LocalDateTime;
 

@@ -1,4 +1,4 @@
-package com.pokade.domain.listing;
+package com.pokade.domain.listing.entity;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;

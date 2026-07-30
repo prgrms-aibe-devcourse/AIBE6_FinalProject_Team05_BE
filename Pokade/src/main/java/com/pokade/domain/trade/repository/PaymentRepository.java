@@ -1,5 +1,6 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.repository;
 
+import com.pokade.domain.trade.entity.Payment;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

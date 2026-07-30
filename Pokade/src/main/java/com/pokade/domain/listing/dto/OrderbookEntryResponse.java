@@ -1,7 +1,7 @@
 package com.pokade.domain.listing.dto;
 
-import com.pokade.domain.listing.Listing;
-import com.pokade.domain.listing.ListingGrade;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingGrade;
 
 public record OrderbookEntryResponse(
         Long listingId,

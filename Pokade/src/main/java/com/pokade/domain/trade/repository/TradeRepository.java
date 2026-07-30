@@ -1,4 +1,7 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.repository;
+
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.entity.TradeStatus;
 
 import java.util.List;
 
