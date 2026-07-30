@@ -12,7 +12,7 @@ class JwtTokenProviderTest {
     private static final String SECRET = "pokade-local-dev-jwt-secret-key-change-in-prod-0123456789";
 
     private final JwtTokenProvider provider =
-            new JwtTokenProvider(new JwtProperties(SECRET, Duration.ofMinutes(30)));
+            new JwtTokenProvider(new JwtProperties(SECRET, Duration.ofMinutes(30), Duration.ofDays(14)));
 
     @Test
     @DisplayName("발급한 토큰은 유효하고, userId와 role을 그대로 복원한다")
@@ -28,7 +28,7 @@ class JwtTokenProviderTest {
     @DisplayName("만료된 토큰은 isValid가 false를 반환한다")
     void isValid_returnsFalseForExpiredToken() {
         JwtTokenProvider expiredProvider =
-                new JwtTokenProvider(new JwtProperties(SECRET, Duration.ofSeconds(-1)));
+                new JwtTokenProvider(new JwtProperties(SECRET, Duration.ofSeconds(-1), Duration.ofDays(14)));
         String expired = expiredProvider.createAccessToken(42L, "USER");
 
         assertThat(provider.isValid(expired)).isFalse();
@@ -38,7 +38,7 @@ class JwtTokenProviderTest {
     @DisplayName("다른 키로 서명된(위조) 토큰은 isValid가 false를 반환한다")
     void isValid_returnsFalseForForgedToken() {
         JwtTokenProvider otherKeyProvider =
-                new JwtTokenProvider(new JwtProperties("another-completely-different-secret-key-0123456789", Duration.ofMinutes(30)));
+                new JwtTokenProvider(new JwtProperties("another-completely-different-secret-key-0123456789", Duration.ofMinutes(30), Duration.ofDays(14)));
         String forged = otherKeyProvider.createAccessToken(42L, "USER");
 
         assertThat(provider.isValid(forged)).isFalse();

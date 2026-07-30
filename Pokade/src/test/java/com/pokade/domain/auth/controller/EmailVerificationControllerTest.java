@@ -2,7 +2,7 @@ package com.pokade.domain.auth.controller;
 
 import com.pokade.domain.auth.service.EmailVerificationService;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
-import com.pokade.global.security.JwtTokenProvider;
+import com.pokade.global.security.JwtAuthenticationFilter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,9 +27,9 @@ class EmailVerificationControllerTest {
     @MockitoBean
     private EmailVerificationService emailVerificationService;
 
+    // SecurityConfig가 생성자에서 요구하는 빈들 — 슬라이스엔 없으므로 목으로 채움
     @MockitoBean
-    private JwtTokenProvider jwtTokenProvider;
-
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
     @MockitoBean
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
