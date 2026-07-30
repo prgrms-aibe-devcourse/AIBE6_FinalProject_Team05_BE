@@ -5,6 +5,8 @@ import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.security.JwtAuthenticationEntryPoint;
+import com.pokade.global.security.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -33,6 +35,12 @@ class TradeControllerTest {
 
     @MockitoBean
     private TradeService tradeService;
+
+    @MockitoBean
+    private JwtTokenProvider jwtTokenProvider;
+
+    @MockitoBean
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     @Test
     void 즉시구매에_성공하면_201과_생성된_거래를_반환한다() throws Exception {
