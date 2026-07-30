@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -109,5 +110,43 @@ class TradeControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRADE_CONFLICT"));
+    }
+
+    @Test
+    void 본인_거래를_조회하면_200과_거래정보를_반환한다() throws Exception {
+        TradeResponse response = new TradeResponse(
+                1L, 1L, 200L, 10000, TradeStatus.PENDING,
+                null, null, null, LocalDateTime.now());
+
+        given(tradeService.getTrade(200L, 1L)).willReturn(response);
+
+        mockMvc.perform(get("/api/trades/{id}", 1L)
+                        .header("X-USER-ID", 200L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.buyerId").value(200L))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    void 본인_거래가_아니면_403을_반환한다() throws Exception {
+        given(tradeService.getTrade(999L, 1L))
+                .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
+
+        mockMvc.perform(get("/api/trades/{id}", 1L)
+                        .header("X-USER-ID", 999L))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 존재하지_않는_거래를_조회하면_404를_반환한다() throws Exception {
+        given(tradeService.getTrade(200L, 999L))
+                .willThrow(new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        mockMvc.perform(get("/api/trades/{id}", 999L)
+                        .header("X-USER-ID", 200L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRADE_NOT_FOUND"));
     }
 }
