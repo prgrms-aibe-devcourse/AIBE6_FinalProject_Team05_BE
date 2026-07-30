@@ -1,0 +1,54 @@
+language: "ko-KR"
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+      - "develop"
+  path_filters:
+    - "!**/build/**"
+    - "!**/.gradle/**"
+    - "!**/gradle/wrapper/**"
+    - "!gradlew"
+    - "!gradlew.bat"
+    - "!**/*.sql"
+    - "!.idea/**"
+  path_instructions:
+    - path: "src/main/java/**/controller/*.java"
+      instructions: >
+        Spring MVC 컨트롤러 리뷰 기준: 요청 검증(@Valid)이 누락되지 않았는지,
+        응답이 공통 Response 래퍼(global/response)를 일관되게 사용하는지,
+        비즈니스 로직이 컨트롤러에 새어나오지 않고 service로 위임되는지 확인해줘.
+    - path: "src/main/java/**/service/*.java"
+      instructions: >
+        서비스 계층 리뷰 기준: @Transactional 범위가 적절한지(읽기 전용은 readOnly=true),
+        N+1 쿼리 위험이 있는 반복 조회가 있는지, 예외는 global/exception의 커스텀 예외를
+        사용하는지 확인해줘.
+    - path: "src/main/java/**/repository/*.java"
+      instructions: >
+        JPA 리포지토리 리뷰 기준: fetch join 없이 연관 엔티티를 순회 조회해서 N+1이 발생하지
+        않는지, 메서드 이름 기반 쿼리가 복잡해지면 @Query 사용을 제안해줘.
+    - path: "src/main/java/**/entity/*.java"
+      instructions: >
+        JPA 엔티티 리뷰 기준: setter를 무분별하게 열어두지 않았는지, 연관관계의 주인과
+        fetch 전략(LAZY 권장)이 명확한지, 생성자는 정적 팩토리 메서드나 빌더 패턴을
+        따르는지 확인해줘.
+    - path: "src/main/java/com/pokade/global/security/**/*.java"
+      instructions: >
+        Spring Security/JWT/OAuth2 설정 리뷰 기준: 토큰 검증 로직에 취약점이 없는지,
+        비밀값이 하드코딩되지 않고 환경변수/설정으로 분리되어 있는지 꼼꼼히 확인해줘.
+    - path: "src/test/java/**/*.java"
+      instructions: >
+        테스트 코드 리뷰 기준: given-when-then 구조가 명확한지, 실제 동작 검증 없이
+        mock 호출 여부만 확인하는 얕은 테스트는 아닌지 지적해줘.
+
+chat:
+  auto_reply: true
