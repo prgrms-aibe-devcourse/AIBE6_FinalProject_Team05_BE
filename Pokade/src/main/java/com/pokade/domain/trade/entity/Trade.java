@@ -1,6 +1,6 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.entity;
 
-import com.pokade.domain.listing.Listing;
+import com.pokade.domain.listing.entity.Listing;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import jakarta.persistence.Column;

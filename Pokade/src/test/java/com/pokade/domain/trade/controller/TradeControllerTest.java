@@ -1,8 +1,10 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
+import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.trade.service.TradeService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;

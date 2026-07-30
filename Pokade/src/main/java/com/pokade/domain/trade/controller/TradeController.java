@@ -1,7 +1,8 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.controller;
 
 import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
+import com.pokade.domain.trade.service.TradeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

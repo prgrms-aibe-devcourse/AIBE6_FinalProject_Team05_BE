@@ -1,9 +1,13 @@
-package com.pokade.domain.listing;
+package com.pokade.domain.listing.service;
 
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingImage;
+import com.pokade.domain.listing.entity.ListingStatus;
+import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;

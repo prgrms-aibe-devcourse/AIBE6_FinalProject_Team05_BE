@@ -1,7 +1,11 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.service;
 
-import com.pokade.domain.listing.Listing;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.trade.dto.TradeResponse;
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.repository.PaymentRepository;
+import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -20,7 +24,7 @@ import static org.mockito.BDDMockito.given;
 class TradeServiceTest {
 
     @Mock
-    private com.pokade.domain.listing.ListingRepository listingRepository;
+    private ListingRepository listingRepository;
 
     @Mock
     private TradeRepository tradeRepository;

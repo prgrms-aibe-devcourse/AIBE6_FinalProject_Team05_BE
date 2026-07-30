@@ -1,5 +1,7 @@
-package com.pokade.domain.listing;
+package com.pokade.domain.listing.repository;
 
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingStatus;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
