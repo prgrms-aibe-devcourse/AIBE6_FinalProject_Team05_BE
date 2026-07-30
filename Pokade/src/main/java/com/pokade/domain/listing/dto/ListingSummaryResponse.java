@@ -1,8 +1,8 @@
 package com.pokade.domain.listing.dto;
 
-import com.pokade.domain.listing.Listing;
-import com.pokade.domain.listing.ListingGrade;
-import com.pokade.domain.listing.ListingStatus;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.listing.entity.ListingStatus;
 
 import java.time.LocalDateTime;
 

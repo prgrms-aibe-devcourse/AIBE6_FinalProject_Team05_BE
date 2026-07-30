@@ -1,4 +1,4 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

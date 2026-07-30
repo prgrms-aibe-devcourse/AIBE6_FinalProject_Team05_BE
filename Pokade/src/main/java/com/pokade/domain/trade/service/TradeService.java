@@ -1,9 +1,14 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.service;
 
-import com.pokade.domain.listing.Listing;
-import com.pokade.domain.listing.ListingRepository;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
+import com.pokade.domain.trade.entity.Payment;
+import com.pokade.domain.trade.entity.PaymentMethod;
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.repository.PaymentRepository;
+import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +55,19 @@ public class TradeService {
                         .method(PaymentMethod.CARD)
                         .build()
         );
+
+        return TradeResponse.of(trade);
+    }
+
+    public TradeResponse getTrade(Long userId, Long tradeId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        boolean isParticipant = trade.getBuyerId().equals(userId)
+                || trade.getListing().getSellerId().equals(userId);
+        if (!isParticipant) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
 
         return TradeResponse.of(trade);
     }

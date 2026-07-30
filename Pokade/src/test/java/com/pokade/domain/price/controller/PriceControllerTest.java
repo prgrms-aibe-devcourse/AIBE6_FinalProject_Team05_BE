@@ -1,6 +1,6 @@
 package com.pokade.domain.price.controller;
 
-import com.pokade.domain.listing.ListingGrade;
+import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.exception.BusinessException;

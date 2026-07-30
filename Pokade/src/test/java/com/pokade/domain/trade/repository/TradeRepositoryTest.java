@@ -1,4 +1,4 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -13,9 +13,11 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.data.domain.PageRequest;
 
 import com.pokade.domain.card.entity.Card;
-import com.pokade.domain.listing.Listing;
-import com.pokade.domain.listing.ListingGrade;
-import com.pokade.domain.listing.ListingRepository;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.user.entity.User;
 import com.pokade.support.AbstractIntegrationTest;
 

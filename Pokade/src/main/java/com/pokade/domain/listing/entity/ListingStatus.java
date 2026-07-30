@@ -1,4 +1,4 @@
-package com.pokade.domain.listing;
+package com.pokade.domain.listing.entity;
 
 public enum ListingStatus {
     ACTIVE,
