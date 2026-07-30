@@ -53,4 +53,17 @@ public class TradeService {
 
         return TradeResponse.of(trade);
     }
+
+    public TradeResponse getTrade(Long userId, Long tradeId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        boolean isParticipant = trade.getBuyerId().equals(userId)
+                || trade.getListing().getSellerId().equals(userId);
+        if (!isParticipant) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        return TradeResponse.of(trade);
+    }
 }

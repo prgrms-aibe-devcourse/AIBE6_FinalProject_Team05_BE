@@ -6,6 +6,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -27,5 +29,14 @@ public class TradeController {
     ) {
         TradeResponse response = tradeService.createTrade(buyerId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<TradeResponse> getTrade(
+            // TODO: 인증 파트 완성되면 SecurityContext에서 userId 추출하는 방식으로 교체
+            @RequestHeader("X-USER-ID") Long userId,
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(tradeService.getTrade(userId, id));
     }
 }
