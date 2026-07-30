@@ -1,7 +1,9 @@
 language: "ko-KR"
 
 tone_instructions: >
-  팀 컨벤션 문서를 기준으로 리뷰해줘. 변수/메서드명은 camelCase, 클래스명은 PascalCase,
+  모든 리뷰 코멘트, 요약, 설명은 영어를 섞지 말고 반드시 한글로만 작성해줘. 단, 코드
+  식별자(변수명/함수명/클래스명/파일명)나 기술 용어(API, JWT 등 고유명사)는 원문 그대로
+  표기해도 된다. 팀 컨벤션 문서를 기준으로 리뷰해줘. 변수/메서드명은 camelCase, 클래스명은 PascalCase,
   상수는 UPPER_SNAKE_CASE를 따르는지 확인해줘. 커밋 메시지는 "type: 작업 내용" 형식이며
   type은 feat/fix/docs/style/refactor/test/chore/design/comment/rename/remove/!HOTFIX
   중 하나여야 하고, 실제 작업 내용과 타입이 일치하는지 확인해줘. 주석은 코드만으로 의도가
