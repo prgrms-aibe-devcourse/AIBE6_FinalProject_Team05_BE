@@ -45,8 +45,9 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .formLogin(form -> form.disable()) // 명시 안하면 disable 문서화 목적
-                .httpBasic(httpBasic -> httpBasic.disable())  // 명시 안하면 disable 문서화 목적
+                // 폼 로그인·HTTP Basic·기본 로그아웃 미사용 — JWT REST 전용이라 명시적으로 비활성화(방어적 설정)
+                .formLogin(form -> form.disable())
+                .httpBasic(httpBasic -> httpBasic.disable())
                 .logout(logout -> logout.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
