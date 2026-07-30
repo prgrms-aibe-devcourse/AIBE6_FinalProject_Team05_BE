@@ -24,6 +24,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
+    private final LoginAttemptStore loginAttemptStore;
 
     private String dummyHash;
 
@@ -46,20 +47,29 @@ public class AuthService {
 
     @Transactional
     public TokenPair login(LoginRequest request) {
+        String email = request.email();
+        if (loginAttemptStore.isBlocked(email)) { // BCrypt 전에 차단 → DoS 증폭 컷
+            throw new BusinessException(ErrorCode.LOGIN_ATTEMPTS_EXCEEDED);
+        }
+
         User user = userRepository.findByEmail(request.email()).orElse(null);
 
         if (user == null) {
-            passwordEncoder.matches(request.password(), dummyHash);
+            passwordEncoder.matches(request.password(), dummyHash); //타이밍 방어
+            loginAttemptStore.recordFailure(email);
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            loginAttemptStore.recordFailure(email);
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
 
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
+            throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED); // 미인증은 실패로 안 셈
         }
+
+        loginAttemptStore.reset(email); // 로그인 성공 시 실패 기록 초기화
 
         String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole().name());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getId());

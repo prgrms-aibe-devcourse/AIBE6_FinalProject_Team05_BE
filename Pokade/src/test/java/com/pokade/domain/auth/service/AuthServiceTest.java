@@ -40,6 +40,8 @@ class AuthServiceTest {
     JwtTokenProvider jwtTokenProvider;
     @Mock
     RefreshTokenStore refreshTokenStore;
+    @Mock
+    LoginAttemptStore loginAttemptStore;
     @InjectMocks
     AuthService authService;
 
@@ -121,6 +123,7 @@ class AuthServiceTest {
         assertThat(result.accessToken()).isEqualTo("access-token");
         assertThat(result.refreshToken()).isEqualTo("refresh-token");
         then(refreshTokenStore).should().save(1L, "refresh-token");
+        then(loginAttemptStore).should().reset(email);          // 성공 → 카운터 리셋
     }
 
     @Test
@@ -135,6 +138,7 @@ class AuthServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_FAILED);
 
         then(refreshTokenStore).should(never()).save(any(), any());
+        then(loginAttemptStore).should().recordFailure(email);  // 실패 → 카운트
     }
 
     @Test
@@ -149,6 +153,7 @@ class AuthServiceTest {
 
         then(passwordEncoder).should().matches(any(), any());   // ← 추가: 유저 없어도 더미 비교 호출
         then(refreshTokenStore).should(never()).save(any(), any());
+        then(loginAttemptStore).should().recordFailure(email);  // 실패 → 카운트
     }
 
     @Test
@@ -274,5 +279,19 @@ class AuthServiceTest {
         authService.logout("bad");
 
         then(refreshTokenStore).should(never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("시도 초과로 차단된 이메일이면 LOGIN_ATTEMPTS_EXCEEDED를 던지고 유저 조회·비번 검증을 하지 않는다")
+    void login_blocked() {
+        String email = "user@pokade.com";
+        given(loginAttemptStore.isBlocked(email)).willReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(email, "pokade1234")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_ATTEMPTS_EXCEEDED);
+
+        then(userRepository).should(never()).findByEmail(any());   // BCrypt 전에 차단
+        then(passwordEncoder).should(never()).matches(any(), any());
     }
 }
