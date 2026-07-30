@@ -53,7 +53,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1");
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), eq("base1"), any(Pageable.class)))
+        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), eq("base1"), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -70,7 +70,7 @@ class CardControllerTest {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
         given(cardService.search(
-                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), any(Pageable.class)))
+                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -84,13 +84,31 @@ class CardControllerTest {
     void t2() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardService.search(isNull(), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
                 .uri("/api/cards")
                 .assertThat()
                 .hasStatusOk();
+    }
+
+    @Test
+    @DisplayName("t12 sort 쿼리 파라미터를 서비스에 그대로 위임한다")
+    void t12() {
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+                List.of("Fire"), null, null, "base1");
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardService.search(isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
+                .willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards?sort=name")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content[0].name").isEqualTo("Charizard");
     }
 
     @Test

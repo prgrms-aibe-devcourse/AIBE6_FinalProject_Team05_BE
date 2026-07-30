@@ -54,9 +54,9 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(List.of("Fire"), List.of("Rare Holo"), "base1", pageable)).willReturn(page);
+        given(cardRepository.search(List.of("Fire"), List.of("Rare Holo"), "base1", "name", pageable)).willReturn(page);
 
-        Page<CardResponse> result = cardService.search(List.of("Fire"), List.of("Rare Holo"), "base1", pageable);
+        Page<CardResponse> result = cardService.search(List.of("Fire"), List.of("Rare Holo"), "base1", "name", pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
@@ -72,14 +72,32 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, pageable))
+        given(cardRepository.search(List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, null, pageable))
                 .willReturn(page);
 
         Page<CardResponse> result = cardService.search(
-                List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, pageable);
+                List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, null, pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Blastoise");
+    }
+
+    @Test
+    @DisplayName("t14 sort 파라미터를 리포지토리에 그대로 위임한다")
+    void t14() {
+        Card card = Card.builder()
+                .id(1L)
+                .name("Charizard")
+                .types(List.of("Fire"))
+                .build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardRepository.search(null, null, null, "latest", pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(null, null, null, "latest", pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
     }
 
     @Test

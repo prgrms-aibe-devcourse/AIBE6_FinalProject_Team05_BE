@@ -26,8 +26,8 @@ public class CardService {
     private final CardVariantRepository cardVariantRepository;
 
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(List<String> types, List<String> rarity, String expansionId, Pageable pageable) {
-        return cardRepository.search(types, rarity, expansionId, pageable)
+    public Page<CardResponse> search(List<String> types, List<String> rarity, String expansionId, String sort, Pageable pageable) {
+        return cardRepository.search(types, rarity, expansionId, sort, pageable)
                 .map(CardResponse::from);
     }
 
