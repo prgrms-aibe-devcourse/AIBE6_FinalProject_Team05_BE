@@ -15,6 +15,7 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 
 import java.util.List;
+import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
 
@@ -64,6 +65,15 @@ public class CardService {
         return related.stream()
                 .map(CardResponse::from)
                 .toList();
+    }
+
+    /**
+     * Scrydex external_id로 내부 카드 엔티티를 조회한다. AI 등급진단 등 다른 도메인이
+     * vision/외부 식별 결과를 내부 card_id에 매핑할 때 사용할 수 있도록 제공하는 조회 전용 메서드.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Card> findByExternalId(String externalId) {
+        return cardRepository.findByExternalId(externalId);
     }
 
     private boolean hasPokedexNumber(Card card) {

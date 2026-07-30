@@ -273,4 +273,26 @@ class CardServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CARD_NOT_FOUND);
     }
+
+    @Test
+    @DisplayName("t15 존재하는 external_id로 조회하면 카드를 반환한다")
+    void t15() {
+        Card card = Card.builder().id(1L).name("Mew ex").externalId("sv3pt5-151").build();
+        given(cardRepository.findByExternalId("sv3pt5-151")).willReturn(Optional.of(card));
+
+        Optional<Card> result = cardService.findByExternalId("sv3pt5-151");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getName()).isEqualTo("Mew ex");
+    }
+
+    @Test
+    @DisplayName("t16 존재하지 않는 external_id로 조회하면 빈 Optional을 반환한다")
+    void t16() {
+        given(cardRepository.findByExternalId("does-not-exist")).willReturn(Optional.empty());
+
+        Optional<Card> result = cardService.findByExternalId("does-not-exist");
+
+        assertThat(result).isEmpty();
+    }
 }

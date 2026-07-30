@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -376,6 +377,29 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @DisplayName("t11 같은 세트에 다른 카드가 없으면 유사 카드 조회 결과가 빈 목록이다")
     void t11() {
         List<Card> result = cardRepository.findRelatedByExpansion("swsh1", quickBall.getId());
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("t26 external_id로 카드를 조회한다")
+    void t26() {
+        Card card = Card.builder()
+                .name("Mew ex")
+                .externalId("sv3pt5-151")
+                .build();
+        entityManager.persist(card);
+
+        Optional<Card> result = cardRepository.findByExternalId("sv3pt5-151");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getName()).isEqualTo("Mew ex");
+    }
+
+    @Test
+    @DisplayName("t27 존재하지 않는 external_id로 조회하면 빈 Optional을 반환한다")
+    void t27() {
+        Optional<Card> result = cardRepository.findByExternalId("does-not-exist");
 
         assertThat(result).isEmpty();
     }

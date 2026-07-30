@@ -2,6 +2,7 @@ package com.pokade.domain.card.repository;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -120,6 +121,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     }
 
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+    Optional<Card> findByExternalId(String externalId);
 
     @Query(value = """
             SELECT c.* FROM cards c
