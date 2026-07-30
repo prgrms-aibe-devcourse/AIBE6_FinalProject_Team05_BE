@@ -72,4 +72,82 @@ class CardRateLimitFilterTest {
 
         assertThat(otherIpResponse.getStatus()).isEqualTo(200);
     }
+
+    @Test
+    @DisplayName("t4 신뢰되지 않은 origin은 X-Forwarded-For를 조작해도 실제 remoteAddr 기준으로 카운트된다")
+    void t4() throws Exception {
+        CardRateLimitFilter filter = new CardRateLimitFilter();
+        FilterChain filterChain = Mockito.mock(FilterChain.class);
+        String untrustedRemoteAddr = "203.0.113.10";
+
+        for (int i = 0; i < 60; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
+            request.setRemoteAddr(untrustedRemoteAddr);
+            request.addHeader("X-Forwarded-For", "1.1.1." + i);
+            MockHttpServletResponse response = new MockHttpServletResponse();
+
+            filter.doFilter(request, response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
+
+        MockHttpServletRequest overLimitRequest = new MockHttpServletRequest("GET", "/api/cards");
+        overLimitRequest.setRemoteAddr(untrustedRemoteAddr);
+        overLimitRequest.addHeader("X-Forwarded-For", "9.9.9.9");
+        MockHttpServletResponse overLimitResponse = new MockHttpServletResponse();
+
+        filter.doFilter(overLimitRequest, overLimitResponse, filterChain);
+
+        assertThat(overLimitResponse.getStatus()).isEqualTo(429);
+    }
+
+    @Test
+    @DisplayName("t5 신뢰된 프록시(loopback/사설 IP)에서는 X-Forwarded-For가 여전히 반영된다")
+    void t5() throws Exception {
+        CardRateLimitFilter filter = new CardRateLimitFilter();
+        FilterChain filterChain = Mockito.mock(FilterChain.class);
+        String trustedRemoteAddr = "127.0.0.1";
+
+        for (int i = 0; i < 60; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
+            request.setRemoteAddr(trustedRemoteAddr);
+            request.addHeader("X-Forwarded-For", "10.1.2.3");
+            filter.doFilter(request, new MockHttpServletResponse(), filterChain);
+        }
+
+        MockHttpServletRequest sameForwardedIpRequest = new MockHttpServletRequest("GET", "/api/cards");
+        sameForwardedIpRequest.setRemoteAddr(trustedRemoteAddr);
+        sameForwardedIpRequest.addHeader("X-Forwarded-For", "10.1.2.3");
+        MockHttpServletResponse sameForwardedIpResponse = new MockHttpServletResponse();
+        filter.doFilter(sameForwardedIpRequest, sameForwardedIpResponse, filterChain);
+
+        assertThat(sameForwardedIpResponse.getStatus()).isEqualTo(429);
+
+        MockHttpServletRequest otherForwardedIpRequest = new MockHttpServletRequest("GET", "/api/cards");
+        otherForwardedIpRequest.setRemoteAddr(trustedRemoteAddr);
+        otherForwardedIpRequest.addHeader("X-Forwarded-For", "10.1.2.4");
+        MockHttpServletResponse otherForwardedIpResponse = new MockHttpServletResponse();
+        filter.doFilter(otherForwardedIpRequest, otherForwardedIpResponse, filterChain);
+
+        assertThat(otherForwardedIpResponse.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("t6 유휴 시간이 지난 bucketsByIp 항목은 정리되어 무한정 쌓이지 않는다")
+    void t6() throws Exception {
+        CardRateLimitFilter filter = new CardRateLimitFilter();
+        FilterChain filterChain = Mockito.mock(FilterChain.class);
+
+        for (int i = 0; i < 5; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
+            request.setRemoteAddr("127.0.0." + (10 + i));
+            filter.doFilter(request, new MockHttpServletResponse(), filterChain);
+        }
+        assertThat(filter.bucketCountForTest()).isEqualTo(5);
+
+        Thread.sleep(50);
+        filter.evictIdleEntriesForTest(10);
+
+        assertThat(filter.bucketCountForTest()).isEqualTo(0);
+    }
 }
