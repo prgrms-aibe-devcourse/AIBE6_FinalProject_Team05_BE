@@ -5,6 +5,7 @@ import com.pokade.domain.auth.service.AuthService;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtAuthenticationFilter;
 import com.pokade.global.security.JwtProperties;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,5 +85,44 @@ class AuthControllerTest {
                 .hasStatus(HttpStatus.BAD_REQUEST);
 
         then(authService).should(never()).login(any());
+    }
+
+    @Test
+    @DisplayName("유효한 refresh 쿠키로 재발급하면 200과 함께 새 refresh 쿠키를 세팅하고 access를 반환한다")
+    void reissue_ok() {
+        given(authService.reissue("old-refresh")).willReturn(new TokenPair("new-access", "new-refresh"));
+
+        MvcTestResult result = mockMvcTester.post()
+                .uri("/api/auth/reissue")
+                .cookie(new Cookie("refreshToken", "old-refresh"))
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).contains("refreshToken=new-refresh");
+        then(authService).should().reissue("old-refresh");
+    }
+
+    @Test
+    @DisplayName("로그아웃하면 200과 함께 refresh 쿠키를 만료(Max-Age=0)시키고 로그아웃 서비스를 호출한다")
+    void logout_ok() {
+        MvcTestResult result = mockMvcTester.post()
+                .uri("/api/auth/logout")
+                .cookie(new Cookie("refreshToken", "refresh-token"))
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).contains("Max-Age=0");
+        then(authService).should().logout("refresh-token");
+    }
+
+    @Test
+    @DisplayName("refresh 쿠키가 없어도 로그아웃은 200을 반환한다(멱등)")
+    void logout_noCookie() {
+        MvcTestResult result = mockMvcTester.post()
+                .uri("/api/auth/logout")
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        then(authService).should().logout(null);
     }
 }

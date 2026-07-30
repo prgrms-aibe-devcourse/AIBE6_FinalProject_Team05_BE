@@ -60,4 +60,48 @@ class RedisRefreshTokenStoreTest {
         Long ttl = redisTemplate.getExpire("auth:refresh:1");
         assertThat(ttl).isNotNull().isGreaterThan(0);
     }
+
+    @Test
+    @DisplayName("find는 저장된 refresh 토큰을 반환한다")
+    void find_returnsStoredToken() {
+        store.save(1L, "refresh-token");
+
+        assertThat(store.find(1L)).isEqualTo("refresh-token");
+    }
+
+    @Test
+    @DisplayName("find는 저장된 값이 없으면 null을 반환한다")
+    void find_returnsNullWhenAbsent() {
+        assertThat(store.find(999L)).isNull();
+    }
+
+    @Test
+    @DisplayName("saveGrace하면 auth:refresh:grace:<userId>에 저장되고 TTL이 60초 이하로 설정된다")
+    void saveGrace_storesGraceTokenWithShortTtl() {
+        store.saveGrace(1L, "old-refresh");
+
+        assertThat(redisTemplate.opsForValue().get("auth:refresh:grace:1")).isEqualTo("old-refresh");
+        Long ttl = redisTemplate.getExpire("auth:refresh:grace:1");
+        assertThat(ttl).isNotNull().isGreaterThan(0).isLessThanOrEqualTo(60);
+    }
+
+    @Test
+    @DisplayName("findGrace는 저장된 grace 토큰을 반환한다")
+    void findGrace_returnsStoredGraceToken() {
+        store.saveGrace(1L, "old-refresh");
+
+        assertThat(store.findGrace(1L)).isEqualTo("old-refresh");
+    }
+
+    @Test
+    @DisplayName("delete하면 refresh와 grace 토큰이 함께 제거된다")
+    void delete_removesBothRefreshAndGrace() {
+        store.save(1L, "refresh-token");
+        store.saveGrace(1L, "old-refresh");
+
+        store.delete(1L);
+
+        assertThat(store.find(1L)).isNull();
+        assertThat(store.findGrace(1L)).isNull();
+    }
 }
