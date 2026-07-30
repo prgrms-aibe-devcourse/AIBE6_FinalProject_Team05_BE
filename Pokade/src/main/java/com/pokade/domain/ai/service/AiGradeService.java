@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -32,6 +32,10 @@ import java.util.Optional;
 public class AiGradeService {
 
     private static final int FREE_LIMIT = 3;
+
+    // OpenAI Vision이 실제로 지원하는 이미지 포맷 (ImageIO는 디코딩되지만 Vision은 거부하는 bmp/tiff 등을 사전 차단)
+    private static final Set<String> SUPPORTED_IMAGE_TYPES =
+            Set.of("image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp");
 
     // TODO: User 파트 개발 완료 후 포인트 차감 연동 예정
     // private static final int GRADE_COST = 100;
@@ -49,8 +53,10 @@ public class AiGradeService {
     @Value("${pokade.ai.grade.model}")
     private String gradeModel;
 
-    @Transactional
+    // S3 업로드·Vision API 호출은 느린 외부 I/O라 DB 트랜잭션 밖에서 실행 — 커넥션을 오래 점유하지 않도록
+    // DB 쓰기(재업로드 마킹·결과 저장)만 필요한 지점에서 별도로 처리한다.
     public GradeResponse grade(Long userId, GradeRequest request) {
+        validateImageFormats(request);
 
         // ── 재업로드 요청 검증 ───────────────────────────────────────────────
         GradeResult originalResult = null;
@@ -60,6 +66,8 @@ public class AiGradeService {
             if (retryable) {
                 originalResult = gradeResultRepository.findById(request.retryOfId()).orElseThrow();
                 originalResult.markRetryUsed(); // retry_used = true (재사용 방지)
+                // @Transactional 밖이라 영속성 컨텍스트가 없음 — 변경사항이 자동 flush되지 않으므로 명시적으로 save
+                gradeResultRepository.save(originalResult);
                 isFreeRetry = true;
             }
             // retryable하지 않으면 새 요청으로 처리 (유료 가능)
@@ -106,6 +114,21 @@ public class AiGradeService {
                         .build()));
 
         return GradeResponse.from(gradeResult);
+    }
+
+    private void validateImageFormats(GradeRequest request) {
+        List<MultipartFile> files = List.of(
+                request.front(), request.back(),
+                request.cornerTl(), request.cornerTr(),
+                request.cornerBl(), request.cornerBr());
+
+        for (MultipartFile file : files) {
+            String contentType = file.getContentType();
+            if (contentType == null || !SUPPORTED_IMAGE_TYPES.contains(contentType.toLowerCase())) {
+                throw new IllegalArgumentException(
+                        "지원하지 않는 이미지 형식입니다(png/jpeg/gif/webp만 가능): " + file.getOriginalFilename());
+            }
+        }
     }
 
     private Map<PhotoType, String> uploadImages(GradeRequest request) {
