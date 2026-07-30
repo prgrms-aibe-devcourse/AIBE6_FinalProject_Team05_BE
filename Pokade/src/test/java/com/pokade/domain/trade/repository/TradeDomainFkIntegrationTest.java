@@ -1,9 +1,12 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.repository;
 
-import com.pokade.domain.listing.Listing;
-import com.pokade.domain.listing.ListingGrade;
-import com.pokade.domain.listing.ListingImage;
-import com.pokade.domain.listing.ListingRepository;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.listing.entity.ListingImage;
+import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.trade.entity.Payment;
+import com.pokade.domain.trade.entity.PaymentMethod;
+import com.pokade.domain.trade.entity.Trade;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;

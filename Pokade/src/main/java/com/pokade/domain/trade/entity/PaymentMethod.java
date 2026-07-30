@@ -1,4 +1,4 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.entity;
 
 public enum PaymentMethod {
     CARD,

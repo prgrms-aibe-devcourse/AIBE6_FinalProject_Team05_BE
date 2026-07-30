@@ -45,6 +45,10 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                // 폼 로그인·HTTP Basic·기본 로그아웃 미사용 — JWT REST 전용이라 명시적으로 비활성화(방어적 설정)
+                .formLogin(form -> form.disable())
+                .httpBasic(httpBasic -> httpBasic.disable())
+                .logout(logout -> logout.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
@@ -52,6 +56,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/cards", "/api/cards/**").permitAll()
                         .requestMatchers(AUTH_WHITELIST).permitAll()
                         .requestMatchers("/api/prices/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/listings").permitAll()
                         // TODO: 로컬 테스트용 임시 permitAll — 인증 연동 후 제거하거나 정식 공개 여부 팀 결정 필요
                         .requestMatchers(HttpMethod.GET, "/api/listings/*/orderbook").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()

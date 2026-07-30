@@ -1,7 +1,7 @@
 package com.pokade.domain.price.dto;
 
-import com.pokade.domain.listing.ListingGrade;
-import com.pokade.domain.trade.Trade;
+import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.trade.entity.Trade;
 
 import java.time.LocalDateTime;
 

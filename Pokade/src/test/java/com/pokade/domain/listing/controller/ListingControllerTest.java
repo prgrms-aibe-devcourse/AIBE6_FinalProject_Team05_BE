@@ -1,4 +1,4 @@
-package com.pokade.domain.listing;
+package com.pokade.domain.listing.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
@@ -6,6 +6,10 @@ import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
 import com.pokade.domain.listing.dto.OrderbookEntryResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
+import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.listing.entity.ListingStatus;
+import com.pokade.domain.listing.service.ListingService;
+import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
@@ -14,9 +18,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,6 +35,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -34,7 +44,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ListingController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@AutoConfigureMockMvc
+@Import(SecurityConfig.class)
 class ListingControllerTest {
 
     @Autowired
@@ -51,6 +62,12 @@ class ListingControllerTest {
     @MockitoBean
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
+    private RequestPostProcessor userId(Long userId) {
+        Authentication auth = new UsernamePasswordAuthenticationToken(
+                userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        return authentication(auth);
+    }
+
     @Test
     void 매물_등록에_성공하면_201과_등록된_매물을_반환한다() throws Exception {
         ListingCreateRequest request = new ListingCreateRequest(
@@ -63,7 +80,7 @@ class ListingControllerTest {
                 .willReturn(response);
 
         mockMvc.perform(post("/api/listings")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -76,7 +93,7 @@ class ListingControllerTest {
         ListingCreateRequest invalidRequest = new ListingCreateRequest(null, null, null, null, List.of());
 
         mockMvc.perform(post("/api/listings")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -92,7 +109,7 @@ class ListingControllerTest {
                 .willThrow(new BusinessException(ErrorCode.DUPLICATE_LISTING));
 
         mockMvc.perform(post("/api/listings")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -188,7 +205,7 @@ class ListingControllerTest {
 
         given(listingService.getMyListings(100L, null)).willReturn(List.of(summary));
 
-        mockMvc.perform(get("/api/listings/me").header("X-USER-ID", 100L))
+        mockMvc.perform(get("/api/listings/me").with(userId(100L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(1L));
@@ -198,7 +215,7 @@ class ListingControllerTest {
     void 등록한_매물이_없으면_200과_빈_목록을_반환한다() throws Exception {
         given(listingService.getMyListings(100L, null)).willReturn(List.of());
 
-        mockMvc.perform(get("/api/listings/me").header("X-USER-ID", 100L))
+        mockMvc.perform(get("/api/listings/me").with(userId(100L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }
@@ -212,7 +229,7 @@ class ListingControllerTest {
         given(listingService.getMyListings(100L, ListingStatus.SOLD)).willReturn(List.of(summary));
 
         mockMvc.perform(get("/api/listings/me")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .param("status", "SOLD"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].status").value("SOLD"));
@@ -229,7 +246,7 @@ class ListingControllerTest {
                 .willReturn(response);
 
         mockMvc.perform(put("/api/listings/1")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -241,7 +258,7 @@ class ListingControllerTest {
         ListingUpdateRequest invalidRequest = new ListingUpdateRequest(null);
 
         mockMvc.perform(put("/api/listings/1")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -256,7 +273,7 @@ class ListingControllerTest {
                 .willThrow(new BusinessException(ErrorCode.INVALID_LISTING_STATUS));
 
         mockMvc.perform(put("/api/listings/1")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -271,7 +288,7 @@ class ListingControllerTest {
                 .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
 
         mockMvc.perform(put("/api/listings/1")
-                        .header("X-USER-ID", 999L)
+                        .with(userId(999L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden())
@@ -286,7 +303,7 @@ class ListingControllerTest {
                 .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
 
         mockMvc.perform(put("/api/listings/999")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound())
@@ -297,7 +314,7 @@ class ListingControllerTest {
     void 매물_삭제에_성공하면_204를_반환한다() throws Exception {
         willDoNothing().given(listingService).deleteListing(anyLong(), anyLong());
 
-        mockMvc.perform(delete("/api/listings/1").header("X-USER-ID", 100L))
+        mockMvc.perform(delete("/api/listings/1").with(userId(100L)))
                 .andExpect(status().isNoContent());
     }
 
@@ -306,7 +323,7 @@ class ListingControllerTest {
         willThrow(new BusinessException(ErrorCode.INVALID_LISTING_STATUS))
                 .given(listingService).deleteListing(anyLong(), anyLong());
 
-        mockMvc.perform(delete("/api/listings/1").header("X-USER-ID", 100L))
+        mockMvc.perform(delete("/api/listings/1").with(userId(100L)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_LISTING_STATUS"));
     }
@@ -316,7 +333,7 @@ class ListingControllerTest {
         willThrow(new BusinessException(ErrorCode.ACCESS_DENIED))
                 .given(listingService).deleteListing(anyLong(), anyLong());
 
-        mockMvc.perform(delete("/api/listings/1").header("X-USER-ID", 999L))
+        mockMvc.perform(delete("/api/listings/1").with(userId(999L)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
@@ -326,7 +343,7 @@ class ListingControllerTest {
         willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND))
                 .given(listingService).deleteListing(anyLong(), anyLong());
 
-        mockMvc.perform(delete("/api/listings/999").header("X-USER-ID", 100L))
+        mockMvc.perform(delete("/api/listings/999").with(userId(100L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
     }

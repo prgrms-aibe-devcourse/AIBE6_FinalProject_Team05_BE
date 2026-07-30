@@ -2,14 +2,14 @@ package com.pokade.domain.price.service;
 
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
-import com.pokade.domain.listing.ListingRepository;
-import com.pokade.domain.listing.ListingStatus;
+import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.price.ChartPeriod;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.repository.BuyOfferRepository;
-import com.pokade.domain.trade.TradeRepository;
-import com.pokade.domain.trade.TradeStatus;
+import com.pokade.domain.trade.repository.TradeRepository;
+import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;

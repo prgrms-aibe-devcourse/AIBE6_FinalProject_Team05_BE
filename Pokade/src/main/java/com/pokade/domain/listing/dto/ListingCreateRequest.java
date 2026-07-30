@@ -1,6 +1,6 @@
 package com.pokade.domain.listing.dto;
 
-import com.pokade.domain.listing.ListingGrade;
+import com.pokade.domain.listing.entity.ListingGrade;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;

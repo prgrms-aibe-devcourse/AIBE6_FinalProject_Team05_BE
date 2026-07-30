@@ -1,4 +1,4 @@
-package com.pokade.domain.listing;
+package com.pokade.domain.listing.controller;
 
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
@@ -6,17 +6,20 @@ import com.pokade.domain.listing.dto.ListingSummaryResponse;
 import com.pokade.domain.listing.dto.OrderbookEntryResponse;
 import com.pokade.global.response.ApiResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
+import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.listing.entity.ListingStatus;
+import com.pokade.domain.listing.service.ListingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,8 +35,7 @@ public class ListingController {
 
     @PostMapping
     public ResponseEntity<ListingResponse> createListing(
-            // TODO: 인증 파트 완성되면 SecurityContext에서 sellerId 추출하는 방식으로 교체
-            @RequestHeader("X-USER-ID") Long sellerId,
+            @AuthenticationPrincipal Long sellerId,
             @Valid @RequestBody ListingCreateRequest request
     ) {
         ListingResponse response = listingService.createListing(sellerId, request);
@@ -56,8 +58,7 @@ public class ListingController {
 
     @GetMapping("/me")
     public ResponseEntity<List<ListingSummaryResponse>> getMyListings(
-            // TODO: 인증 파트 완성되면 SecurityContext에서 sellerId 추출하는 방식으로 교체
-            @RequestHeader("X-USER-ID") Long sellerId,
+            @AuthenticationPrincipal Long sellerId,
             @RequestParam(required = false) ListingStatus status
     ) {
         return ResponseEntity.ok(listingService.getMyListings(sellerId, status));
@@ -65,8 +66,7 @@ public class ListingController {
 
     @PutMapping("/{id}")
     public ResponseEntity<ListingResponse> updateListing(
-            // TODO: 인증 파트 완성되면 SecurityContext에서 sellerId 추출하는 방식으로 교체
-            @RequestHeader("X-USER-ID") Long sellerId,
+            @AuthenticationPrincipal Long sellerId,
             @PathVariable Long id,
             @Valid @RequestBody ListingUpdateRequest request
     ) {
@@ -75,8 +75,7 @@ public class ListingController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteListing(
-            // TODO: 인증 파트 완성되면 SecurityContext에서 sellerId 추출하는 방식으로 교체
-            @RequestHeader("X-USER-ID") Long sellerId,
+            @AuthenticationPrincipal Long sellerId,
             @PathVariable Long id
     ) {
         listingService.deleteListing(sellerId, id);

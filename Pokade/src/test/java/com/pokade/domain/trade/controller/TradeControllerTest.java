@@ -3,6 +3,9 @@ package com.pokade.domain.trade;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
+import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.trade.service.TradeService;
+import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
@@ -11,21 +14,30 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TradeController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@AutoConfigureMockMvc
+@Import(SecurityConfig.class)
 class TradeControllerTest {
 
     @Autowired
@@ -41,6 +53,12 @@ class TradeControllerTest {
 
     @MockitoBean
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+
+    private RequestPostProcessor userId(Long userId) {
+        Authentication auth = new UsernamePasswordAuthenticationToken(
+                userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        return authentication(auth);
+    }
 
     @Test
     void 즉시구매에_성공하면_201과_생성된_거래를_반환한다() throws Exception {
@@ -117,5 +135,43 @@ class TradeControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRADE_CONFLICT"));
+    }
+
+    @Test
+    void 본인_거래를_조회하면_200과_거래정보를_반환한다() throws Exception {
+        TradeResponse response = new TradeResponse(
+                1L, 1L, 200L, 10000, TradeStatus.PENDING,
+                null, null, null, LocalDateTime.now());
+
+        given(tradeService.getTrade(200L, 1L)).willReturn(response);
+
+        mockMvc.perform(get("/api/trades/{id}", 1L)
+                        .with(userId(200L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.buyerId").value(200L))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    void 본인_거래가_아니면_403을_반환한다() throws Exception {
+        given(tradeService.getTrade(999L, 1L))
+                .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
+
+        mockMvc.perform(get("/api/trades/{id}", 1L)
+                        .with(userId(999L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 존재하지_않는_거래를_조회하면_404를_반환한다() throws Exception {
+        given(tradeService.getTrade(200L, 999L))
+                .willThrow(new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        mockMvc.perform(get("/api/trades/{id}", 999L)
+                        .with(userId(200L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRADE_NOT_FOUND"));
     }
 }
