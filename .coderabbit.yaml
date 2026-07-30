@@ -1,5 +1,14 @@
 language: "ko-KR"
 
+tone_instructions: >
+  팀 컨벤션 문서를 기준으로 리뷰해줘. 변수/메서드명은 camelCase, 클래스명은 PascalCase,
+  상수는 UPPER_SNAKE_CASE를 따르는지 확인해줘. 커밋 메시지는 "type: 작업 내용" 형식이며
+  type은 feat/fix/docs/style/refactor/test/chore/design/comment/rename/remove/!HOTFIX
+  중 하나여야 하고, 실제 작업 내용과 타입이 일치하는지 확인해줘. 주석은 코드만으로 의도가
+  명확하지 않은 경우에만 작성되어야 하고, 임시 주석이 남아있거나 TODO에 담당자/목적이
+  없으면 지적해줘. System.out.println 등 디버그용 출력이 남아있으면 제거를 제안해줘.
+  사용하지 않는 import나 변수가 남아있지 않은지도 확인해줘.
+
 reviews:
   profile: "chill"
   request_changes_workflow: false
