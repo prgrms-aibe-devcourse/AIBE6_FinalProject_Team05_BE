@@ -138,7 +138,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("가입되지 않은 이메일이면 LOGIN_FAILED 예외를 던진다")
+    @DisplayName("가입되지 않은 이메일이면 더미 BCrypt 비교로 응답시간을 맞추고 LOGIN_FAILED를 던진다")
     void login_userNotFound() {
         String email = "unknown@pokade.com";
         given(userRepository.findByEmail(email)).willReturn(Optional.empty());
@@ -147,6 +147,7 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_FAILED);
 
+        then(passwordEncoder).should().matches(any(), any());   // ← 추가: 유저 없어도 더미 비교 호출
         then(refreshTokenStore).should(never()).save(any(), any());
     }
 

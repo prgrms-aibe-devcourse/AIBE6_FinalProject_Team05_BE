@@ -10,6 +10,7 @@ import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtTokenProvider;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
+
+    private String dummyHash;
 
 
     @Transactional
@@ -43,8 +46,12 @@ public class AuthService {
 
     @Transactional
     public TokenPair login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new BusinessException(ErrorCode.LOGIN_FAILED));
+        User user = userRepository.findByEmail(request.email()).orElse(null);
+
+        if (user == null) {
+            passwordEncoder.matches(request.password(), dummyHash);
+            throw new BusinessException(ErrorCode.LOGIN_FAILED);
+        }
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
@@ -109,5 +116,10 @@ public class AuthService {
                     return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
                 })
                 .getRole().name();
+    }
+
+    @PostConstruct
+    void initDummyHash() {
+        this.dummyHash = passwordEncoder.encode("timing-guard");
     }
 }
