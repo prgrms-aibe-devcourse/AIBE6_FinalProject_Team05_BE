@@ -112,6 +112,54 @@ class CardControllerTest {
     }
 
     @Test
+    @DisplayName("t15 size가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
+    void t15() {
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "size는 최대 100까지 요청할 수 있습니다."))
+                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+
+        mockMvcTester.get()
+                .uri("/api/cards?size=101")
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
+
+    @Test
+    @DisplayName("t16 types 개수가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
+    void t16() {
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "types는 최대 20개까지 지정할 수 있습니다."))
+                .given(cardService).search(any(), isNull(), isNull(), isNull(), any(Pageable.class));
+
+        String query = java.util.stream.IntStream.range(0, 21)
+                .mapToObj(i -> "types=type" + i)
+                .reduce((a, b) -> a + "&" + b)
+                .orElseThrow();
+
+        mockMvcTester.get()
+                .uri("/api/cards?" + query)
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
+
+    @Test
+    @DisplayName("t17 검색어가 길이 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
+    void t17() {
+        String tooLongKeyword = "a".repeat(101);
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "검색어는 최대 100자까지 입력할 수 있습니다."))
+                .given(cardService).searchByKeyword(eq(tooLongKeyword), any(Pageable.class));
+
+        mockMvcTester.get()
+                .uri("/api/cards/search?q=" + tooLongKeyword)
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
+
+    @Test
     @DisplayName("t3 존재하는 카드 id로 상세조회하면 200과 확장팩·변형 정보를 포함한 응답을 반환한다")
     void t3() {
         CardDetailResponse.ExpansionSummary expansion = new CardDetailResponse.ExpansionSummary(

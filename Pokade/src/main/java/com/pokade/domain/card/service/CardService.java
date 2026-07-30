@@ -23,11 +23,22 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class CardService {
 
+    // size 상한: 응답 payload/DB 부하를 고려해 BE 기본값(20)의 5배 수준으로 제한.
+    // application.yaml의 Pageable 전역 max-page-size(기본 2000)와 별개로 카드 도메인에서 한 번 더 검증.
+    private static final int MAX_PAGE_SIZE = 100;
+    // types/rarity 상한: 현재 FE 필터 옵션(각 6개)보다 넉넉히 여유를 둔 값.
+    private static final int MAX_FILTER_VALUES = 20;
+    // 키워드 검색어 상한: cards.name 컬럼 길이(200자)보다 짧게 잡아 과도하게 긴 ILIKE 패턴을 차단.
+    private static final int MAX_KEYWORD_LENGTH = 100;
+
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
 
     @Transactional(readOnly = true)
     public Page<CardResponse> search(List<String> types, List<String> rarity, String expansionId, String sort, Pageable pageable) {
+        validatePageSize(pageable);
+        validateFilterSize(types, "types");
+        validateFilterSize(rarity, "rarity");
         return cardRepository.search(types, rarity, expansionId, sort, pageable)
                 .map(CardResponse::from);
     }
@@ -46,7 +57,13 @@ public class CardService {
         if (q == null || q.isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
-        return cardRepository.findByNameContainingIgnoreCase(q.trim(), pageable)
+        validatePageSize(pageable);
+        String keyword = q.trim();
+        if (keyword.length() > MAX_KEYWORD_LENGTH) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
+        }
+        return cardRepository.findByNameContainingIgnoreCase(keyword, pageable)
                 .map(CardResponse::from);
     }
 
@@ -78,5 +95,19 @@ public class CardService {
 
     private boolean hasPokedexNumber(Card card) {
         return card.getNationalPokedexNumbers() != null && !card.getNationalPokedexNumbers().isEmpty();
+    }
+
+    private void validatePageSize(Pageable pageable) {
+        if (pageable.getPageSize() > MAX_PAGE_SIZE) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "size는 최대 " + MAX_PAGE_SIZE + "까지 요청할 수 있습니다.");
+        }
+    }
+
+    private void validateFilterSize(List<String> values, String fieldName) {
+        if (values != null && values.size() > MAX_FILTER_VALUES) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    fieldName + "는 최대 " + MAX_FILTER_VALUES + "개까지 지정할 수 있습니다.");
+        }
     }
 }

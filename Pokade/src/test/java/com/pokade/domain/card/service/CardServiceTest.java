@@ -101,6 +101,72 @@ class CardServiceTest {
     }
 
     @Test
+    @DisplayName("t17 size가 100 이하이면 정상 처리된다")
+    void t17() {
+        Pageable pageable = PageRequest.of(0, 100);
+        Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
+        given(cardRepository.search(null, null, null, null, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(null, null, null, null, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("t18 size가 100을 초과하면 INVALID_INPUT 예외가 발생한다")
+    void t18() {
+        Pageable pageable = PageRequest.of(0, 101);
+
+        assertThatThrownBy(() -> cardService.search(null, null, null, null, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("t19 types가 20개를 초과하면 INVALID_INPUT 예외가 발생한다")
+    void t19() {
+        Pageable pageable = PageRequest.of(0, 20);
+        List<String> tooManyTypes = java.util.stream.IntStream.range(0, 21)
+                .mapToObj(i -> "type" + i)
+                .toList();
+
+        assertThatThrownBy(() -> cardService.search(tooManyTypes, null, null, null, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("t20 rarity가 20개를 초과하면 INVALID_INPUT 예외가 발생한다")
+    void t20() {
+        Pageable pageable = PageRequest.of(0, 20);
+        List<String> tooManyRarities = java.util.stream.IntStream.range(0, 21)
+                .mapToObj(i -> "rarity" + i)
+                .toList();
+
+        assertThatThrownBy(() -> cardService.search(null, tooManyRarities, null, null, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("t21 types가 정확히 20개이면 정상 처리된다(경계값)")
+    void t21() {
+        Pageable pageable = PageRequest.of(0, 20);
+        List<String> exactlyTwenty = java.util.stream.IntStream.range(0, 20)
+                .mapToObj(i -> "type" + i)
+                .toList();
+        Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
+        given(cardRepository.search(exactlyTwenty, null, null, null, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(exactlyTwenty, null, null, null, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(0);
+    }
+
+    @Test
     @DisplayName("t2 존재하는 id로 상세조회하면 확장팩과 변형 목록을 포함한 상세 응답을 반환한다")
     void t2() {
         Expansion expansion = Expansion.builder()
@@ -189,6 +255,43 @@ class CardServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
 
         assertThatThrownBy(() -> cardService.searchByKeyword("   ", pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("t22 검색어가 100자를 초과하면 INVALID_INPUT 예외가 발생한다")
+    void t22() {
+        Pageable pageable = PageRequest.of(0, 20);
+        String tooLongKeyword = "a".repeat(101);
+
+        assertThatThrownBy(() -> cardService.searchByKeyword(tooLongKeyword, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("t23 검색어가 정확히 100자이면 정상 처리된다(경계값)")
+    void t23() {
+        Pageable pageable = PageRequest.of(0, 20);
+        String exactlyHundred = "a".repeat(100);
+        Card card = Card.builder().id(1L).name("Charizard").types(List.of("Fire")).build();
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardRepository.findByNameContainingIgnoreCase(exactlyHundred, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.searchByKeyword(exactlyHundred, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("t24 키워드 검색에서 size가 100을 초과하면 INVALID_INPUT 예외가 발생한다")
+    void t24() {
+        Pageable pageable = PageRequest.of(0, 101);
+
+        assertThatThrownBy(() -> cardService.searchByKeyword("char", pageable))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
