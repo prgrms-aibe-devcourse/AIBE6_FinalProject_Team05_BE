@@ -5,6 +5,7 @@ import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.service.TradeService;
+import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
@@ -13,22 +14,30 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TradeController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@AutoConfigureMockMvc
+@Import(SecurityConfig.class)
 class TradeControllerTest {
 
     @Autowired
@@ -45,6 +54,12 @@ class TradeControllerTest {
     @MockitoBean
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
+    private RequestPostProcessor userId(Long userId) {
+        Authentication auth = new UsernamePasswordAuthenticationToken(
+                userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        return authentication(auth);
+    }
+
     @Test
     void 즉시구매에_성공하면_201과_생성된_거래를_반환한다() throws Exception {
         TradeCreateRequest request = new TradeCreateRequest(1L);
@@ -56,7 +71,7 @@ class TradeControllerTest {
                 .willReturn(response);
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 200L)
+                        .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -70,7 +85,7 @@ class TradeControllerTest {
         TradeCreateRequest invalidRequest = new TradeCreateRequest(null);
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 200L)
+                        .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -85,7 +100,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.SELF_PURCHASE_NOT_ALLOWED));
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -100,7 +115,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 200L)
+                        .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound())
@@ -115,7 +130,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.TRADE_CONFLICT));
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 200L)
+                        .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -131,7 +146,7 @@ class TradeControllerTest {
         given(tradeService.getTrade(200L, 1L)).willReturn(response);
 
         mockMvc.perform(get("/api/trades/{id}", 1L)
-                        .header("X-USER-ID", 200L))
+                        .with(userId(200L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.buyerId").value(200L))
@@ -144,7 +159,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
 
         mockMvc.perform(get("/api/trades/{id}", 1L)
-                        .header("X-USER-ID", 999L))
+                        .with(userId(999L)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
@@ -155,7 +170,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.TRADE_NOT_FOUND));
 
         mockMvc.perform(get("/api/trades/{id}", 999L)
-                        .header("X-USER-ID", 200L))
+                        .with(userId(200L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRADE_NOT_FOUND"));
     }
