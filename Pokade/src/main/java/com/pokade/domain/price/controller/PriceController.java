@@ -32,4 +32,12 @@ public class PriceController {
     public ApiResponse<List<TradeSummaryResponse>> getRecentTrades(@PathVariable Long cardId) {
         return ApiResponse.ok(priceService.getRecentTrades(cardId));
     }
+
+    @GetMapping("/{cardId}/chart")
+    public ApiResponse<List<TradeSummaryResponse>> getPriceChart(
+            @PathVariable Long cardId,
+            @RequestParam String period
+    ) {
+        return ApiResponse.ok(priceService.getPriceChart(cardId, period));
+    }
 }
