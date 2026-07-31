@@ -52,12 +52,15 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         Expansion sv3pt5 = persistExpansion("sv3pt5", "151");
         Expansion swsh1 = persistExpansion("swsh1", "Sword & Shield");
 
-        charizard = persistCard("Charizard", "Rare Holo", base1, "Fire", List.of(6));
-        persistCard("Blastoise", "Rare Holo", base1, "Water", List.of(9));
-        persistCard("Pikachu", "Common", base1, "Lightning", List.of(25));
-        charizardEx = persistCard("Charizard ex", "Double Rare", sv3pt5, "Fire", List.of(6));
-        professorsResearch = persistTrainerCard("Professor's Research", base1);
-        quickBall = persistTrainerCard("Quick Ball", swsh1);
+        // synced_at을 삽입 순서(id)와 일부러 어긋나게 부여해, DESC 정렬이 id가 아닌
+        // synced_at 자체를 1차 키로 쓰는지 구분해서 검증할 수 있게 한다.
+        LocalDateTime baseTime = LocalDateTime.now();
+        charizard = persistCard("Charizard", "Rare Holo", base1, "Fire", List.of(6), baseTime.plusMinutes(5));
+        persistCard("Blastoise", "Rare Holo", base1, "Water", List.of(9), baseTime.plusMinutes(1));
+        persistCard("Pikachu", "Common", base1, "Lightning", List.of(25), baseTime.plusMinutes(4));
+        charizardEx = persistCard("Charizard ex", "Double Rare", sv3pt5, "Fire", List.of(6), baseTime.plusMinutes(6));
+        professorsResearch = persistTrainerCard("Professor's Research", base1, baseTime.plusMinutes(2));
+        quickBall = persistTrainerCard("Quick Ball", swsh1, baseTime.plusMinutes(3));
     }
 
     private Expansion persistExpansion(String id, String name) {
@@ -70,7 +73,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         return expansion;
     }
 
-    private Card persistCard(String name, String rarity, Expansion expansion, String type, List<Integer> pokedexNumbers) {
+    private Card persistCard(String name, String rarity, Expansion expansion, String type, List<Integer> pokedexNumbers, LocalDateTime syncedAt) {
         Card card = Card.builder()
                 .name(name)
                 .rarity(rarity)
@@ -78,16 +81,18 @@ class CardRepositoryTest extends AbstractIntegrationTest {
                 .expansion(expansion)
                 .types(type != null ? List.of(type) : null)
                 .nationalPokedexNumbers(pokedexNumbers)
+                .syncedAt(syncedAt)
                 .build();
         entityManager.persist(card);
         return card;
     }
 
-    private Card persistTrainerCard(String name, Expansion expansion) {
+    private Card persistTrainerCard(String name, Expansion expansion, LocalDateTime syncedAt) {
         Card card = Card.builder()
                 .name(name)
                 .supertype("Trainer")
                 .expansion(expansion)
+                .syncedAt(syncedAt)
                 .build();
         entityManager.persist(card);
         return card;
@@ -218,9 +223,12 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     void t18() {
         Page<Card> result = cardRepository.search(null, null, null, null, PageRequest.of(0, 10));
 
+        // id 순서(삽입 순서)와는 다른 synced_at 순서(내림차순: Charizard ex > Charizard > Pikachu
+        // > Quick Ball > Professor's Research > Blastoise)로 나와야 synced_at이 실제 1차 정렬
+        // 키임이 증명된다.
         assertThat(result.getContent())
                 .extracting(Card::getName)
-                .containsExactly("Quick Ball", "Professor's Research", "Charizard ex", "Pikachu", "Blastoise", "Charizard");
+                .containsExactly("Charizard ex", "Charizard", "Pikachu", "Quick Ball", "Professor's Research", "Blastoise");
     }
 
     @Test
@@ -240,7 +248,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
-                .containsExactly("Quick Ball", "Professor's Research", "Charizard ex", "Pikachu", "Blastoise", "Charizard");
+                .containsExactly("Charizard ex", "Charizard", "Pikachu", "Quick Ball", "Professor's Research", "Blastoise");
     }
 
     @Test
@@ -271,11 +279,17 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t23 필터와 sort=popular를 함께 적용해도 필터링된 결과 안에서 조회수순으로 정렬한다")
     void t23() {
+        cardRepository.incrementViewCount(charizard.getId());
+        cardRepository.incrementViewCount(charizard.getId());
+        cardRepository.incrementViewCount(charizardEx.getId());
+        entityManager.flush();
+        entityManager.clear();
+
         Page<Card> result = cardRepository.search(List.of("Fire"), null, null, "popular", PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
-                .containsExactlyInAnyOrder("Charizard", "Charizard ex");
+                .containsExactly("Charizard", "Charizard ex");
     }
 
     @Test
@@ -304,21 +318,26 @@ class CardRepositoryTest extends AbstractIntegrationTest {
             return card.getId();
         });
 
-        int threadCount = 20;
-        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        List<Future<?>> futures = new ArrayList<>();
-        for (int i = 0; i < threadCount; i++) {
-            futures.add(executor.submit(() -> cardRepository.incrementViewCount(cardId)));
-        }
-        executor.shutdown();
-        executor.awaitTermination(10, TimeUnit.SECONDS);
-        // future.get()으로 각 스레드의 예외를 즉시 드러낸다. submit()만 하고 get()을 부르지 않으면
-        // TransactionRequiredException 등이 조용히 삼켜져 view_count가 증가하지 않은 원인을 놓치게 된다.
-        for (Future<?> future : futures) {
-            assertThatCode(future::get).doesNotThrowAnyException();
-        }
-
+        // 카드 커밋 직후부터 finally로 정리를 보장한다: 스레드 실행/검증 중 어디서 실패하더라도
+        // 커밋된 테스트 카드가 DB에 남지 않도록 try 범위를 넓혔다.
         try {
+            int threadCount = 20;
+            ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < threadCount; i++) {
+                futures.add(executor.submit(() -> cardRepository.incrementViewCount(cardId)));
+            }
+            executor.shutdown();
+            boolean terminated = executor.awaitTermination(10, TimeUnit.SECONDS);
+            // awaitTermination의 반환값을 무시하면 타임아웃으로 일부 스레드가 아직 실행 중이어도
+            // 조용히 다음 단계로 넘어가 원인 파악이 어려운 실패로 이어질 수 있다.
+            assertThat(terminated).as("20개 스레드가 타임아웃 전에 모두 종료되어야 한다").isTrue();
+            // future.get()으로 각 스레드의 예외를 즉시 드러낸다. submit()만 하고 get()을 부르지 않으면
+            // TransactionRequiredException 등이 조용히 삼켜져 view_count가 증가하지 않은 원인을 놓치게 된다.
+            for (Future<?> future : futures) {
+                assertThatCode(future::get).doesNotThrowAnyException();
+            }
+
             Integer finalViewCount = requiresNew.execute(status ->
                     cardRepository.findById(cardId).orElseThrow().getViewCount());
             assertThat(finalViewCount).isEqualTo(threadCount);
