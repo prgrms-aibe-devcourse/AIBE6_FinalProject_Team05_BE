@@ -25,10 +25,9 @@ public class RedisLoginAttemptStore implements LoginAttemptStore {
 
     @Override
     public void recordFailure(String email) {
-        Long count = redisTemplate.execute(INCR_WITH_TTL, List.of(KEY_PREFIX + email), String.valueOf(BLOCK_TTL.getSeconds()));
-        if (count != null && count == 1) {
-            redisTemplate.expire(KEY_PREFIX + email, BLOCK_TTL);
-        }
+        redisTemplate.execute(INCR_WITH_TTL,
+                List.of(KEY_PREFIX + email),
+                String.valueOf(BLOCK_TTL.getSeconds()));
     }
 
     @Override
