@@ -28,7 +28,11 @@ public interface CardRepository extends JpaRepository<Card, Long> {
      */
     Set<String> SORT_COLUMN_WHITELIST = Set.of(SORT_LATEST, SORT_NAME, SORT_POPULAR);
 
-    @Query(value = """
+    /**
+     * searchOrderBy* 3개 @Query가 공유하는 SELECT ~ WHERE 절 (ORDER BY 제외).
+     * ORDER BY는 인덱스 정렬 최적화를 위해 메서드별로 분리 유지한다.
+     */
+    String CARD_SEARCH_BASE = """
             SELECT c.* FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
@@ -39,9 +43,10 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                 AND (:maxPrice IS NULL OR l.price <= :maxPrice)
             )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            ORDER BY c.synced_at DESC, c.id DESC
-            """,
-            countQuery = """
+            """;
+
+    /** searchOrderBy* 3개 @Query가 공유하는 countQuery. ORDER BY가 없어 셋 다 동일하다. */
+    String CARD_SEARCH_COUNT = """
             SELECT COUNT(*) FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
@@ -52,7 +57,10 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                 AND (:maxPrice IS NULL OR l.price <= :maxPrice)
             )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            """,
+            """;
+
+    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
+            countQuery = CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByLatest(@Param("hasTypes") boolean hasTypes,
                                     @Param("types") List<String> types,
@@ -66,31 +74,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                     @Param("expansionId") String expansionId,
                                     Pageable pageable);
 
-    @Query(value = """
-            SELECT c.* FROM cards c WHERE
-            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
-            (:hasRarities = false OR c.rarity IN (:rarities)) AND
-            ((:hasGrades = false AND :hasPrice = false) OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE'
-                AND (:hasGrades = false OR l.grade IN (:grades))
-                AND (:minPrice IS NULL OR l.price >= :minPrice)
-                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
-            )) AND
-            (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            ORDER BY c.name ASC, c.id ASC
-            """,
-            countQuery = """
-            SELECT COUNT(*) FROM cards c WHERE
-            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
-            (:hasRarities = false OR c.rarity IN (:rarities)) AND
-            ((:hasGrades = false AND :hasPrice = false) OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE'
-                AND (:hasGrades = false OR l.grade IN (:grades))
-                AND (:minPrice IS NULL OR l.price >= :minPrice)
-                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
-            )) AND
-            (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            """,
+    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByName(@Param("hasTypes") boolean hasTypes,
                                   @Param("types") List<String> types,
@@ -104,31 +89,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                   @Param("expansionId") String expansionId,
                                   Pageable pageable);
 
-    @Query(value = """
-            SELECT c.* FROM cards c WHERE
-            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
-            (:hasRarities = false OR c.rarity IN (:rarities)) AND
-            ((:hasGrades = false AND :hasPrice = false) OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE'
-                AND (:hasGrades = false OR l.grade IN (:grades))
-                AND (:minPrice IS NULL OR l.price >= :minPrice)
-                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
-            )) AND
-            (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            ORDER BY c.view_count DESC, c.id DESC
-            """,
-            countQuery = """
-            SELECT COUNT(*) FROM cards c WHERE
-            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
-            (:hasRarities = false OR c.rarity IN (:rarities)) AND
-            ((:hasGrades = false AND :hasPrice = false) OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE'
-                AND (:hasGrades = false OR l.grade IN (:grades))
-                AND (:minPrice IS NULL OR l.price >= :minPrice)
-                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
-            )) AND
-            (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            """,
+    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+            countQuery = CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByPopular(@Param("hasTypes") boolean hasTypes,
                                      @Param("types") List<String> types,
