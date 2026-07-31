@@ -1,6 +1,7 @@
 package com.pokade.domain.price.controller;
 
 import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.exception.BusinessException;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -122,6 +124,41 @@ class PriceControllerTest {
     @Test
     void period_파라미터가_없으면_400을_반환한다() throws Exception {
         mockMvc.perform(get("/api/prices/1/chart"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 배치_요약_조회시_cardIds에_해당하는_요약_목록을_반환한다() throws Exception {
+        List<CardPriceSummaryResponse> summaries = List.of(
+                new CardPriceSummaryResponse(1L, 3000000, null, "KRW"),
+                new CardPriceSummaryResponse(2L, null, 2000000, "KRW")
+        );
+        given(priceService.getSummaries(List.of(1L, 2L))).willReturn(summaries);
+
+        mockMvc.perform(get("/api/prices/summaries").param("cardIds", "1,2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].cardId").value(1))
+                .andExpect(jsonPath("$.data[0].buyPrice").value(3000000))
+                .andExpect(jsonPath("$.data[0].sellPrice").value(nullValue()))
+                .andExpect(jsonPath("$.data[1].cardId").value(2))
+                .andExpect(jsonPath("$.data[1].sellPrice").value(2000000));
+    }
+
+    @Test
+    void 배치_요약_조회시_cardIds가_없으면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/prices/summaries"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 배치_요약_조회시_상한을_넘으면_400을_반환한다() throws Exception {
+        given(priceService.getSummaries(any()))
+                .willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최대 100개까지 조회할 수 있습니다."));
+
+        mockMvc.perform(get("/api/prices/summaries").param("cardIds", "1,2,3"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }

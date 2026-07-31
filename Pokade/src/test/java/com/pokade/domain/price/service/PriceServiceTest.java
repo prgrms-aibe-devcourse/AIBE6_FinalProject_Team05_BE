@@ -4,7 +4,9 @@ import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.trade.entity.Trade;
@@ -101,5 +103,90 @@ class PriceServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_PERIOD);
         verify(tradeRepository, never()).findCompletedTradesSince(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("t5 여러 카드를 배치 조회하면 카드별 대표 판본 기준 가격을 반환하고, "
+            + "대표 판본이 없는 카드는 가격을 null로 채운다")
+    void t5() {
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L, 2L, 3L)))
+                .willReturn(List.of(
+                        primaryVariantIdView(1L, 10L),
+                        primaryVariantIdView(2L, 20L)
+                        // 3L은 대표 판본이 없는 카드로 취급(응답에서 variantId 없음)
+                ));
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L, 20L), ListingStatus.ACTIVE))
+                .willReturn(List.of(listingPriceView(10L, 3000000)));
+        given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L, 20L)))
+                .willReturn(List.of(buyOfferPriceView(20L, 2000000)));
+
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L, 2L, 3L));
+
+        assertThat(result).hasSize(3);
+        assertThat(result.get(0)).isEqualTo(new CardPriceSummaryResponse(1L, 3000000, null, "KRW"));
+        assertThat(result.get(1)).isEqualTo(new CardPriceSummaryResponse(2L, null, 2000000, "KRW"));
+        assertThat(result.get(2)).isEqualTo(new CardPriceSummaryResponse(3L, null, null, "KRW"));
+    }
+
+    @Test
+    @DisplayName("t6 cardIds가 비어 있으면 INVALID_INPUT 예외가 발생한다")
+    void t6() {
+        assertThatThrownBy(() -> priceService.getSummaries(List.of()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("t7 cardIds가 상한(100개)을 넘으면 INVALID_INPUT 예외가 발생한다")
+    void t7() {
+        List<Long> tooMany = java.util.stream.LongStream.rangeClosed(1, 101).boxed().toList();
+
+        assertThatThrownBy(() -> priceService.getSummaries(tooMany))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    private CardVariantRepository.PrimaryVariantIdView primaryVariantIdView(Long cardId, Long variantId) {
+        return new CardVariantRepository.PrimaryVariantIdView() {
+            @Override
+            public Long getCardId() {
+                return cardId;
+            }
+
+            @Override
+            public Long getVariantId() {
+                return variantId;
+            }
+        };
+    }
+
+    private ListingRepository.VariantPriceView listingPriceView(Long variantId, Integer price) {
+        return new ListingRepository.VariantPriceView() {
+            @Override
+            public Long getVariantId() {
+                return variantId;
+            }
+
+            @Override
+            public Integer getPrice() {
+                return price;
+            }
+        };
+    }
+
+    private BuyOfferRepository.VariantPriceView buyOfferPriceView(Long variantId, Integer price) {
+        return new BuyOfferRepository.VariantPriceView() {
+            @Override
+            public Long getVariantId() {
+                return variantId;
+            }
+
+            @Override
+            public Integer getPrice() {
+                return price;
+            }
+        };
     }
 }
