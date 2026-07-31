@@ -3,6 +3,7 @@ package com.pokade.domain.auth.service;
 import com.pokade.global.security.JwtProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
 
 import java.nio.charset.StandardCharsets;
@@ -10,6 +11,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
@@ -18,6 +20,17 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     private static final String REFRESH_KEY_PREFIX = "auth:refresh:";
     private static final String GRACE_KEY_PREFIX = "auth:refresh:grace:";
     private static final Duration GRACE_TTL = Duration.ofSeconds(5);
+
+    // 현재 refresh와 일치할 때만 원자적으로 회전: 옛 current→grace, 새 refresh→current (동시요청 double-rotate 차단)
+    private static final RedisScript<Long> COMPARE_AND_ROTATE = RedisScript.of(
+            "local cur = redis.call('GET', KEYS[1]) " +
+                    "if cur == ARGV[1] then " +
+                    "  redis.call('SET', KEYS[2], cur, 'EX', ARGV[3]) " +
+                    "  redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[4]) " +
+                    "  return 1 " +
+                    "end " +
+                    "return 0", Long.class);
+
     private final StringRedisTemplate redisTemplate;
     private final JwtProperties jwtProperties;
 
@@ -37,21 +50,14 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
 
     // 제시된 토큰의 해시가 저장된 refresh 해시와 일치하는지
     @Override
-    public boolean matches(Long userId, String refreshToken) {
-        String stored = redisTemplate.opsForValue().get(REFRESH_KEY_PREFIX + userId);
-        return stored != null && stored.equals(hash(refreshToken));
-    }
-
-    @Override
-    public void delete(Long userId) {
-        redisTemplate.delete(REFRESH_KEY_PREFIX + userId);
-        redisTemplate.delete(GRACE_KEY_PREFIX + userId);
-    }
-
-    // 직전 refresh를 grace 창(5초) 동안 해시로 보관
-    @Override
-    public void saveGrace(Long userId, String refreshToken) {
-        redisTemplate.opsForValue().set(GRACE_KEY_PREFIX + userId, hash(refreshToken), GRACE_TTL);
+    public boolean compareAndRotate(Long userId, String presentedToken, String newRefreshToken) {
+        Long rotated = redisTemplate.execute(COMPARE_AND_ROTATE,
+                List.of(REFRESH_KEY_PREFIX + userId, GRACE_KEY_PREFIX + userId),
+                hash(presentedToken),
+                hash(newRefreshToken),
+                String.valueOf(GRACE_TTL.getSeconds()),
+                String.valueOf(jwtProperties.refreshExpiration().getSeconds()));
+        return Long.valueOf(1L).equals(rotated);
     }
 
     // 제시된 토큰의 해시가 grace 해시와 일치하는지
@@ -59,6 +65,12 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     public boolean matchesGrace(Long userId, String refreshToken) {
         String stored = redisTemplate.opsForValue().get(GRACE_KEY_PREFIX + userId);
         return stored != null && stored.equals(hash(refreshToken));
+    }
+
+    @Override
+    public void delete(Long userId) {
+        redisTemplate.delete(REFRESH_KEY_PREFIX + userId);
+        redisTemplate.delete(GRACE_KEY_PREFIX + userId);
     }
 
     // SHA-256 해시 -> 16진 문자열 (외부 의존성 없이 JDK만)
@@ -71,5 +83,4 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
             throw new IllegalStateException("SHA-256 not available", e);
         }
     }
-
 }
