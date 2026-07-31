@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS cards (
     expansion_id              VARCHAR(50) REFERENCES expansions(id),
     expansion_sort_order      INTEGER,
     language_code             VARCHAR(10),                    -- EN / JA
+    view_count                INTEGER NOT NULL DEFAULT 0,     -- 인기순(조회수) 정렬용
     synced_at                 TIMESTAMP
 );
 

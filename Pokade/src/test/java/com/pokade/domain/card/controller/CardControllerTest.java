@@ -53,7 +53,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1");
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), eq("base1"), any(Pageable.class)))
+        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), eq("base1"), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -70,7 +70,7 @@ class CardControllerTest {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
         given(cardService.search(
-                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), any(Pageable.class)))
+                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -84,13 +84,79 @@ class CardControllerTest {
     void t2() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardService.search(isNull(), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
                 .uri("/api/cards")
                 .assertThat()
                 .hasStatusOk();
+    }
+
+    @Test
+    @DisplayName("t12 sort 쿼리 파라미터를 서비스에 그대로 위임한다")
+    void t12() {
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+                List.of("Fire"), null, null, "base1");
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardService.search(isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
+                .willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards?sort=name")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content[0].name").isEqualTo("Charizard");
+    }
+
+    @Test
+    @DisplayName("t15 size가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
+    void t15() {
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "size는 최대 100까지 요청할 수 있습니다."))
+                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+
+        mockMvcTester.get()
+                .uri("/api/cards?size=101")
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
+
+    @Test
+    @DisplayName("t16 types 개수가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
+    void t16() {
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "types는 최대 20개까지 지정할 수 있습니다."))
+                .given(cardService).search(any(), isNull(), isNull(), isNull(), any(Pageable.class));
+
+        String query = java.util.stream.IntStream.range(0, 21)
+                .mapToObj(i -> "types=type" + i)
+                .reduce((a, b) -> a + "&" + b)
+                .orElseThrow();
+
+        mockMvcTester.get()
+                .uri("/api/cards?" + query)
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
+
+    @Test
+    @DisplayName("t17 검색어가 길이 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
+    void t17() {
+        String tooLongKeyword = "a".repeat(101);
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "검색어는 최대 100자까지 입력할 수 있습니다."))
+                .given(cardService).searchByKeyword(eq(tooLongKeyword), any(Pageable.class));
+
+        mockMvcTester.get()
+                .uri("/api/cards/search?q=" + tooLongKeyword)
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("INVALID_INPUT");
     }
 
     @Test
