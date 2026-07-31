@@ -72,7 +72,7 @@ class TradeControllerTest {
                 .willReturn(response);
 
         mockMvc.perform(post("/api/trades")
-                        .with(userId(200L))
+                        .header("X-USER-ID", 200L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -86,7 +86,7 @@ class TradeControllerTest {
         TradeCreateRequest invalidRequest = new TradeCreateRequest(null);
 
         mockMvc.perform(post("/api/trades")
-                        .with(userId(200L))
+                        .header("X-USER-ID", 200L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -101,7 +101,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.SELF_PURCHASE_NOT_ALLOWED));
 
         mockMvc.perform(post("/api/trades")
-                        .with(userId(100L))
+                        .header("X-USER-ID", 100L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -116,7 +116,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
 
         mockMvc.perform(post("/api/trades")
-                        .with(userId(200L))
+                        .header("X-USER-ID", 200L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound())
@@ -131,7 +131,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.TRADE_CONFLICT));
 
         mockMvc.perform(post("/api/trades")
-                        .with(userId(200L))
+                        .header("X-USER-ID", 200L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
