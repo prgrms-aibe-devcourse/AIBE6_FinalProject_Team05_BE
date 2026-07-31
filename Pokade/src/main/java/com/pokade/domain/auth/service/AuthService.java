@@ -98,14 +98,11 @@ public class AuthService {
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
-        if (refreshTokenStore.matches(userId, refreshToken)) { // 현재 refresh와 일치 -> 정상 회전
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
+
+        if (refreshTokenStore.compareAndRotate(userId, refreshToken, newRefreshToken)) {
             String newAccessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
-            String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
-
-            refreshTokenStore.saveGrace(userId, refreshToken);
-            refreshTokenStore.save(userId, newRefreshToken);
-
-            return new TokenPair(newAccessToken, newRefreshToken);
+            return new TokenPair(newAccessToken, newRefreshToken); // Option X: refresh 재
         }
 
        if (refreshTokenStore.matchesGrace(userId, refreshToken)) { // 직전 refresh(동시요청) -> 새 access만

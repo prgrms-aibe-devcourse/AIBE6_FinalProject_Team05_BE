@@ -63,7 +63,7 @@ class RedisRefreshTokenStoreTest {
         store.save(1L, "refresh-token");
 
         String raw = redisTemplate.opsForValue().get("auth:refresh:1");
-        assertThat(raw).isNotNull().isNotEqualTo("refresh-token"); // 원문이 아니라 해시
+        assertThat(raw).isNotNull().isNotEqualTo("refresh-token");
         Long ttl = redisTemplate.getExpire("auth:refresh:1");
         assertThat(ttl).isNotNull().isGreaterThan(0);
     }
@@ -77,57 +77,69 @@ class RedisRefreshTokenStoreTest {
     }
 
     @Test
-    @DisplayName("matches는 동일 원문 토큰이면 true를 반환한다")
-    void matches_trueForSameToken() {
-        store.save(1L, "refresh-token");
+    @DisplayName("compareAndRotate는 현재 refresh와 일치하면 회전하고 옛 토큰을 grace로 옮긴다")
+    void compareAndRotate_rotatesAndMovesOldToGrace() {
+        store.save(1L, "R0");
 
-        assertThat(store.matches(1L, "refresh-token")).isTrue();
+        assertThat(store.compareAndRotate(1L, "R0", "R1")).isTrue();
+        assertThat(store.matchesGrace(1L, "R0")).isTrue();           // 옛 current -> grace
+        assertThat(store.compareAndRotate(1L, "R1", "R2")).isTrue(); // 새 current는 R1
     }
 
     @Test
-    @DisplayName("matches는 다른 토큰이면 false를 반환한다")
-    void matches_falseForDifferentToken() {
-        store.save(1L, "refresh-token");
+    @DisplayName("compareAndRotate는 현재 refresh와 다르면 회전하지 않고 false")
+    void compareAndRotate_falseWhenNotCurrent() {
+        store.save(1L, "R0");
 
-        assertThat(store.matches(1L, "other-token")).isFalse();
+        assertThat(store.compareAndRotate(1L, "WRONG", "R1")).isFalse();
+        assertThat(store.compareAndRotate(1L, "R0", "R1")).isTrue(); // current는 그대로 R0였음
     }
 
     @Test
-    @DisplayName("matches는 저장된 값이 없으면 false를 반환한다")
-    void matches_falseWhenAbsent() {
-        assertThat(store.matches(999L, "refresh-token")).isFalse();
+    @DisplayName("compareAndRotate는 저장이 없으면 false")
+    void compareAndRotate_falseWhenAbsent() {
+        assertThat(store.compareAndRotate(999L, "R0", "R1")).isFalse();
     }
 
     @Test
-    @DisplayName("saveGrace하면 해시가 저장되고 TTL이 5초 이하로 설정된다")
-    void saveGrace_storesHashedWithShortTtl() {
-        store.saveGrace(1L, "old-refresh");
+    @DisplayName("같은 현재 refresh로 두 번째 회전은 실패하고 grace로 수렴한다 (동시요청 double-rotate 방지)")
+    void compareAndRotate_secondCallWithSameCurrentHitsGrace() {
+        store.save(1L, "R0");
 
-        String raw = redisTemplate.opsForValue().get("auth:refresh:grace:1");
-        assertThat(raw).isNotNull().isNotEqualTo("old-refresh");
+        assertThat(store.compareAndRotate(1L, "R0", "R1a")).isTrue();  // A: 회전 성공
+        assertThat(store.compareAndRotate(1L, "R0", "R1b")).isFalse(); // B: 같은 R0 -> 재회전 차단
+        assertThat(store.matchesGrace(1L, "R0")).isTrue();            // B는 grace로 수렴
+    }
+
+    @Test
+    @DisplayName("compareAndRotate 시 grace TTL이 5초 이하로 설정된다")
+    void compareAndRotate_graceTtlIsShort() {
+        store.save(1L, "R0");
+        store.compareAndRotate(1L, "R0", "R1");
+
         Long ttl = redisTemplate.getExpire("auth:refresh:grace:1");
         assertThat(ttl).isNotNull().isGreaterThan(0).isLessThanOrEqualTo(5);
     }
 
     @Test
-    @DisplayName("matchesGrace는 동일 원문 토큰이면 true, 다르면 false")
-    void matchesGrace_matchesOnlySameToken() {
-        store.saveGrace(1L, "old-refresh");
+    @DisplayName("matchesGrace는 grace로 옮겨진 옛 토큰이면 true, 아니면 false")
+    void matchesGrace_reflectsGraceContent() {
+        store.save(1L, "R0");
+        store.compareAndRotate(1L, "R0", "R1");
 
-        assertThat(store.matchesGrace(1L, "old-refresh")).isTrue();
+        assertThat(store.matchesGrace(1L, "R0")).isTrue();
         assertThat(store.matchesGrace(1L, "other")).isFalse();
     }
 
     @Test
     @DisplayName("delete하면 refresh와 grace가 모두 제거된다")
     void delete_removesBoth() {
-        store.save(1L, "refresh-token");
-        store.saveGrace(1L, "old-refresh");
+        store.save(1L, "R0");
+        store.compareAndRotate(1L, "R0", "R1"); // current=R1, grace=R0
 
         store.delete(1L);
 
         assertThat(store.exists(1L)).isFalse();
-        assertThat(store.matches(1L, "refresh-token")).isFalse();
-        assertThat(store.matchesGrace(1L, "old-refresh")).isFalse();
+        assertThat(store.matchesGrace(1L, "R0")).isFalse();
     }
 }

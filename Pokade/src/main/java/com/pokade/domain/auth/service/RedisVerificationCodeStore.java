@@ -20,7 +20,7 @@ public class RedisVerificationCodeStore implements VerificationCodeStore {
     private static final String ATTEMPT_KEY_PREFIX = "auth:verify:attempt:";
     private static final RedisScript<Long> INCR_WITH_TTL = RedisScript.of(
             "local c = redis.call('INCR', KEYS[1]) " +
-                    "if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end " +
+                    "if c == 1 or redis.call('TTL', KEYS[1]) == -1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end " +
                     "return c", Long.class);
     private final StringRedisTemplate redisTemplate;
 

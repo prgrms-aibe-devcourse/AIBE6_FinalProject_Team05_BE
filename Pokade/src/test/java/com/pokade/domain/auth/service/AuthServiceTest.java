@@ -171,23 +171,22 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("저장된 refresh와 일치하면 회전(새 access+새 refresh)하고 직전 refresh를 grace에 보관한다")
+    @DisplayName("저장된 refresh와 일치하면 원자 회전(compareAndRotate)하고 새 access+새 refresh를 반환한다")
     void reissue_success() {
         String oldRefresh = "old-refresh";
         given(jwtTokenProvider.isValid(oldRefresh)).willReturn(true);
         given(jwtTokenProvider.getUserId(oldRefresh)).willReturn(1L);
         given(refreshTokenStore.exists(1L)).willReturn(true);
-        given(refreshTokenStore.matches(1L, oldRefresh)).willReturn(true);
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
+        given(refreshTokenStore.compareAndRotate(1L, oldRefresh, "new-refresh")).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
 
         TokenPair result = authService.reissue(oldRefresh);
 
         assertThat(result.accessToken()).isEqualTo("new-access");
         assertThat(result.refreshToken()).isEqualTo("new-refresh");
-        then(refreshTokenStore).should().saveGrace(1L, oldRefresh);
-        then(refreshTokenStore).should().save(1L, "new-refresh");
+        then(refreshTokenStore).should().compareAndRotate(1L, oldRefresh, "new-refresh");
     }
 
     @Test
@@ -219,7 +218,8 @@ class AuthServiceTest {
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
         given(refreshTokenStore.exists(1L)).willReturn(true);
-        given(refreshTokenStore.matches(1L, presented)).willReturn(false);
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("unused-new");
+        given(refreshTokenStore.compareAndRotate(1L, presented, "unused-new")).willReturn(false);
         given(refreshTokenStore.matchesGrace(1L, presented)).willReturn(false);
 
         assertThatThrownBy(() -> authService.reissue(presented))
@@ -236,7 +236,8 @@ class AuthServiceTest {
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
         given(refreshTokenStore.exists(1L)).willReturn(true);
-        given(refreshTokenStore.matches(1L, presented)).willReturn(false);
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("unused-new");
+        given(refreshTokenStore.compareAndRotate(1L, presented, "unused-new")).willReturn(false);
         given(refreshTokenStore.matchesGrace(1L, presented)).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
@@ -255,7 +256,8 @@ class AuthServiceTest {
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
         given(refreshTokenStore.exists(1L)).willReturn(true);
-        given(refreshTokenStore.matches(1L, presented)).willReturn(true);
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
+        given(refreshTokenStore.compareAndRotate(1L, presented, "new-refresh")).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.reissue(presented))
