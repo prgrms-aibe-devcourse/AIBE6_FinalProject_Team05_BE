@@ -30,7 +30,6 @@ public class PriceService {
 
     private static final String CURRENCY = "KRW";
     private static final int RECENT_TRADES_LIMIT = 20;
-    // /search 한 페이지(20개) 조회 기준보다 넉넉한 상한 — CardService의 MAX_PAGE_SIZE(100)와 동일한 취지.
     private static final int MAX_SUMMARIES_BATCH_SIZE = 100;
 
     private final CardRepository cardRepository;
@@ -57,11 +56,7 @@ public class PriceService {
         return new PriceSummaryResponse(buyPrice, sellPrice, CURRENCY);
     }
 
-    // /search 등에서 카드 여러 장을 한 번에 그릴 때 getSummary()를 카드 수만큼 호출하는 N+1을 피하기
-    // 위한 배치 버전. 항상 대표 판본(primary variant) 기준이라 카드별 variantId 지정은 지원하지 않는다.
-    // 존재하지 않는 카드/대표 판본이 없는 카드는 요청 자체를 실패시키지 않고 buyPrice/sellPrice를
-    // null로 채워 응답한다 — 응답 배열은 항상 distinct한 요청 cardId 개수만큼 나온다(FE가 배열 길이나
-    // 순서에 의존하지 않고 cardId로 매칭할 수 있게).
+    // N+1을 피하기 위한 배치 버전.
     public List<CardPriceSummaryResponse> getSummaries(List<Long> cardIds) {
         if (cardIds == null || cardIds.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최소 1개 이상 필요합니다.");
