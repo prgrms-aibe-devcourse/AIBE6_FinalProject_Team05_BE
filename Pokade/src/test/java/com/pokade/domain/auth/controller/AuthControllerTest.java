@@ -5,6 +5,7 @@ import com.pokade.domain.auth.service.AuthService;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtAuthenticationFilter;
 import com.pokade.global.security.JwtProperties;
+import com.pokade.global.web.RefreshTokenCookieFactory;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ import static org.mockito.Mockito.never;
 
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(AuthControllerTest.TestConfig.class)
+@Import({AuthControllerTest.TestConfig.class, RefreshTokenCookieFactory.class})
 class AuthControllerTest {
 
     @Autowired
