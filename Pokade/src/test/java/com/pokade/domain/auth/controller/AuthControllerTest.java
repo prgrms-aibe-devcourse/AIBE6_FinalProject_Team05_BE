@@ -126,4 +126,19 @@ class AuthControllerTest {
         assertThat(result).hasStatusOk();
         then(authService).should().logout(null);
     }
+
+    @Test
+    @DisplayName("grace 수렴 재발급이면 refresh 쿠키를 세팅하지 않고 새 access만 반환한다")
+    void reissue_graceConverges_noCookie() {
+        given(authService.reissue("old-refresh")).willReturn(new TokenPair("new-access", null));
+
+        MvcTestResult result = mockMvcTester.post()
+                .uri("/api/auth/reissue")
+                .cookie(new Cookie("refreshToken", "old-refresh"))
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).isNull(); // 쿠키 미세팅
+        then(authService).should().reissue("old-refresh");
+    }
 }

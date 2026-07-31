@@ -2,9 +2,11 @@ package com.pokade.domain.auth.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -16,7 +18,10 @@ public class RedisVerificationCodeStore implements VerificationCodeStore {
     private static final String CODE_KEY_PREFIX = "auth:verify:code:";
     private static final String COOLDOWN_KEY_PREFIX = "auth:verify:cooldown:";
     private static final String ATTEMPT_KEY_PREFIX = "auth:verify:attempt:";
-
+    private static final RedisScript<Long> INCR_WITH_TTL = RedisScript.of(
+            "local c = redis.call('INCR', KEYS[1]) " +
+                    "if c == 1 or redis.call('TTL', KEYS[1]) == -1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end " +
+                    "return c", Long.class);
     private final StringRedisTemplate redisTemplate;
 
     @Override
@@ -43,10 +48,9 @@ public class RedisVerificationCodeStore implements VerificationCodeStore {
 
     @Override
     public void incrementAttempt(String email) {
-        Long count = redisTemplate.opsForValue().increment(ATTEMPT_KEY_PREFIX + email);
-        if (count != null && count == 1) {
-            redisTemplate.expire(ATTEMPT_KEY_PREFIX + email, CODE_TTL);
-        }
+        redisTemplate.execute(INCR_WITH_TTL,
+                List.of(ATTEMPT_KEY_PREFIX + email),
+                String.valueOf(CODE_TTL.getSeconds()));
     }
 
     @Override

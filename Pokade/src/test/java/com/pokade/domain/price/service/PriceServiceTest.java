@@ -1,16 +1,17 @@
 package com.pokade.domain.price.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
+import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.price.dto.TradeSummaryResponse;
+import com.pokade.domain.price.repository.BuyOfferRepository;
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.trade.repository.TradeRepository;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,18 +19,16 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.pokade.domain.card.repository.CardRepository;
-import com.pokade.domain.card.repository.CardVariantRepository;
-import com.pokade.domain.listing.Listing;
-import com.pokade.domain.listing.ListingGrade;
-import com.pokade.domain.listing.ListingRepository;
-import com.pokade.domain.price.dto.TradeSummaryResponse;
-import com.pokade.domain.price.repository.BuyOfferRepository;
-import com.pokade.domain.trade.Trade;
-import com.pokade.domain.trade.TradeRepository;
-import com.pokade.domain.trade.TradeStatus;
-import com.pokade.global.exception.BusinessException;
-import com.pokade.global.exception.ErrorCode;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class PriceServiceTest {

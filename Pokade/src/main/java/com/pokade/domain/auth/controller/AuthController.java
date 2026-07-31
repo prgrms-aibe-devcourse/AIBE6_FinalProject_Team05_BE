@@ -49,8 +49,10 @@ public class AuthController {
             HttpServletResponse response
     ) {
         TokenPair tokens = authService.reissue(refreshToken);
-        response.addHeader(HttpHeaders.SET_COOKIE,
-                refreshTokenCookieFactory.create(tokens.refreshToken()).toString());
+        if (tokens.refreshToken() != null) { // grace 수렴이면 refresh 없음 -> 기존 쿠키 유지, 재세팅 스킵
+            response.addHeader(HttpHeaders.SET_COOKIE,
+                    refreshTokenCookieFactory.create(tokens.refreshToken()).toString());
+        }
         return ApiResponse.ok("토큰 재발급 성공", LoginResponse.of(tokens.accessToken()));
     }
 
@@ -58,7 +60,7 @@ public class AuthController {
     public ApiResponse<Void> logout(
             @CookieValue(value = "refreshToken", required = false) String refreshToken,
             HttpServletResponse response
-    ){
+    ) {
         authService.logout(refreshToken);
         response.addHeader(HttpHeaders.SET_COOKIE,
                 refreshTokenCookieFactory.expired().toString());
