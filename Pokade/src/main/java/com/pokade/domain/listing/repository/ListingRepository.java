@@ -36,6 +36,16 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
     Optional<Integer> findLowestActivePrice(@Param("cardId") Long cardId,
                                              @Param("variantId") Long variantId,
                                              @Param("status") ListingStatus status);
+    
+    @Query("SELECT l.variantId AS variantId, MIN(l.price) AS price FROM Listing l "
+            + "WHERE l.variantId IN :variantIds AND l.status = :status GROUP BY l.variantId")
+    List<VariantPriceView> findLowestActivePricesByVariantIds(@Param("variantIds") List<Long> variantIds,
+                                                               @Param("status") ListingStatus status);
+
+    interface VariantPriceView {
+        Long getVariantId();
+        Integer getPrice();
+    }
 
     // ACTIVE 상태인 매물만 원자적으로 TRADING으로 전환. 반환값 0 = 이미 팔렸거나 존재하지 않음(동시 구매 충돌)
     @Modifying
