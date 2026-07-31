@@ -11,6 +11,7 @@ public enum ErrorCode {
     INVALID_LISTING_STATUS(HttpStatus.BAD_REQUEST, "현재 상태에서는 처리할 수 없는 매물입니다."),
     INVALID_TRADE_STATUS(HttpStatus.BAD_REQUEST, "현재 상태에서는 처리할 수 없는 거래입니다."),
     SELF_PURCHASE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인이 등록한 매물은 구매할 수 없습니다."),
+    INVALID_PERIOD(HttpStatus.BAD_REQUEST, "잘못된 기간 값입니다."),
 
     PAYMENT_FAILED(HttpStatus.PAYMENT_REQUIRED, "결제에 실패했습니다."),
 
@@ -42,7 +43,10 @@ public enum ErrorCode {
     EMAIL_VERIFY_ATTEMPT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증 시도 횟수를 초과했습니다."),
 
     // ===== AI 등급 진단 =====
-    AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다.");
+    AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다."),
+
+    // ===== 카드 도메인 임시 Rate Limit (팀 공통 정책 확정 시 제거) =====
+    CARD_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "카드 API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
 
     private final HttpStatus status;
     private final String message;
