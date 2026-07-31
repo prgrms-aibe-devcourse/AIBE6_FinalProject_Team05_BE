@@ -87,6 +87,20 @@ INSERT INTO card_variants (card_id, variant_name, is_primary, synced_at) VALUES 
 INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high, market, currency, change_1d_pct, change_7d_pct, change_14d_pct, change_30d_pct, change_90d_pct, change_180d_pct, change_7d_amount, updated_at) VALUES ((SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv10_ja-1') AND variant_name = 'normal'), 'graded', '10', 'PSA', 5.0, 5.6, 6.2, 5.7, 'JPY', NULL, 0.0, NULL, 1.79, 3.64, NULL, 0.0, now()) ON CONFLICT (variant_id, price_type, grade, company) DO NOTHING;
 INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high, market, currency, change_1d_pct, change_7d_pct, change_14d_pct, change_30d_pct, change_90d_pct, change_180d_pct, change_7d_amount, updated_at) VALUES ((SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv10_ja-1') AND variant_name = 'normal'), 'graded', '9', 'PSA', 2.0, 2.3, 2.6, 2.35, 'JPY', NULL, 0.0, NULL, 2.22, 4.44, NULL, 0.0, now()) ON CONFLICT (variant_id, price_type, grade, company) DO NOTHING;
 
+-- GET /api/cards?sort=popular 테스트용 view_count 더미 값 (신규 카드는 위 INSERT가 0으로 넣으므로 매 재기동 시 덮어써서 편차를 유지)
+UPDATE cards SET view_count = 15000 WHERE external_id = 'base1-4';
+UPDATE cards SET view_count = 12000 WHERE external_id = 'sv3pt5-6';
+UPDATE cards SET view_count = 9000 WHERE external_id = 'sm3-20';
+UPDATE cards SET view_count = 7000 WHERE external_id = 'base1-2';
+UPDATE cards SET view_count = 6000 WHERE external_id = 'base1-58';
+UPDATE cards SET view_count = 5500 WHERE external_id = 'sv3pt5-25';
+UPDATE cards SET view_count = 4000 WHERE external_id = 'sv3pt5-54';
+UPDATE cards SET view_count = 3000 WHERE external_id = 'zsv10pt5-105';
+UPDATE cards SET view_count = 2500 WHERE external_id = 'me1-12';
+UPDATE cards SET view_count = 1800 WHERE external_id = 'xy7-54';
+UPDATE cards SET view_count = 1200 WHERE external_id = 'sm11-95';
+UPDATE cards SET view_count = 300 WHERE external_id = 'sv10_ja-1';
+
 
 -- =========================================================
 -- FR-PRICE-01 검증용 시드 (users / listings / buy_offers)
