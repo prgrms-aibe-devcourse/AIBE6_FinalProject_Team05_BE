@@ -14,9 +14,13 @@ import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 import lombok.RequiredArgsConstructor;
 
@@ -33,6 +37,8 @@ public class CardService {
     private static final int MAX_KEYWORD_LENGTH = 100;
     // 카드검색 필터로 노출하는 등급 값. PSA10/9/8은 감정 등급이라 필터 대상이 아니다.
     private static final Set<String> GRADE_WHITELIST = Set.of("S", "A", "B");
+    // 응답에 노출하는 등급 표시 순서. 필터 화이트리스트와 동일한 범위로 제한한다.
+    private static final List<String> GRADE_DISPLAY_ORDER = List.of("S", "A", "B");
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
@@ -44,8 +50,13 @@ public class CardService {
         validateFilterSize(rarities, "rarity");
         validateFilterSize(grades, "grades");
         validateGrades(grades);
-        return cardRepository.search(types, rarities, grades, expansionId, sort, pageable)
-                .map(CardResponse::from);
+        Page<Card> cards = cardRepository.search(types, rarities, grades, expansionId, sort, pageable);
+        List<Long> cardIds = cards.getContent().stream().map(Card::getId).toList();
+        Map<Long, List<String>> gradesByCardId = cardIds.isEmpty()
+                ? Map.of()
+                : groupByKey(cardRepository.findGradesByCardIds(cardIds),
+                        CardRepository.CardGradeView::getCardId, CardRepository.CardGradeView::getGrade);
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
     }
 
     @Transactional
@@ -54,7 +65,19 @@ public class CardService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
         cardRepository.incrementViewCount(id);
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
-        return CardDetailResponse.of(card, variants);
+        Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id),
+                CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade);
+        return CardDetailResponse.of(card, variants, gradesByVariantId);
+    }
+
+    private <T, K> Map<K, List<String>> groupByKey(List<T> views, Function<T, K> keyFn, Function<T, String> gradeFn) {
+        Map<K, Set<String>> grouped = new HashMap<>();
+        for (T view : views) {
+            grouped.computeIfAbsent(keyFn.apply(view), k -> new HashSet<>()).add(gradeFn.apply(view));
+        }
+        Map<K, List<String>> result = new HashMap<>();
+        grouped.forEach((key, gradeSet) -> result.put(key, GRADE_DISPLAY_ORDER.stream().filter(gradeSet::contains).toList()));
+        return result;
     }
 
     @Transactional(readOnly = true)

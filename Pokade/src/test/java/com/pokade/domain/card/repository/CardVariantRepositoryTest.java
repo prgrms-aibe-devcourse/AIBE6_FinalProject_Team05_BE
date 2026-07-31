@@ -82,4 +82,66 @@ class CardVariantRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(result).isEmpty();
     }
+
+    private Long persistSeller(String email) {
+        return ((Number) entityManager.createNativeQuery(
+                        "INSERT INTO users (email, nickname, provider, role, status, terms_agreed_at) "
+                                + "VALUES (:email, 'tester', 'LOCAL', 'USER', 'ACTIVE', now()) RETURNING id")
+                .setParameter("email", email)
+                .getSingleResult()).longValue();
+    }
+
+    private Long persistListing(Long cardId, Long sellerId, Long variantId, String grade, String status) {
+        return ((Number) entityManager.createNativeQuery(
+                        "INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status) "
+                                + "VALUES (:cardId, :sellerId, :variantId, 10000, :grade, :status) RETURNING id")
+                .setParameter("cardId", cardId)
+                .setParameter("sellerId", sellerId)
+                .setParameter("variantId", variantId)
+                .setParameter("grade", grade)
+                .setParameter("status", status)
+                .getSingleResult()).longValue();
+    }
+
+    @Test
+    @DisplayName("t3 variant_id가 채워진 매물은 해당 variant의 등급으로 매핑된다")
+    void t3() {
+        Long seller = persistSeller("variant-grade-seller@test.com");
+        CardVariant firstEdition = cardVariantRepository
+                .findByCardIdOrderByPrimaryDescVariantNameAsc(multiVariantCard.getId())
+                .stream().filter(v -> v.getVariantName().equals("firstEditionHolofoil")).findFirst().orElseThrow();
+        persistListing(multiVariantCard.getId(), seller, firstEdition.getId(), "A", "ACTIVE");
+        entityManager.flush();
+
+        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId());
+
+        assertThat(result)
+                .extracting(CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(firstEdition.getId(), "A"));
+    }
+
+    @Test
+    @DisplayName("t4 variant_id가 NULL인 매물은 대표 변형(primary) 등급으로 합산된다")
+    void t4() {
+        Long seller = persistSeller("variant-grade-null-seller@test.com");
+        CardVariant primary = cardVariantRepository
+                .findByCardIdOrderByPrimaryDescVariantNameAsc(multiVariantCard.getId())
+                .stream().filter(CardVariant::isPrimary).findFirst().orElseThrow();
+        persistListing(multiVariantCard.getId(), seller, null, "S", "ACTIVE");
+        entityManager.flush();
+
+        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId());
+
+        assertThat(result)
+                .extracting(CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(primary.getId(), "S"));
+    }
+
+    @Test
+    @DisplayName("t5 매물이 없는 카드는 등급 조회 결과가 빈 목록이다")
+    void t5() {
+        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId());
+
+        assertThat(result).isEmpty();
+    }
 }

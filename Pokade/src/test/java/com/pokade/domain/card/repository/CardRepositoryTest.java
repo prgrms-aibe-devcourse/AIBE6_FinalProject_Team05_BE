@@ -555,4 +555,42 @@ class CardRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(result.getTotalElements()).isEqualTo(6);
     }
+
+    @Test
+    @DisplayName("t41 카드별 ACTIVE 매물에 존재하는 등급을 배치로 조회하면 카드마다 중복 없는 등급 목록을 얻는다")
+    void t41() {
+        Long seller = persistSeller("grade-batch-seller@test.com");
+        persistListing(charizard.getId(), seller, ListingGrade.S, ListingStatus.ACTIVE);
+        persistListing(charizard.getId(), seller, ListingGrade.S, ListingStatus.ACTIVE);
+        persistListing(charizard.getId(), seller, ListingGrade.A, ListingStatus.ACTIVE);
+        persistListing(charizardEx.getId(), seller, ListingGrade.B, ListingStatus.ACTIVE);
+        entityManager.flush();
+
+        List<CardRepository.CardGradeView> result = cardRepository.findGradesByCardIds(
+                List.of(charizard.getId(), charizardEx.getId(), professorsResearch.getId()));
+
+        assertThat(result)
+                .filteredOn(view -> view.getCardId().equals(charizard.getId()))
+                .extracting(CardRepository.CardGradeView::getGrade)
+                .containsExactlyInAnyOrder("S", "A");
+        assertThat(result)
+                .filteredOn(view -> view.getCardId().equals(charizardEx.getId()))
+                .extracting(CardRepository.CardGradeView::getGrade)
+                .containsExactly("B");
+        assertThat(result)
+                .noneMatch(view -> view.getCardId().equals(professorsResearch.getId()));
+    }
+
+    @Test
+    @DisplayName("t42 ACTIVE가 아니거나 S/A/B가 아닌 등급은 배치 조회에서 제외된다")
+    void t42() {
+        Long seller = persistSeller("grade-batch-exclude-seller@test.com");
+        persistListing(charizard.getId(), seller, ListingGrade.PSA10, ListingStatus.ACTIVE);
+        persistListing(charizard.getId(), seller, ListingGrade.S, ListingStatus.CANCELLED);
+        entityManager.flush();
+
+        List<CardRepository.CardGradeView> result = cardRepository.findGradesByCardIds(List.of(charizard.getId()));
+
+        assertThat(result).isEmpty();
+    }
 }

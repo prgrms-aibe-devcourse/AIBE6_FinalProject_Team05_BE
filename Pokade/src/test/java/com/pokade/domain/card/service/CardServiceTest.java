@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
@@ -221,6 +222,68 @@ class CardServiceTest {
     }
 
     @Test
+    @DisplayName("t35 검색 결과 카드들의 id를 모아 등급을 배치 조회하고 카드별 등급 배열로 매핑한다")
+    void t35() {
+        Card charizard = Card.builder().id(1L).name("Charizard").types(List.of("Fire")).build();
+        Card blastoise = Card.builder().id(2L).name("Blastoise").types(List.of("Water")).build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(charizard, blastoise), pageable, 2);
+        given(cardRepository.search(null, null, null, null, null, pageable)).willReturn(page);
+        given(cardRepository.findGradesByCardIds(List.of(1L, 2L))).willReturn(List.of(
+                gradeView(1L, "B"),
+                gradeView(1L, "S"),
+                gradeView(1L, "A")
+        ));
+
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, pageable);
+
+        assertThat(result.getContent().get(0).grades()).containsExactly("S", "A", "B");
+        assertThat(result.getContent().get(1).grades()).isEmpty();
+        verify(cardRepository, times(1)).findGradesByCardIds(any());
+    }
+
+    @Test
+    @DisplayName("t36 검색 결과가 비어 있으면 등급 배치 조회를 호출하지 않는다")
+    void t36() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
+        given(cardRepository.search(null, null, null, null, null, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, pageable);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(cardRepository, never()).findGradesByCardIds(any());
+    }
+
+    private CardRepository.CardGradeView gradeView(Long cardId, String grade) {
+        return new CardRepository.CardGradeView() {
+            @Override
+            public Long getCardId() {
+                return cardId;
+            }
+
+            @Override
+            public String getGrade() {
+                return grade;
+            }
+        };
+    }
+
+    private CardVariantRepository.VariantGradeView variantGradeView(Long variantId, String grade) {
+        return new CardVariantRepository.VariantGradeView() {
+            @Override
+            public Long getVariantId() {
+                return variantId;
+            }
+
+            @Override
+            public String getGrade() {
+                return grade;
+            }
+        };
+    }
+
+    @Test
     @DisplayName("t2 존재하는 id로 상세조회하면 확장팩과 변형 목록을 포함한 상세 응답을 반환한다")
     void t2() {
         Expansion expansion = Expansion.builder()
@@ -252,6 +315,10 @@ class CardServiceTest {
         given(cardRepository.findById(1L)).willReturn(Optional.of(card));
         given(cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(1L))
                 .willReturn(List.of(primaryVariant, secondaryVariant));
+        given(cardVariantRepository.findGradesByCardId(1L)).willReturn(List.of(
+                variantGradeView(1L, "A"),
+                variantGradeView(2L, "B")
+        ));
 
         CardDetailResponse result = cardService.getDetail(1L);
 
@@ -259,6 +326,8 @@ class CardServiceTest {
         assertThat(result.expansion().id()).isEqualTo("base1");
         assertThat(result.variants()).hasSize(2);
         assertThat(result.variants().get(0).variantName()).isEqualTo("unlimitedHolofoil");
+        assertThat(result.variants().get(0).grades()).containsExactly("A");
+        assertThat(result.variants().get(1).grades()).containsExactly("B");
         verify(cardRepository).incrementViewCount(1L);
     }
 

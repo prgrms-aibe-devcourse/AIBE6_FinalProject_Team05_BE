@@ -120,6 +120,25 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     @Query(value = "UPDATE cards SET view_count = view_count + 1 WHERE id = :id", nativeQuery = true)
     void incrementViewCount(@Param("id") Long id);
 
+    /**
+     * 카드별 ACTIVE 매물에 존재하는 등급(S/A/B) 집합을 배치로 조회한다.
+     * 카드 목록 응답에 등급 정보를 붙일 때 카드 수와 무관하게 쿼리 1회로 처리하기 위해 사용한다.
+     */
+    @Query(value = """
+            SELECT DISTINCT l.card_id AS cardId, l.grade AS grade
+            FROM listings l
+            WHERE l.card_id IN (:cardIds)
+              AND l.status = 'ACTIVE'
+              AND l.grade IN ('S', 'A', 'B')
+            """,
+            nativeQuery = true)
+    List<CardGradeView> findGradesByCardIds(@Param("cardIds") List<Long> cardIds);
+
+    interface CardGradeView {
+        Long getCardId();
+        String getGrade();
+    }
+
     default Page<Card> search(List<String> types, List<String> rarities, List<String> grades, String expansionId, String sort, Pageable pageable) {
         // 빈 문자열("")이 섞여 들어오면 실제 필터 조건 없이 IN ('') 비교만 남아 매칭이 전혀 안 되므로
         // hasTypes/hasRarities/hasGrades 판단 전에 제거한다.

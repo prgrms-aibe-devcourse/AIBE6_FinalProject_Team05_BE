@@ -50,18 +50,18 @@ class CardControllerTest {
     @DisplayName("t1 쿼리 파라미터로 카드를 검색하면 200과 페이지 결과를 반환한다")
     void t1() {
         CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, "base1");
+                List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), isNull(), eq("base1"), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
-        mockMvcTester.get()
+        var result = mockMvcTester.get()
                 .uri("/api/cards?types=Fire&rarity=Rare Holo&expansionId=base1")
                 .assertThat()
-                .hasStatusOk()
-                .bodyJson()
-                .extractingPath("$.data.content[0].name").isEqualTo("Charizard");
+                .hasStatusOk();
+        result.bodyJson().extractingPath("$.data.content[0].name").isEqualTo("Charizard");
+        result.bodyJson().extractingPath("$.data.content[0].grades").asList().isEmpty();
     }
 
     @Test
@@ -97,7 +97,7 @@ class CardControllerTest {
     @DisplayName("t12 sort 쿼리 파라미터를 서비스에 그대로 위임한다")
     void t12() {
         CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, "base1");
+                List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.search(isNull(), isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
@@ -148,18 +148,18 @@ class CardControllerTest {
     @DisplayName("t18 grades 쿼리 파라미터를 서비스에 그대로 위임한다")
     void t18() {
         CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, "base1");
+                List.of("Fire"), null, null, "base1", List.of("S", "A"));
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.search(isNull(), isNull(), eq(List.of("S", "A")), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
-        mockMvcTester.get()
+        var result = mockMvcTester.get()
                 .uri("/api/cards?grades=S&grades=A")
                 .assertThat()
-                .hasStatusOk()
-                .bodyJson()
-                .extractingPath("$.data.content[0].name").isEqualTo("Charizard");
+                .hasStatusOk();
+        result.bodyJson().extractingPath("$.data.content[0].name").isEqualTo("Charizard");
+        result.bodyJson().extractingPath("$.data.content[0].grades").asList().containsExactly("S", "A");
     }
 
     @Test
@@ -197,7 +197,7 @@ class CardControllerTest {
         CardDetailResponse.ExpansionSummary expansion = new CardDetailResponse.ExpansionSummary(
                 "base1", "Base", "Base", "BS", 102, LocalDate.of(1999, 1, 9), null, null);
         CardDetailResponse.VariantSummary variant = new CardDetailResponse.VariantSummary(
-                1L, "unlimitedHolofoil", true, null, null);
+                1L, "unlimitedHolofoil", true, null, null, List.of("S", "A"));
         CardDetailResponse detail = new CardDetailResponse(
                 1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
@@ -211,6 +211,7 @@ class CardControllerTest {
         result.bodyJson().extractingPath("$.data.name").isEqualTo("Charizard");
         result.bodyJson().extractingPath("$.data.expansion.id").isEqualTo("base1");
         result.bodyJson().extractingPath("$.data.variants[0].variantName").isEqualTo("unlimitedHolofoil");
+        result.bodyJson().extractingPath("$.data.variants[0].grades").asList().containsExactly("S", "A");
     }
 
     @Test
@@ -251,7 +252,7 @@ class CardControllerTest {
     @DisplayName("t6 검색어로 카드 이름 키워드 검색을 하면 200과 페이지 결과를 반환한다")
     void t6() {
         CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, "base1");
+                List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.searchByKeyword(eq("char"), any(Pageable.class))).willReturn(page);
@@ -282,7 +283,7 @@ class CardControllerTest {
     @DisplayName("t8 존재하는 카드 id로 유사 카드를 조회하면 200과 목록을 반환한다")
     void t8() {
         CardResponse related = new CardResponse(2L, "sv3pt5-6", "Charizard ex", "151", "Double Rare", "Pokémon",
-                List.of("Fire"), null, null, "sv3pt5");
+                List.of("Fire"), null, null, "sv3pt5", List.of());
         given(cardService.getRelated(1L)).willReturn(List.of(related));
 
         mockMvcTester.get()
