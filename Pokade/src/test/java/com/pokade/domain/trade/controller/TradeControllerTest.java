@@ -1,4 +1,4 @@
-package com.pokade.domain.trade;
+package com.pokade.domain.trade.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
