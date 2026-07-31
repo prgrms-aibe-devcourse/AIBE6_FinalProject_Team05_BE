@@ -16,6 +16,7 @@ import com.pokade.global.exception.ErrorCode;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
 
@@ -30,16 +31,20 @@ public class CardService {
     private static final int MAX_FILTER_VALUES = 20;
     // 키워드 검색어 상한: cards.name 컬럼 길이(200자)보다 짧게 잡아 과도하게 긴 ILIKE 패턴을 차단.
     private static final int MAX_KEYWORD_LENGTH = 100;
+    // 카드검색 필터로 노출하는 등급 값. PSA10/9/8은 감정 등급이라 필터 대상이 아니다.
+    private static final Set<String> GRADE_WHITELIST = Set.of("S", "A", "B");
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
 
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, String sort, Pageable pageable) {
+    public Page<CardResponse> search(List<String> types, List<String> rarities, List<String> grades, String expansionId, String sort, Pageable pageable) {
         validatePageSize(pageable);
         validateFilterSize(types, "types");
         validateFilterSize(rarities, "rarity");
-        return cardRepository.search(types, rarities, expansionId, sort, pageable)
+        validateFilterSize(grades, "grades");
+        validateGrades(grades);
+        return cardRepository.search(types, rarities, grades, expansionId, sort, pageable)
                 .map(CardResponse::from);
     }
 
@@ -108,6 +113,18 @@ public class CardService {
         if (values != null && values.size() > MAX_FILTER_VALUES) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     fieldName + "는 최대 " + MAX_FILTER_VALUES + "개까지 지정할 수 있습니다.");
+        }
+    }
+
+    private void validateGrades(List<String> grades) {
+        if (grades == null) {
+            return;
+        }
+        for (String grade : grades) {
+            if (grade != null && !grade.isBlank() && !GRADE_WHITELIST.contains(grade)) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT,
+                        "grades는 S, A, B 중에서만 지정할 수 있습니다.");
+            }
         }
     }
 }

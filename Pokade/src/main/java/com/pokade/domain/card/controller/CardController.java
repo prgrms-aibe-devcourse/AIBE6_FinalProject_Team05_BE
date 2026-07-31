@@ -29,10 +29,11 @@ public class CardController {
     public ApiResponse<Page<CardResponse>> search(
             @RequestParam(required = false) List<String> types,
             @RequestParam(required = false) List<String> rarity,
+            @RequestParam(required = false) List<String> grades,
             @RequestParam(required = false) String expansionId,
             @RequestParam(required = false) String sort,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ApiResponse.ok(cardService.search(types, rarity, expansionId, sort, pageable));
+        return ApiResponse.ok(cardService.search(types, rarity, grades, expansionId, sort, pageable));
     }
 
     @GetMapping("/search")

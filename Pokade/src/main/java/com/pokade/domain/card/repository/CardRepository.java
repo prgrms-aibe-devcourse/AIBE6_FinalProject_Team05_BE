@@ -32,6 +32,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT c.* FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasGrades = false OR EXISTS (
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE' AND l.grade IN (:grades)
+            )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
             ORDER BY c.synced_at DESC, c.id DESC
             """,
@@ -39,6 +42,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT COUNT(*) FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasGrades = false OR EXISTS (
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE' AND l.grade IN (:grades)
+            )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
             """,
             nativeQuery = true)
@@ -46,6 +52,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                     @Param("types") List<String> types,
                                     @Param("hasRarities") boolean hasRarities,
                                     @Param("rarities") List<String> rarities,
+                                    @Param("hasGrades") boolean hasGrades,
+                                    @Param("grades") List<String> grades,
                                     @Param("expansionId") String expansionId,
                                     Pageable pageable);
 
@@ -53,6 +61,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT c.* FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasGrades = false OR EXISTS (
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE' AND l.grade IN (:grades)
+            )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
             ORDER BY c.name ASC, c.id ASC
             """,
@@ -60,6 +71,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT COUNT(*) FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasGrades = false OR EXISTS (
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE' AND l.grade IN (:grades)
+            )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
             """,
             nativeQuery = true)
@@ -67,6 +81,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                   @Param("types") List<String> types,
                                   @Param("hasRarities") boolean hasRarities,
                                   @Param("rarities") List<String> rarities,
+                                  @Param("hasGrades") boolean hasGrades,
+                                  @Param("grades") List<String> grades,
                                   @Param("expansionId") String expansionId,
                                   Pageable pageable);
 
@@ -74,6 +90,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT c.* FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasGrades = false OR EXISTS (
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE' AND l.grade IN (:grades)
+            )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
             ORDER BY c.view_count DESC, c.id DESC
             """,
@@ -81,6 +100,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT COUNT(*) FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasGrades = false OR EXISTS (
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE' AND l.grade IN (:grades)
+            )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
             """,
             nativeQuery = true)
@@ -88,6 +110,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                      @Param("types") List<String> types,
                                      @Param("hasRarities") boolean hasRarities,
                                      @Param("rarities") List<String> rarities,
+                                     @Param("hasGrades") boolean hasGrades,
+                                     @Param("grades") List<String> grades,
                                      @Param("expansionId") String expansionId,
                                      Pageable pageable);
 
@@ -96,16 +120,19 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     @Query(value = "UPDATE cards SET view_count = view_count + 1 WHERE id = :id", nativeQuery = true)
     void incrementViewCount(@Param("id") Long id);
 
-    default Page<Card> search(List<String> types, List<String> rarities, String expansionId, String sort, Pageable pageable) {
+    default Page<Card> search(List<String> types, List<String> rarities, List<String> grades, String expansionId, String sort, Pageable pageable) {
         // 빈 문자열("")이 섞여 들어오면 실제 필터 조건 없이 IN ('') 비교만 남아 매칭이 전혀 안 되므로
-        // hasTypes/hasRarities 판단 전에 제거한다.
+        // hasTypes/hasRarities/hasGrades 판단 전에 제거한다.
         List<String> filteredTypes = types == null ? null
                 : types.stream().filter(v -> v != null && !v.isBlank()).toList();
         List<String> filteredRarities = rarities == null ? null
                 : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
+        List<String> filteredGrades = grades == null ? null
+                : grades.stream().filter(v -> v != null && !v.isBlank()).toList();
 
         boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
         boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
+        boolean hasGrades = filteredGrades != null && !filteredGrades.isEmpty();
         // Pageable에 담긴 Sort는 버린다: Spring의 Pageable 리졸버가 우리와 같은 "sort" 파라미터명을
         // 공유하기 때문에(예: ?sort=latest) 정렬 프로퍼티로 오인해 파싱해 넣을 수 있고, 그 값을 그대로
         // 네이티브 쿼리에 넘기면 이미 고정된 ORDER BY와 충돌한다. 정렬은 아래 화이트리스트로만 결정한다.
@@ -114,14 +141,15 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
         List<String> safeTypes = hasTypes ? filteredTypes : List.of("");
         List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
+        List<String> safeGrades = hasGrades ? filteredGrades : List.of("");
 
         if (SORT_NAME.equals(resolvedSort)) {
-            return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, expansionId, unsortedPageable);
+            return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, hasGrades, safeGrades, expansionId, unsortedPageable);
         }
         if (SORT_POPULAR.equals(resolvedSort)) {
-            return searchOrderByPopular(hasTypes, safeTypes, hasRarities, safeRarities, expansionId, unsortedPageable);
+            return searchOrderByPopular(hasTypes, safeTypes, hasRarities, safeRarities, hasGrades, safeGrades, expansionId, unsortedPageable);
         }
-        return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, expansionId, unsortedPageable);
+        return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, hasGrades, safeGrades, expansionId, unsortedPageable);
     }
 
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
