@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -173,5 +174,52 @@ class TradeControllerTest {
                         .with(userId(200L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRADE_NOT_FOUND"));
+    }
+
+    @Test
+    void 구매자가_확정하면_200과_COMPLETED_상태를_반환한다() throws Exception {
+        TradeResponse response = new TradeResponse(
+                1L, 1L, 200L, 10000, TradeStatus.COMPLETED,
+                null, LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now());
+
+        given(tradeService.confirmTrade(200L, 1L)).willReturn(response);
+
+        mockMvc.perform(patch("/api/trades/{id}/confirm", 1L)
+                        .with(userId(200L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+    }
+
+    @Test
+    void 구매자가_아니면_확정시_403을_반환한다() throws Exception {
+        given(tradeService.confirmTrade(100L, 1L))
+                .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
+
+        mockMvc.perform(patch("/api/trades/{id}/confirm", 1L)
+                        .with(userId(100L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 존재하지_않는_거래를_확정하면_404를_반환한다() throws Exception {
+        given(tradeService.confirmTrade(200L, 999L))
+                .willThrow(new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        mockMvc.perform(patch("/api/trades/{id}/confirm", 999L)
+                        .with(userId(200L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRADE_NOT_FOUND"));
+    }
+
+    @Test
+    void 이미_완료된_거래를_확정하면_400을_반환한다() throws Exception {
+        given(tradeService.confirmTrade(200L, 1L))
+                .willThrow(new BusinessException(ErrorCode.INVALID_TRADE_STATUS));
+
+        mockMvc.perform(patch("/api/trades/{id}/confirm", 1L)
+                        .with(userId(200L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRADE_STATUS"));
     }
 }
