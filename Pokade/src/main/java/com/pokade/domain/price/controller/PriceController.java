@@ -1,5 +1,6 @@
 package com.pokade.domain.price.controller;
 
+import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.service.PriceService;
@@ -26,6 +27,11 @@ public class PriceController {
             @RequestParam(required = false) Long variantId
     ) {
         return ApiResponse.ok(priceService.getSummary(cardId, variantId));
+    }
+
+    @GetMapping("/summaries")
+    public ApiResponse<List<CardPriceSummaryResponse>> getSummaries(@RequestParam List<Long> cardIds) {
+        return ApiResponse.ok(priceService.getSummaries(cardIds));
     }
 
     @GetMapping("/{cardId}/trades")
