@@ -421,6 +421,39 @@ class CardServiceTest {
     }
 
     @Test
+    @DisplayName("t37 키워드 검색 결과 카드들의 id를 모아 등급을 배치 조회하고 카드별 등급 배열로 매핑한다")
+    void t37() {
+        Card charizard = Card.builder().id(1L).name("Charizard").types(List.of("Fire")).build();
+        Card blastoise = Card.builder().id(2L).name("Blastoise").types(List.of("Water")).build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(charizard, blastoise), pageable, 2);
+        given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
+        given(cardRepository.findGradesByCardIds(List.of(1L, 2L))).willReturn(List.of(
+                gradeView(1L, "B"),
+                gradeView(1L, "S")
+        ));
+
+        Page<CardResponse> result = cardService.searchByKeyword("char", pageable);
+
+        assertThat(result.getContent().get(0).grades()).containsExactly("S", "B");
+        assertThat(result.getContent().get(1).grades()).isEmpty();
+        verify(cardRepository, times(1)).findGradesByCardIds(any());
+    }
+
+    @Test
+    @DisplayName("t38 키워드 검색 결과가 비어 있으면 등급 배치 조회를 호출하지 않는다")
+    void t38() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
+        given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.searchByKeyword("char", pageable);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(cardRepository, never()).findGradesByCardIds(any());
+    }
+
+    @Test
     @DisplayName("t7 포켓몬 카드(도감번호 있음)는 도감번호 겹침 기준으로 유사 카드를 조회한다")
     void t7() {
         Card card = Card.builder().id(1L).name("Charizard").nationalPokedexNumbers(List.of(6)).build();
@@ -487,6 +520,38 @@ class CardServiceTest {
         assertThat(result).isEmpty();
         verify(cardRepository, never()).findRelatedByPokedexNumber(any());
         verify(cardRepository, never()).findRelatedByExpansion(any(), any());
+    }
+
+    @Test
+    @DisplayName("t39 유사 카드 결과들의 id를 모아 등급을 배치 조회하고 카드별 등급 배열로 매핑한다")
+    void t39() {
+        Card card = Card.builder().id(1L).name("Charizard").nationalPokedexNumbers(List.of(6)).build();
+        Card related1 = Card.builder().id(2L).name("Charizard ex").build();
+        Card related2 = Card.builder().id(3L).name("Charizard V").build();
+        given(cardRepository.findById(1L)).willReturn(Optional.of(card));
+        given(cardRepository.findRelatedByPokedexNumber(1L)).willReturn(List.of(related1, related2));
+        given(cardRepository.findGradesByCardIds(List.of(2L, 3L))).willReturn(List.of(
+                gradeView(2L, "A")
+        ));
+
+        List<CardResponse> result = cardService.getRelated(1L);
+
+        assertThat(result.get(0).grades()).containsExactly("A");
+        assertThat(result.get(1).grades()).isEmpty();
+        verify(cardRepository, times(1)).findGradesByCardIds(any());
+    }
+
+    @Test
+    @DisplayName("t40 유사 카드 결과가 비어 있으면 등급 배치 조회를 호출하지 않는다")
+    void t40() {
+        Card card = Card.builder().id(1L).name("Charizard").nationalPokedexNumbers(List.of(6)).build();
+        given(cardRepository.findById(1L)).willReturn(Optional.of(card));
+        given(cardRepository.findRelatedByPokedexNumber(1L)).willReturn(List.of());
+
+        List<CardResponse> result = cardService.getRelated(1L);
+
+        assertThat(result).isEmpty();
+        verify(cardRepository, never()).findGradesByCardIds(any());
     }
 
     @Test

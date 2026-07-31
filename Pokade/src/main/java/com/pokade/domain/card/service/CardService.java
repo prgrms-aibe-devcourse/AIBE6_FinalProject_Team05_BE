@@ -51,11 +51,7 @@ public class CardService {
         validateFilterSize(grades, "grades");
         validateGrades(grades);
         Page<Card> cards = cardRepository.search(types, rarities, grades, expansionId, sort, pageable);
-        List<Long> cardIds = cards.getContent().stream().map(Card::getId).toList();
-        Map<Long, List<String>> gradesByCardId = cardIds.isEmpty()
-                ? Map.of()
-                : groupByKey(cardRepository.findGradesByCardIds(cardIds),
-                        CardRepository.CardGradeView::getCardId, CardRepository.CardGradeView::getGrade);
+        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
         return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
     }
 
@@ -91,8 +87,9 @@ public class CardService {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
         }
-        return cardRepository.findByNameContainingIgnoreCase(keyword, pageable)
-                .map(CardResponse::from);
+        Page<Card> cards = cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
+        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
     }
 
     @Transactional(readOnly = true)
@@ -107,9 +104,19 @@ public class CardService {
         } else {
             related = List.of();
         }
+        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(CardResponse::from)
+                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of())))
                 .toList();
+    }
+
+    private Map<Long, List<String>> fetchGradesByCardIds(List<Card> cards) {
+        if (cards.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> cardIds = cards.stream().map(Card::getId).toList();
+        return groupByKey(cardRepository.findGradesByCardIds(cardIds),
+                CardRepository.CardGradeView::getCardId, CardRepository.CardGradeView::getGrade);
     }
 
     /**
