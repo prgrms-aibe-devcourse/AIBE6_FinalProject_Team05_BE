@@ -35,11 +35,11 @@ public class CardService {
     private final CardVariantRepository cardVariantRepository;
 
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(List<String> types, List<String> rarity, String expansionId, String sort, Pageable pageable) {
+    public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, String sort, Pageable pageable) {
         validatePageSize(pageable);
         validateFilterSize(types, "types");
-        validateFilterSize(rarity, "rarity");
-        return cardRepository.search(types, rarity, expansionId, sort, pageable)
+        validateFilterSize(rarities, "rarity");
+        return cardRepository.search(types, rarities, expansionId, sort, pageable)
                 .map(CardResponse::from);
     }
 

@@ -1,8 +1,8 @@
 package com.pokade.domain.card.repository;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,14 +22,11 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     String SORT_POPULAR = "popular";
 
     /**
-     * sort 요청 파라미터 화이트리스트. 값은 실제 실행할 SQL을 선택하는 키로만 쓰이고
-     * SQL 문자열에 직접 삽입되지 않으므로(고정된 두 개의 @Query 중 택일), 인젝션 여지가 없다.
+     * sort 요청 파라미터 화이트리스트. 값은 아래 default search()의 if/else 디스패치에서
+     * 어떤 @Query를 실행할지 고르는 키로만 쓰이고 SQL 문자열에 직접 삽입되지 않으므로
+     * (고정된 세 개의 @Query 중 택일), 인젝션 여지가 없다.
      */
-    Map<String, String> SORT_COLUMN_WHITELIST = Map.of(
-            SORT_LATEST, "synced_at",
-            SORT_NAME, "name",
-            SORT_POPULAR, "view_count"
-    );
+    Set<String> SORT_COLUMN_WHITELIST = Set.of(SORT_LATEST, SORT_NAME, SORT_POPULAR);
 
     @Query(value = """
             SELECT c.* FROM cards c WHERE
@@ -100,16 +97,23 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     void incrementViewCount(@Param("id") Long id);
 
     default Page<Card> search(List<String> types, List<String> rarities, String expansionId, String sort, Pageable pageable) {
-        boolean hasTypes = types != null && !types.isEmpty();
-        boolean hasRarities = rarities != null && !rarities.isEmpty();
+        // 빈 문자열("")이 섞여 들어오면 실제 필터 조건 없이 IN ('') 비교만 남아 매칭이 전혀 안 되므로
+        // hasTypes/hasRarities 판단 전에 제거한다.
+        List<String> filteredTypes = types == null ? null
+                : types.stream().filter(v -> v != null && !v.isBlank()).toList();
+        List<String> filteredRarities = rarities == null ? null
+                : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
+
+        boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
+        boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
         // Pageable에 담긴 Sort는 버린다: Spring의 Pageable 리졸버가 우리와 같은 "sort" 파라미터명을
         // 공유하기 때문에(예: ?sort=latest) 정렬 프로퍼티로 오인해 파싱해 넣을 수 있고, 그 값을 그대로
         // 네이티브 쿼리에 넘기면 이미 고정된 ORDER BY와 충돌한다. 정렬은 아래 화이트리스트로만 결정한다.
         Pageable unsortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
-        String resolvedSort = sort != null && SORT_COLUMN_WHITELIST.containsKey(sort) ? sort : SORT_LATEST;
+        String resolvedSort = sort != null && SORT_COLUMN_WHITELIST.contains(sort) ? sort : SORT_LATEST;
 
-        List<String> safeTypes = hasTypes ? types : List.of("");
-        List<String> safeRarities = hasRarities ? rarities : List.of("");
+        List<String> safeTypes = hasTypes ? filteredTypes : List.of("");
+        List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
 
         if (SORT_NAME.equals(resolvedSort)) {
             return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, expansionId, unsortedPageable);

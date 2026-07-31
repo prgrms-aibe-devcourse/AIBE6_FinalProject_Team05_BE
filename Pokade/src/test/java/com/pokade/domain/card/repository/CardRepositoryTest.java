@@ -357,6 +357,34 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("t28 types에 빈 문자열이 섞여 있으면 제거하고 나머지 값으로만 필터링한다")
+    void t28() {
+        Page<Card> result = cardRepository.search(List.of("Fire", ""), null, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactlyInAnyOrder("Charizard", "Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t29 rarity에 빈 문자열이 섞여 있으면 제거하고 나머지 값으로만 필터링한다")
+    void t29() {
+        Page<Card> result = cardRepository.search(null, List.of("Common", ""), null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Pikachu");
+    }
+
+    @Test
+    @DisplayName("t30 types가 빈 문자열로만 채워져 있으면 필터 없이 전체 카드를 반환한다")
+    void t30() {
+        Page<Card> result = cardRepository.search(List.of(""), null, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getTotalElements()).isEqualTo(6);
+    }
+
+    @Test
     @DisplayName("t7 같은 포켓몬 도감번호를 가진 다른 카드를 유사 카드로 조회한다")
     void t7() {
         List<Card> result = cardRepository.findRelatedByPokedexNumber(charizard.getId());
