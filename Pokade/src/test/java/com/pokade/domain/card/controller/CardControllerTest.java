@@ -53,7 +53,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), isNull(), eq("base1"), isNull(), any(Pageable.class)))
+        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), isNull(), eq("base1"), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         var result = mockMvcTester.get()
@@ -70,7 +70,7 @@ class CardControllerTest {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
         given(cardService.search(
-                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), isNull(), isNull(), any(Pageable.class)))
+                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -84,7 +84,7 @@ class CardControllerTest {
     void t2() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -100,7 +100,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(isNull(), isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -115,7 +115,7 @@ class CardControllerTest {
     @DisplayName("t15 size가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t15() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "size는 최대 100까지 요청할 수 있습니다."))
-                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
 
         mockMvcTester.get()
                 .uri("/api/cards?size=101")
@@ -129,7 +129,7 @@ class CardControllerTest {
     @DisplayName("t16 types 개수가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t16() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "types는 최대 20개까지 지정할 수 있습니다."))
-                .given(cardService).search(any(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                .given(cardService).search(any(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
 
         String query = java.util.stream.IntStream.range(0, 21)
                 .mapToObj(i -> "types=type" + i)
@@ -151,7 +151,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1", List.of("S", "A"));
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(isNull(), isNull(), eq(List.of("S", "A")), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), eq(List.of("S", "A")), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         var result = mockMvcTester.get()
@@ -166,10 +166,42 @@ class CardControllerTest {
     @DisplayName("t19 잘못된 grades 값이면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t19() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "grades는 S, A, B 중에서만 지정할 수 있습니다."))
-                .given(cardService).search(isNull(), isNull(), eq(List.of("PSA10")), isNull(), isNull(), any(Pageable.class));
+                .given(cardService).search(isNull(), isNull(), eq(List.of("PSA10")), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
 
         mockMvcTester.get()
                 .uri("/api/cards?grades=PSA10")
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
+
+    @Test
+    @DisplayName("t20 minPrice/maxPrice 쿼리 파라미터를 서비스에 그대로 위임한다")
+    void t20() {
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+                List.of("Fire"), null, null, "base1", List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), eq(10000), eq(50000), isNull(), any(Pageable.class)))
+                .willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards?minPrice=10000&maxPrice=50000")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content[0].name").isEqualTo("Charizard");
+    }
+
+    @Test
+    @DisplayName("t21 minPrice가 maxPrice보다 크면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
+    void t21() {
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "minPrice는 maxPrice보다 클 수 없습니다."))
+                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), eq(50000), eq(10000), isNull(), any(Pageable.class));
+
+        mockMvcTester.get()
+                .uri("/api/cards?minPrice=50000&maxPrice=10000")
                 .assertThat()
                 .hasStatus(HttpStatus.BAD_REQUEST)
                 .bodyJson()

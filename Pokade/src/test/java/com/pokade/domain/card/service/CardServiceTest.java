@@ -55,9 +55,9 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(List.of("Fire"), List.of("Rare Holo"), null, "base1", "name", pageable)).willReturn(page);
+        given(cardRepository.search(List.of("Fire"), List.of("Rare Holo"), null, "base1", null, null, "name", pageable)).willReturn(page);
 
-        Page<CardResponse> result = cardService.search(List.of("Fire"), List.of("Rare Holo"), null, "base1", "name", pageable);
+        Page<CardResponse> result = cardService.search(List.of("Fire"), List.of("Rare Holo"), null, "base1", null, null, "name", pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
@@ -73,11 +73,11 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, null, null, pageable))
+        given(cardRepository.search(List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, null, null, null, null, pageable))
                 .willReturn(page);
 
         Page<CardResponse> result = cardService.search(
-                List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, null, null, pageable);
+                List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, null, null, null, null, pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Blastoise");
@@ -93,9 +93,9 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(null, null, null, null, "latest", pageable)).willReturn(page);
+        given(cardRepository.search(null, null, null, null, null, null, "latest", pageable)).willReturn(page);
 
-        Page<CardResponse> result = cardService.search(null, null, null, null, "latest", pageable);
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, null, "latest", pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
@@ -106,9 +106,9 @@ class CardServiceTest {
     void t17() {
         Pageable pageable = PageRequest.of(0, 100);
         Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardRepository.search(null, null, null, null, null, pageable)).willReturn(page);
+        given(cardRepository.search(null, null, null, null, null, null, null, pageable)).willReturn(page);
 
-        Page<CardResponse> result = cardService.search(null, null, null, null, null, pageable);
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, null, null, pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(0);
     }
@@ -118,7 +118,7 @@ class CardServiceTest {
     void t18() {
         Pageable pageable = PageRequest.of(0, 101);
 
-        assertThatThrownBy(() -> cardService.search(null, null, null, null, null, pageable))
+        assertThatThrownBy(() -> cardService.search(null, null, null, null, null, null, null, pageable))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -132,7 +132,7 @@ class CardServiceTest {
                 .mapToObj(i -> "type" + i)
                 .toList();
 
-        assertThatThrownBy(() -> cardService.search(tooManyTypes, null, null, null, null, pageable))
+        assertThatThrownBy(() -> cardService.search(tooManyTypes, null, null, null, null, null, null, pageable))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -146,7 +146,7 @@ class CardServiceTest {
                 .mapToObj(i -> "rarity" + i)
                 .toList();
 
-        assertThatThrownBy(() -> cardService.search(null, tooManyRarities, null, null, null, pageable))
+        assertThatThrownBy(() -> cardService.search(null, tooManyRarities, null, null, null, null, null, pageable))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -160,9 +160,9 @@ class CardServiceTest {
                 .mapToObj(i -> "type" + i)
                 .toList();
         Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardRepository.search(exactlyTwenty, null, null, null, null, pageable)).willReturn(page);
+        given(cardRepository.search(exactlyTwenty, null, null, null, null, null, null, pageable)).willReturn(page);
 
-        Page<CardResponse> result = cardService.search(exactlyTwenty, null, null, null, null, pageable);
+        Page<CardResponse> result = cardService.search(exactlyTwenty, null, null, null, null, null, null, pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(0);
     }
@@ -175,7 +175,7 @@ class CardServiceTest {
                 .mapToObj(i -> "S")
                 .toList();
 
-        assertThatThrownBy(() -> cardService.search(null, null, tooManyGrades, null, null, pageable))
+        assertThatThrownBy(() -> cardService.search(null, null, tooManyGrades, null, null, null, null, pageable))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -186,7 +186,7 @@ class CardServiceTest {
     void t32() {
         Pageable pageable = PageRequest.of(0, 20);
 
-        assertThatThrownBy(() -> cardService.search(null, null, List.of("PSA10"), null, null, pageable))
+        assertThatThrownBy(() -> cardService.search(null, null, List.of("PSA10"), null, null, null, null, pageable))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -197,7 +197,7 @@ class CardServiceTest {
     void t33() {
         Pageable pageable = PageRequest.of(0, 20);
 
-        assertThatThrownBy(() -> cardService.search(null, null, List.of("아무값"), null, null, pageable))
+        assertThatThrownBy(() -> cardService.search(null, null, List.of("아무값"), null, null, null, null, pageable))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -213,9 +213,38 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(null, null, List.of("S", "A", "B"), null, null, pageable)).willReturn(page);
+        given(cardRepository.search(null, null, List.of("S", "A", "B"), null, null, null, null, pageable)).willReturn(page);
 
-        Page<CardResponse> result = cardService.search(null, null, List.of("S", "A", "B"), null, null, pageable);
+        Page<CardResponse> result = cardService.search(null, null, List.of("S", "A", "B"), null, null, null, null, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
+    }
+
+    @Test
+    @DisplayName("t41 minPrice가 maxPrice보다 크면 INVALID_INPUT 예외가 발생한다")
+    void t41() {
+        Pageable pageable = PageRequest.of(0, 20);
+
+        assertThatThrownBy(() -> cardService.search(null, null, null, null, 20000, 10000, null, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("t42 minPrice/maxPrice를 리포지토리에 그대로 위임한다")
+    void t42() {
+        Card card = Card.builder()
+                .id(1L)
+                .name("Charizard")
+                .types(List.of("Fire"))
+                .build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardRepository.search(null, null, null, null, 10000, 50000, null, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(null, null, null, null, 10000, 50000, null, pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
@@ -228,14 +257,14 @@ class CardServiceTest {
         Card blastoise = Card.builder().id(2L).name("Blastoise").types(List.of("Water")).build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(charizard, blastoise), pageable, 2);
-        given(cardRepository.search(null, null, null, null, null, pageable)).willReturn(page);
+        given(cardRepository.search(null, null, null, null, null, null, null, pageable)).willReturn(page);
         given(cardRepository.findGradesByCardIds(List.of(1L, 2L))).willReturn(List.of(
                 gradeView(1L, "B"),
                 gradeView(1L, "S"),
                 gradeView(1L, "A")
         ));
 
-        Page<CardResponse> result = cardService.search(null, null, null, null, null, pageable);
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, null, null, pageable);
 
         assertThat(result.getContent().get(0).grades()).containsExactly("S", "A", "B");
         assertThat(result.getContent().get(1).grades()).isEmpty();
@@ -247,9 +276,9 @@ class CardServiceTest {
     void t36() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardRepository.search(null, null, null, null, null, pageable)).willReturn(page);
+        given(cardRepository.search(null, null, null, null, null, null, null, pageable)).willReturn(page);
 
-        Page<CardResponse> result = cardService.search(null, null, null, null, null, pageable);
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, null, null, pageable);
 
         assertThat(result.getContent()).isEmpty();
         verify(cardRepository, never()).findGradesByCardIds(any());

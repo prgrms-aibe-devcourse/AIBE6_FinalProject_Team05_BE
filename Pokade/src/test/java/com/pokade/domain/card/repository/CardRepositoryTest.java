@@ -110,10 +110,14 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     }
 
     private void persistListing(Long cardId, Long sellerId, ListingGrade grade, ListingStatus status) {
+        persistListing(cardId, sellerId, 10000, grade, status);
+    }
+
+    private void persistListing(Long cardId, Long sellerId, int price, ListingGrade grade, ListingStatus status) {
         Listing listing = Listing.builder()
                 .cardId(cardId)
                 .sellerId(sellerId)
-                .price(10000)
+                .price(price)
                 .grade(grade)
                 .build();
         entityManager.persist(listing);
@@ -138,7 +142,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t2 types 배열에 검색 타입이 포함된 카드만 조회한다")
     void t2() {
-        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -148,7 +152,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t3 rarity가 정확히 일치하는 카드만 조회한다")
     void t3() {
-        Page<Card> result = cardRepository.search(null, List.of("Common"), null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, List.of("Common"), null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -158,7 +162,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t4 expansionId가 정확히 일치하는 카드만 조회한다")
     void t4() {
-        Page<Card> result = cardRepository.search(null, null, null, "sv3pt5", null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, null, "sv3pt5", null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -168,7 +172,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t5 여러 조건을 조합하면 AND로 필터링된다")
     void t5() {
-        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, "base1", null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, "base1", null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -178,7 +182,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t6 조건이 없으면 전체 카드를 페이지 크기만큼 반환한다")
     void t6() {
-        Page<Card> result = cardRepository.search(null, null, null, null, null, PageRequest.of(0, 2));
+        Page<Card> result = cardRepository.search(null, null, null, null, null, null, null, PageRequest.of(0, 2));
 
         assertThat(result.getContent()).hasSize(2);
         assertThat(result.getTotalElements()).isEqualTo(6);
@@ -188,7 +192,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t12 타입을 여러 개 선택하면 하나라도 포함된 카드를 OR로 조회한다")
     void t12() {
-        Page<Card> result = cardRepository.search(List.of("Fire", "Water"), null, null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Fire", "Water"), null, null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -198,7 +202,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t13 레어도를 여러 개 선택하면 하나라도 일치하는 카드를 OR로 조회한다")
     void t13() {
-        Page<Card> result = cardRepository.search(null, List.of("Common", "Double Rare"), null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, List.of("Common", "Double Rare"), null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -209,7 +213,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @DisplayName("t14 타입·레어도·세트를 동시에 지정하면 AND로 결합되어 모두 만족하는 카드만 조회한다")
     void t14() {
         Page<Card> result = cardRepository.search(
-                List.of("Fire"), List.of("Rare Holo"), null, "base1", null, PageRequest.of(0, 10));
+                List.of("Fire"), List.of("Rare Holo"), null, "base1", null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -219,7 +223,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t15 조건을 모두 만족하는 카드가 없으면 빈 페이지를 반환한다")
     void t15() {
-        Page<Card> result = cardRepository.search(List.of("Water"), List.of("Common"), null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Water"), List.of("Common"), null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isZero();
@@ -228,7 +232,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t16 존재하지 않는 타입 값으로 조회해도 예외 없이 빈 페이지를 반환한다")
     void t16() {
-        Page<Card> result = cardRepository.search(List.of("NonExistentType"), null, null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("NonExistentType"), null, null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isZero();
@@ -238,7 +242,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @DisplayName("t17 타입을 여러 개, 레어도를 여러 개 동시에 선택하면 각 조건 내부는 OR, 조건 간에는 AND로 결합된다")
     void t17() {
         Page<Card> result = cardRepository.search(
-                List.of("Fire", "Water"), List.of("Rare Holo", "Double Rare"), null, null, null, PageRequest.of(0, 10));
+                List.of("Fire", "Water"), List.of("Rare Holo", "Double Rare"), null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -248,7 +252,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t18 sort가 없으면 기본값 latest 기준(synced_at DESC, id DESC)으로 정렬한다")
     void t18() {
-        Page<Card> result = cardRepository.search(null, null, null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, null, null, null, null, null, PageRequest.of(0, 10));
 
         // id 순서(삽입 순서)와는 다른 synced_at 순서(내림차순: Charizard ex > Charizard > Pikachu
         // > Quick Ball > Professor's Research > Blastoise)로 나와야 synced_at이 실제 1차 정렬
@@ -261,7 +265,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t19 sort=name이면 이름 오름차순으로 정렬한다")
     void t19() {
-        Page<Card> result = cardRepository.search(null, null, null, null, "name", PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, null, null, null, null, "name", PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -271,7 +275,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t20 화이트리스트에 없는 sort 값이 들어와도 예외 없이 기본값 latest로 처리한다")
     void t20() {
-        Page<Card> result = cardRepository.search(null, null, null, null, "id; DROP TABLE cards;--", PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, null, null, null, null, "id; DROP TABLE cards;--", PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -281,7 +285,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t21 필터와 sort=name을 함께 적용해도 필터링된 결과 안에서 이름순으로 정렬한다")
     void t21() {
-        Page<Card> result = cardRepository.search(List.of("Fire", "Water"), null, null, null, "name", PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Fire", "Water"), null, null, null, null, null, "name", PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -296,7 +300,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         persistCardWithViewCount("Squirtle", popExpansion, 10);
         persistCardWithViewCount("Bulbasaur", popExpansion, 0);
 
-        Page<Card> result = cardRepository.search(null, null, null, "popTest", "popular", PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, null, "popTest", null, null, "popular", PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -312,7 +316,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
-        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, null, "popular", PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, null, null, null, "popular", PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -386,7 +390,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t28 types에 빈 문자열이 섞여 있으면 제거하고 나머지 값으로만 필터링한다")
     void t28() {
-        Page<Card> result = cardRepository.search(List.of("Fire", ""), null, null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of("Fire", ""), null, null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -396,7 +400,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t29 rarity에 빈 문자열이 섞여 있으면 제거하고 나머지 값으로만 필터링한다")
     void t29() {
-        Page<Card> result = cardRepository.search(null, List.of("Common", ""), null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, List.of("Common", ""), null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -406,7 +410,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t30 types가 빈 문자열로만 채워져 있으면 필터 없이 전체 카드를 반환한다")
     void t30() {
-        Page<Card> result = cardRepository.search(List.of(""), null, null, null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(List.of(""), null, null, null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getTotalElements()).isEqualTo(6);
     }
@@ -486,7 +490,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         persistListing(charizardEx.getId(), seller, ListingGrade.A, ListingStatus.ACTIVE);
         entityManager.flush();
 
-        Page<Card> result = cardRepository.search(null, null, List.of("S"), null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, List.of("S"), null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -501,7 +505,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         persistListing(charizardEx.getId(), seller, ListingGrade.A, ListingStatus.ACTIVE);
         entityManager.flush();
 
-        Page<Card> result = cardRepository.search(null, null, List.of("S", "A"), null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, List.of("S", "A"), null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -515,7 +519,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         persistListing(charizard.getId(), seller, ListingGrade.S, ListingStatus.CANCELLED);
         entityManager.flush();
 
-        Page<Card> result = cardRepository.search(null, null, List.of("S"), null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, List.of("S"), null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent()).isEmpty();
     }
@@ -527,7 +531,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         persistListing(charizard.getId(), seller, ListingGrade.PSA10, ListingStatus.ACTIVE);
         entityManager.flush();
 
-        Page<Card> result = cardRepository.search(null, null, List.of("S"), null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, List.of("S"), null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent()).isEmpty();
     }
@@ -541,7 +545,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         persistListing(charizard.getId(), seller, ListingGrade.S, ListingStatus.ACTIVE);
         entityManager.flush();
 
-        Page<Card> result = cardRepository.search(null, List.of("Rare Holo"), List.of("S"), null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, List.of("Rare Holo"), List.of("S"), null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getContent())
                 .extracting(Card::getName)
@@ -551,9 +555,76 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t40 grades가 빈 문자열로만 채워져 있으면 필터 없이 전체 카드를 반환한다")
     void t40() {
-        Page<Card> result = cardRepository.search(null, null, List.of(""), null, null, PageRequest.of(0, 10));
+        Page<Card> result = cardRepository.search(null, null, List.of(""), null, null, null, null, PageRequest.of(0, 10));
 
         assertThat(result.getTotalElements()).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("t43 등급 미지정 상태에서 가격(minPrice)만 지정해도 매물 가격 기준으로 필터링된다")
+    void t43() {
+        // 등급을 지정하지 않고 가격만 지정한 경우에도 바깥 게이트 조건이 EXISTS를 실행해야
+        // 매물 가격 기준 필터링이 실제로 적용되는지 검증한다(게이트 수정의 핵심 케이스).
+        Long seller = persistSeller("price-only-seller@test.com");
+        persistListing(charizard.getId(), seller, 5000, null, ListingStatus.ACTIVE);
+        persistListing(charizardEx.getId(), seller, 20000, null, ListingStatus.ACTIVE);
+        entityManager.flush();
+
+        Page<Card> result = cardRepository.search(null, null, null, null, 10000, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t44 minPrice와 maxPrice를 함께 지정하면 범위 안의 매물이 있는 카드만 조회된다")
+    void t44() {
+        Long seller = persistSeller("price-range-seller@test.com");
+        persistListing(charizard.getId(), seller, 5000, null, ListingStatus.ACTIVE);
+        persistListing(charizardEx.getId(), seller, 15000, null, ListingStatus.ACTIVE);
+        persistListing(professorsResearch.getId(), seller, 30000, null, ListingStatus.ACTIVE);
+        entityManager.flush();
+
+        Page<Card> result = cardRepository.search(null, null, null, null, 10000, 20000, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t45 등급과 가격을 동시에 지정하면 같은 매물이 두 조건을 모두 만족하는 카드만 조회된다")
+    void t45() {
+        Long seller = persistSeller("grade-price-seller@test.com");
+        // charizard는 두 매물로 조건을 나눠 만족시켜, 같은 매물 하나가 등급·가격을 모두
+        // 만족해야 하는지(카드 단위가 아니라 매물 단위 AND) 검증한다.
+        persistListing(charizard.getId(), seller, 5000, ListingGrade.S, ListingStatus.ACTIVE);
+        persistListing(charizard.getId(), seller, 20000, ListingGrade.A, ListingStatus.ACTIVE);
+        // charizardEx는 단일 매물이 등급·가격 조건을 모두 만족한다.
+        persistListing(charizardEx.getId(), seller, 20000, ListingGrade.S, ListingStatus.ACTIVE);
+        entityManager.flush();
+
+        Page<Card> result = cardRepository.search(null, null, List.of("S"), null, 10000, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t46 가격 필터를 기존 타입 필터와 함께 적용해도 두 조건이 AND로 결합된다")
+    void t46() {
+        Long seller = persistSeller("price-type-seller@test.com");
+        persistListing(charizard.getId(), seller, 5000, null, ListingStatus.ACTIVE);
+        persistListing(charizardEx.getId(), seller, 20000, null, ListingStatus.ACTIVE);
+        entityManager.flush();
+
+        Page<Card> result = cardRepository.search(List.of("Fire"), null, null, null, 10000, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Charizard ex");
     }
 
     @Test

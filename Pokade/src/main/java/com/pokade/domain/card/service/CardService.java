@@ -44,13 +44,14 @@ public class CardService {
     private final CardVariantRepository cardVariantRepository;
 
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(List<String> types, List<String> rarities, List<String> grades, String expansionId, String sort, Pageable pageable) {
+    public Page<CardResponse> search(List<String> types, List<String> rarities, List<String> grades, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         validatePageSize(pageable);
         validateFilterSize(types, "types");
         validateFilterSize(rarities, "rarity");
         validateFilterSize(grades, "grades");
         validateGrades(grades);
-        Page<Card> cards = cardRepository.search(types, rarities, grades, expansionId, sort, pageable);
+        validatePriceRange(minPrice, maxPrice);
+        Page<Card> cards = cardRepository.search(types, rarities, grades, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
         return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
     }
@@ -143,6 +144,12 @@ public class CardService {
         if (values != null && values.size() > MAX_FILTER_VALUES) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     fieldName + "는 최대 " + MAX_FILTER_VALUES + "개까지 지정할 수 있습니다.");
+        }
+    }
+
+    private void validatePriceRange(Integer minPrice, Integer maxPrice) {
+        if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "minPrice는 maxPrice보다 클 수 없습니다.");
         }
     }
 

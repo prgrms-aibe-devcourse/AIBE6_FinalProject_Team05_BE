@@ -31,9 +31,11 @@ public class CardController {
             @RequestParam(required = false) List<String> rarity,
             @RequestParam(required = false) List<String> grades,
             @RequestParam(required = false) String expansionId,
+            @RequestParam(required = false) Integer minPrice,
+            @RequestParam(required = false) Integer maxPrice,
             @RequestParam(required = false) String sort,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ApiResponse.ok(cardService.search(types, rarity, grades, expansionId, sort, pageable));
+        return ApiResponse.ok(cardService.search(types, rarity, grades, expansionId, minPrice, maxPrice, sort, pageable));
     }
 
     @GetMapping("/search")
