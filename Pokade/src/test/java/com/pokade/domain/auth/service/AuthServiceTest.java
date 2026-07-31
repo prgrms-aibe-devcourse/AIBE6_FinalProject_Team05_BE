@@ -176,7 +176,8 @@ class AuthServiceTest {
         String oldRefresh = "old-refresh";
         given(jwtTokenProvider.isValid(oldRefresh)).willReturn(true);
         given(jwtTokenProvider.getUserId(oldRefresh)).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn(oldRefresh);
+        given(refreshTokenStore.exists(1L)).willReturn(true);
+        given(refreshTokenStore.matches(1L, oldRefresh)).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
         given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
@@ -204,7 +205,7 @@ class AuthServiceTest {
     void reissue_noStoredToken() {
         given(jwtTokenProvider.isValid("r")).willReturn(true);
         given(jwtTokenProvider.getUserId("r")).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn(null);
+        given(refreshTokenStore.exists(1L)).willReturn(false);
 
         assertThatThrownBy(() -> authService.reissue("r"))
                 .isInstanceOf(BusinessException.class)
@@ -212,13 +213,14 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("저장값과 불일치하고 grace도 아니면 TOKEN_STOLEN 예외를 던지고 저장 토큰을 삭제한다")
+    @DisplayName("저장값·grace 모두와 불일치하면 TOKEN_STOLEN을 던지고 저장 토큰을 삭제한다")
     void reissue_stolen() {
         String presented = "stale-refresh";
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn("current-refresh");
-        given(refreshTokenStore.findGrace(1L)).willReturn(null);
+        given(refreshTokenStore.exists(1L)).willReturn(true);
+        given(refreshTokenStore.matches(1L, presented)).willReturn(false);
+        given(refreshTokenStore.matchesGrace(1L, presented)).willReturn(false);
 
         assertThatThrownBy(() -> authService.reissue(presented))
                 .isInstanceOf(BusinessException.class)
@@ -228,20 +230,21 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("저장값과 불일치해도 grace와 일치하면 재회전 없이 새 access만 발급하고 현재 refresh로 수렴한다")
+    @DisplayName("저장값과 불일치해도 grace와 일치하면 재회전 없이 새 access만 발급하고 refresh는 재세팅하지 않는다")
     void reissue_graceConverges() {
         String presented = "old-refresh";
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn("current-refresh");
-        given(refreshTokenStore.findGrace(1L)).willReturn(presented);
+        given(refreshTokenStore.exists(1L)).willReturn(true);
+        given(refreshTokenStore.matches(1L, presented)).willReturn(false);
+        given(refreshTokenStore.matchesGrace(1L, presented)).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
 
         TokenPair result = authService.reissue(presented);
 
         assertThat(result.accessToken()).isEqualTo("new-access");
-        assertThat(result.refreshToken()).isEqualTo("current-refresh");
+        assertThat(result.refreshToken()).isNull(); // Option Y: grace 수렴은 새 access만, refresh 없음
         then(refreshTokenStore).should(never()).save(any(), any());
     }
 
@@ -251,7 +254,8 @@ class AuthServiceTest {
         String presented = "current-refresh";
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn(presented);
+        given(refreshTokenStore.exists(1L)).willReturn(true);
+        given(refreshTokenStore.matches(1L, presented)).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.reissue(presented))

@@ -1,6 +1,7 @@
 package com.pokade.domain.auth.service;
 
 import com.pokade.global.security.JwtProperties;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,62 +47,87 @@ class RedisRefreshTokenStoreTest {
         }
     }
 
+    @BeforeEach
+    void flush() {
+        redisTemplate.getConnectionFactory().getConnection().serverCommands().flushDb();
+    }
+
     @Autowired
     RedisRefreshTokenStore store;
     @Autowired
     StringRedisTemplate redisTemplate;
 
     @Test
-    @DisplayName("save하면 auth:refresh:<userId> 키에 토큰이 저장되고 TTL이 설정된다")
-    void save_storesTokenWithTtl() {
+    @DisplayName("save하면 원문이 아닌 해시가 저장되고 TTL이 설정된다")
+    void save_storesHashedTokenWithTtl() {
         store.save(1L, "refresh-token");
 
-        assertThat(redisTemplate.opsForValue().get("auth:refresh:1")).isEqualTo("refresh-token");
+        String raw = redisTemplate.opsForValue().get("auth:refresh:1");
+        assertThat(raw).isNotNull().isNotEqualTo("refresh-token"); // 원문이 아니라 해시
         Long ttl = redisTemplate.getExpire("auth:refresh:1");
         assertThat(ttl).isNotNull().isGreaterThan(0);
     }
 
     @Test
-    @DisplayName("find는 저장된 refresh 토큰을 반환한다")
-    void find_returnsStoredToken() {
+    @DisplayName("exists는 save 후 true, 저장이 없으면 false")
+    void exists_reflectsPresence() {
+        assertThat(store.exists(1L)).isFalse();
+        store.save(1L, "refresh-token");
+        assertThat(store.exists(1L)).isTrue();
+    }
+
+    @Test
+    @DisplayName("matches는 동일 원문 토큰이면 true를 반환한다")
+    void matches_trueForSameToken() {
         store.save(1L, "refresh-token");
 
-        assertThat(store.find(1L)).isEqualTo("refresh-token");
+        assertThat(store.matches(1L, "refresh-token")).isTrue();
     }
 
     @Test
-    @DisplayName("find는 저장된 값이 없으면 null을 반환한다")
-    void find_returnsNullWhenAbsent() {
-        assertThat(store.find(999L)).isNull();
+    @DisplayName("matches는 다른 토큰이면 false를 반환한다")
+    void matches_falseForDifferentToken() {
+        store.save(1L, "refresh-token");
+
+        assertThat(store.matches(1L, "other-token")).isFalse();
     }
 
     @Test
-    @DisplayName("saveGrace하면 auth:refresh:grace:<userId>에 저장되고 TTL이 60초 이하로 설정된다")
-    void saveGrace_storesGraceTokenWithShortTtl() {
+    @DisplayName("matches는 저장된 값이 없으면 false를 반환한다")
+    void matches_falseWhenAbsent() {
+        assertThat(store.matches(999L, "refresh-token")).isFalse();
+    }
+
+    @Test
+    @DisplayName("saveGrace하면 해시가 저장되고 TTL이 5초 이하로 설정된다")
+    void saveGrace_storesHashedWithShortTtl() {
         store.saveGrace(1L, "old-refresh");
 
-        assertThat(redisTemplate.opsForValue().get("auth:refresh:grace:1")).isEqualTo("old-refresh");
+        String raw = redisTemplate.opsForValue().get("auth:refresh:grace:1");
+        assertThat(raw).isNotNull().isNotEqualTo("old-refresh");
         Long ttl = redisTemplate.getExpire("auth:refresh:grace:1");
-        assertThat(ttl).isNotNull().isGreaterThan(0).isLessThanOrEqualTo(60);
+        assertThat(ttl).isNotNull().isGreaterThan(0).isLessThanOrEqualTo(5);
     }
 
     @Test
-    @DisplayName("findGrace는 저장된 grace 토큰을 반환한다")
-    void findGrace_returnsStoredGraceToken() {
+    @DisplayName("matchesGrace는 동일 원문 토큰이면 true, 다르면 false")
+    void matchesGrace_matchesOnlySameToken() {
         store.saveGrace(1L, "old-refresh");
 
-        assertThat(store.findGrace(1L)).isEqualTo("old-refresh");
+        assertThat(store.matchesGrace(1L, "old-refresh")).isTrue();
+        assertThat(store.matchesGrace(1L, "other")).isFalse();
     }
 
     @Test
-    @DisplayName("delete하면 refresh와 grace 토큰이 함께 제거된다")
-    void delete_removesBothRefreshAndGrace() {
+    @DisplayName("delete하면 refresh와 grace가 모두 제거된다")
+    void delete_removesBoth() {
         store.save(1L, "refresh-token");
         store.saveGrace(1L, "old-refresh");
 
         store.delete(1L);
 
-        assertThat(store.find(1L)).isNull();
-        assertThat(store.findGrace(1L)).isNull();
+        assertThat(store.exists(1L)).isFalse();
+        assertThat(store.matches(1L, "refresh-token")).isFalse();
+        assertThat(store.matchesGrace(1L, "old-refresh")).isFalse();
     }
 }

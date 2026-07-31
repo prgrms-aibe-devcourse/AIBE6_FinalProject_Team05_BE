@@ -93,29 +93,28 @@ public class AuthService {
         }
 
         Long userId = jwtTokenProvider.getUserId(refreshToken);
-        String stored = refreshTokenStore.find(userId);
 
-        if (stored == null) {
+        if (!refreshTokenStore.exists(userId)) { // 저장 키 자체가 없음 -> 미로그인/로그아웃/만료
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
-        if (!stored.equals(refreshToken)) {
-            String grace = refreshTokenStore.findGrace(userId);
+        if (refreshTokenStore.matches(userId, refreshToken)) { // 현재 refresh와 일치 -> 정상 회전
+            String newAccessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
+            String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
 
-            if (refreshToken.equals(grace)) {
-                String accessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
-                return new TokenPair(accessToken, stored);
-            }
-            refreshTokenStore.delete(userId);
-            throw new BusinessException(ErrorCode.TOKEN_STOLEN);
+            refreshTokenStore.saveGrace(userId, refreshToken);
+            refreshTokenStore.save(userId, newRefreshToken);
+
+            return new TokenPair(newAccessToken, newRefreshToken);
         }
-        String newAccessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
-        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
 
-        refreshTokenStore.saveGrace(userId, refreshToken);
-        refreshTokenStore.save(userId, newRefreshToken);
+       if (refreshTokenStore.matchesGrace(userId, refreshToken)) { // 직전 refresh(동시요청) -> 새 access만
+           String accessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
+           return new TokenPair(accessToken, null); // Option Y: refresh 재발급,재세팅 안 함
+       }
 
-        return new TokenPair(newAccessToken, newRefreshToken);
+       refreshTokenStore.delete(userId); // 키는 있는데 어느 것과도 불일치 -> 탈취 의심, 전면 폐기
+       throw new BusinessException(ErrorCode.TOKEN_STOLEN);
     }
 
 
