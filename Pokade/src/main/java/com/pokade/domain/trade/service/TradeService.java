@@ -71,4 +71,18 @@ public class TradeService {
 
         return TradeResponse.of(trade);
     }
+
+    @Transactional
+    public TradeResponse confirmTrade(Long buyerId, Long tradeId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        if (!trade.getBuyerId().equals(buyerId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        trade.complete();
+
+        return TradeResponse.of(trade);
+    }
 }
