@@ -144,4 +144,49 @@ class CardVariantRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(result).isEmpty();
     }
+
+    @Test
+    @DisplayName("t6 대표 변형(is_primary)이 없는 카드도 variant_id가 명시된 ACTIVE 매물의 등급이 조회된다")
+    void t6() {
+        Card noPrimaryCard = Card.builder()
+                .name("Blastoise")
+                .rarity("Rare Holo")
+                .expansion(multiVariantCard.getExpansion())
+                .build();
+        entityManager.persist(noPrimaryCard);
+        CardVariant onlyVariant = CardVariant.builder()
+                .card(noPrimaryCard)
+                .variantName("holofoil")
+                .primary(false)
+                .syncedAt(LocalDateTime.now())
+                .build();
+        entityManager.persist(onlyVariant);
+        Long seller = persistSeller("no-primary-variant-seller@test.com");
+        persistListing(noPrimaryCard.getId(), seller, onlyVariant.getId(), "B", "ACTIVE");
+        entityManager.flush();
+
+        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(noPrimaryCard.getId(), List.of("S", "A", "B"));
+
+        assertThat(result)
+                .extracting(CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(onlyVariant.getId(), "B"));
+    }
+
+    @Test
+    @DisplayName("t7 동일 variant에 같은 등급의 ACTIVE 매물이 여러 건이어도 중복 없이 한 건으로 조회된다")
+    void t7() {
+        Long seller = persistSeller("duplicate-grade-seller@test.com");
+        CardVariant firstEdition = cardVariantRepository
+                .findByCardIdOrderByPrimaryDescVariantNameAsc(multiVariantCard.getId())
+                .stream().filter(v -> v.getVariantName().equals("firstEditionHolofoil")).findFirst().orElseThrow();
+        persistListing(multiVariantCard.getId(), seller, firstEdition.getId(), "A", "ACTIVE");
+        persistListing(multiVariantCard.getId(), seller, firstEdition.getId(), "A", "ACTIVE");
+        entityManager.flush();
+
+        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId(), List.of("S", "A", "B"));
+
+        assertThat(result)
+                .extracting(CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(firstEdition.getId(), "A"));
+    }
 }
