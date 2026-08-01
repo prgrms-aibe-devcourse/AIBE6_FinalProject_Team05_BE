@@ -35,25 +35,22 @@ public class CardService {
     private static final int MAX_FILTER_VALUES = 20;
     // 키워드 검색어 상한: cards.name 컬럼 길이(200자)보다 짧게 잡아 과도하게 긴 ILIKE 패턴을 차단.
     private static final int MAX_KEYWORD_LENGTH = 100;
-    // 카드검색 필터로 노출하는 등급 값. PSA10/9/8은 감정 등급이라 필터 대상이 아니다.
-    private static final Set<String> GRADE_WHITELIST = Set.of("S", "A", "B");
-    // 네이티브 쿼리 IN (:validGrades) 바인드 파라미터로 전달하기 위한 리스트 형태. GRADE_WHITELIST와 동일한 값을 유지한다.
-    private static final List<String> GRADE_WHITELIST_LIST = List.copyOf(GRADE_WHITELIST);
-    // 응답에 노출하는 등급 표시 순서. 필터 화이트리스트와 동일한 범위로 제한한다.
+    // 카드 목록/상세 응답에 표시할 등급 값. PSA10/9/8은 감정 등급이라 표시 대상이 아니다.
+    // 네이티브 쿼리 IN (:validGrades) 바인드 파라미터로 전달하기 위한 리스트 형태.
+    private static final List<String> GRADE_WHITELIST_LIST = List.of("S", "A", "B");
+    // 응답에 노출하는 등급 표시 순서. 화이트리스트와 동일한 범위로 제한한다.
     private static final List<String> GRADE_DISPLAY_ORDER = List.of("S", "A", "B");
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
 
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(List<String> types, List<String> rarities, List<String> grades, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+    public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         validatePageSize(pageable);
         validateFilterSize(types, "types");
         validateFilterSize(rarities, "rarity");
-        validateFilterSize(grades, "grades");
-        validateGrades(grades);
         validatePriceRange(minPrice, maxPrice);
-        Page<Card> cards = cardRepository.search(types, rarities, grades, expansionId, minPrice, maxPrice, sort, pageable);
+        Page<Card> cards = cardRepository.search(types, rarities, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
         return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
     }
@@ -152,18 +149,6 @@ public class CardService {
     private void validatePriceRange(Integer minPrice, Integer maxPrice) {
         if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "minPrice는 maxPrice보다 클 수 없습니다.");
-        }
-    }
-
-    private void validateGrades(List<String> grades) {
-        if (grades == null) {
-            return;
-        }
-        for (String grade : grades) {
-            if (grade != null && !grade.isBlank() && !GRADE_WHITELIST.contains(grade)) {
-                throw new BusinessException(ErrorCode.INVALID_INPUT,
-                        "grades는 S, A, B 중에서만 지정할 수 있습니다.");
-            }
         }
     }
 }
