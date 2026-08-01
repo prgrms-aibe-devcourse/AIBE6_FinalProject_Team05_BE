@@ -35,10 +35,10 @@ public interface CardVariantRepository extends JpaRepository<CardVariant, Long> 
             JOIN card_variants cv ON cv.card_id = l.card_id AND cv.is_primary = true
             WHERE l.card_id = :cardId
               AND l.status = 'ACTIVE'
-              AND l.grade IN ('S', 'A', 'B')
+              AND l.grade IN (:validGrades)
             """,
             nativeQuery = true)
-    List<VariantGradeView> findGradesByCardId(@Param("cardId") Long cardId);
+    List<VariantGradeView> findGradesByCardId(@Param("cardId") Long cardId, @Param("validGrades") List<String> validGrades);
 
     interface VariantGradeView {
         Long getVariantId();

@@ -3,6 +3,7 @@ package com.pokade.domain.card.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -258,7 +259,7 @@ class CardServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(charizard, blastoise), pageable, 2);
         given(cardRepository.search(null, null, null, null, null, null, null, pageable)).willReturn(page);
-        given(cardRepository.findGradesByCardIds(List.of(1L, 2L))).willReturn(List.of(
+        given(cardRepository.findGradesByCardIds(eq(List.of(1L, 2L)), any())).willReturn(List.of(
                 gradeView(1L, "B"),
                 gradeView(1L, "S"),
                 gradeView(1L, "A")
@@ -268,7 +269,7 @@ class CardServiceTest {
 
         assertThat(result.getContent().get(0).grades()).containsExactly("S", "A", "B");
         assertThat(result.getContent().get(1).grades()).isEmpty();
-        verify(cardRepository, times(1)).findGradesByCardIds(any());
+        verify(cardRepository, times(1)).findGradesByCardIds(any(), any());
     }
 
     @Test
@@ -281,7 +282,7 @@ class CardServiceTest {
         Page<CardResponse> result = cardService.search(null, null, null, null, null, null, null, pageable);
 
         assertThat(result.getContent()).isEmpty();
-        verify(cardRepository, never()).findGradesByCardIds(any());
+        verify(cardRepository, never()).findGradesByCardIds(any(), any());
     }
 
     private CardRepository.CardGradeView gradeView(Long cardId, String grade) {
@@ -344,7 +345,7 @@ class CardServiceTest {
         given(cardRepository.findById(1L)).willReturn(Optional.of(card));
         given(cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(1L))
                 .willReturn(List.of(primaryVariant, secondaryVariant));
-        given(cardVariantRepository.findGradesByCardId(1L)).willReturn(List.of(
+        given(cardVariantRepository.findGradesByCardId(eq(1L), any())).willReturn(List.of(
                 variantGradeView(1L, "A"),
                 variantGradeView(2L, "B")
         ));
@@ -457,7 +458,7 @@ class CardServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(charizard, blastoise), pageable, 2);
         given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
-        given(cardRepository.findGradesByCardIds(List.of(1L, 2L))).willReturn(List.of(
+        given(cardRepository.findGradesByCardIds(eq(List.of(1L, 2L)), any())).willReturn(List.of(
                 gradeView(1L, "B"),
                 gradeView(1L, "S")
         ));
@@ -466,7 +467,7 @@ class CardServiceTest {
 
         assertThat(result.getContent().get(0).grades()).containsExactly("S", "B");
         assertThat(result.getContent().get(1).grades()).isEmpty();
-        verify(cardRepository, times(1)).findGradesByCardIds(any());
+        verify(cardRepository, times(1)).findGradesByCardIds(any(), any());
     }
 
     @Test
@@ -479,7 +480,7 @@ class CardServiceTest {
         Page<CardResponse> result = cardService.searchByKeyword("char", pageable);
 
         assertThat(result.getContent()).isEmpty();
-        verify(cardRepository, never()).findGradesByCardIds(any());
+        verify(cardRepository, never()).findGradesByCardIds(any(), any());
     }
 
     @Test
@@ -559,7 +560,7 @@ class CardServiceTest {
         Card related2 = Card.builder().id(3L).name("Charizard V").build();
         given(cardRepository.findById(1L)).willReturn(Optional.of(card));
         given(cardRepository.findRelatedByPokedexNumber(1L)).willReturn(List.of(related1, related2));
-        given(cardRepository.findGradesByCardIds(List.of(2L, 3L))).willReturn(List.of(
+        given(cardRepository.findGradesByCardIds(eq(List.of(2L, 3L)), any())).willReturn(List.of(
                 gradeView(2L, "A")
         ));
 
@@ -567,7 +568,7 @@ class CardServiceTest {
 
         assertThat(result.get(0).grades()).containsExactly("A");
         assertThat(result.get(1).grades()).isEmpty();
-        verify(cardRepository, times(1)).findGradesByCardIds(any());
+        verify(cardRepository, times(1)).findGradesByCardIds(any(), any());
     }
 
     @Test
@@ -580,7 +581,7 @@ class CardServiceTest {
         List<CardResponse> result = cardService.getRelated(1L);
 
         assertThat(result).isEmpty();
-        verify(cardRepository, never()).findGradesByCardIds(any());
+        verify(cardRepository, never()).findGradesByCardIds(any(), any());
     }
 
     @Test

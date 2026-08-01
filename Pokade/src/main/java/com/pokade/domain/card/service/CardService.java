@@ -37,6 +37,8 @@ public class CardService {
     private static final int MAX_KEYWORD_LENGTH = 100;
     // 카드검색 필터로 노출하는 등급 값. PSA10/9/8은 감정 등급이라 필터 대상이 아니다.
     private static final Set<String> GRADE_WHITELIST = Set.of("S", "A", "B");
+    // 네이티브 쿼리 IN (:validGrades) 바인드 파라미터로 전달하기 위한 리스트 형태. GRADE_WHITELIST와 동일한 값을 유지한다.
+    private static final List<String> GRADE_WHITELIST_LIST = List.copyOf(GRADE_WHITELIST);
     // 응답에 노출하는 등급 표시 순서. 필터 화이트리스트와 동일한 범위로 제한한다.
     private static final List<String> GRADE_DISPLAY_ORDER = List.of("S", "A", "B");
 
@@ -62,7 +64,7 @@ public class CardService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
         cardRepository.incrementViewCount(id);
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
-        Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id),
+        Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id, GRADE_WHITELIST_LIST),
                 CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade);
         return CardDetailResponse.of(card, variants, gradesByVariantId);
     }
@@ -116,7 +118,7 @@ public class CardService {
             return Map.of();
         }
         List<Long> cardIds = cards.stream().map(Card::getId).toList();
-        return groupByKey(cardRepository.findGradesByCardIds(cardIds),
+        return groupByKey(cardRepository.findGradesByCardIds(cardIds, GRADE_WHITELIST_LIST),
                 CardRepository.CardGradeView::getCardId, CardRepository.CardGradeView::getGrade);
     }
 

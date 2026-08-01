@@ -118,10 +118,10 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             FROM listings l
             WHERE l.card_id IN (:cardIds)
               AND l.status = 'ACTIVE'
-              AND l.grade IN ('S', 'A', 'B')
+              AND l.grade IN (:validGrades)
             """,
             nativeQuery = true)
-    List<CardGradeView> findGradesByCardIds(@Param("cardIds") List<Long> cardIds);
+    List<CardGradeView> findGradesByCardIds(@Param("cardIds") List<Long> cardIds, @Param("validGrades") List<String> validGrades);
 
     interface CardGradeView {
         Long getCardId();

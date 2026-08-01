@@ -113,7 +113,7 @@ class CardVariantRepositoryTest extends AbstractIntegrationTest {
         persistListing(multiVariantCard.getId(), seller, firstEdition.getId(), "A", "ACTIVE");
         entityManager.flush();
 
-        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId());
+        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId(), List.of("S", "A", "B"));
 
         assertThat(result)
                 .extracting(CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade)
@@ -130,7 +130,7 @@ class CardVariantRepositoryTest extends AbstractIntegrationTest {
         persistListing(multiVariantCard.getId(), seller, null, "S", "ACTIVE");
         entityManager.flush();
 
-        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId());
+        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId(), List.of("S", "A", "B"));
 
         assertThat(result)
                 .extracting(CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade)
@@ -140,7 +140,7 @@ class CardVariantRepositoryTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("t5 매물이 없는 카드는 등급 조회 결과가 빈 목록이다")
     void t5() {
-        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId());
+        List<CardVariantRepository.VariantGradeView> result = cardVariantRepository.findGradesByCardId(multiVariantCard.getId(), List.of("S", "A", "B"));
 
         assertThat(result).isEmpty();
     }

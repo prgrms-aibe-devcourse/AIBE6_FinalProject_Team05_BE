@@ -638,7 +638,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         entityManager.flush();
 
         List<CardRepository.CardGradeView> result = cardRepository.findGradesByCardIds(
-                List.of(charizard.getId(), charizardEx.getId(), professorsResearch.getId()));
+                List.of(charizard.getId(), charizardEx.getId(), professorsResearch.getId()), List.of("S", "A", "B"));
 
         assertThat(result)
                 .filteredOn(view -> view.getCardId().equals(charizard.getId()))
@@ -660,7 +660,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         persistListing(charizard.getId(), seller, ListingGrade.S, ListingStatus.CANCELLED);
         entityManager.flush();
 
-        List<CardRepository.CardGradeView> result = cardRepository.findGradesByCardIds(List.of(charizard.getId()));
+        List<CardRepository.CardGradeView> result = cardRepository.findGradesByCardIds(List.of(charizard.getId()), List.of("S", "A", "B"));
 
         assertThat(result).isEmpty();
     }
