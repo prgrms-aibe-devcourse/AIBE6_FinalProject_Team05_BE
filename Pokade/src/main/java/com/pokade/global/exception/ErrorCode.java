@@ -20,6 +20,7 @@ public enum ErrorCode {
     LISTING_NOT_FOUND(HttpStatus.NOT_FOUND, "매물을 찾을 수 없습니다."),
     TRADE_NOT_FOUND(HttpStatus.NOT_FOUND, "거래를 찾을 수 없습니다."),
     CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다."),
+    GRADE_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "진단 결과를 찾을 수 없습니다."),
     PRIMARY_VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "대표 변형이 지정되지 않은 카드입니다."),
 
     DUPLICATE_LISTING(HttpStatus.CONFLICT, "이미 등록된 매물입니다."),
@@ -44,6 +45,10 @@ public enum ErrorCode {
 
     // ===== AI 등급 진단 =====
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다."),
+
+    // ===== 인프라 (AOP 자동 변환) =====
+    FILE_IO_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 처리 중 오류가 발생했습니다."),
+    DATABASE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "데이터베이스 처리 중 오류가 발생했습니다."),
 
     // ===== 카드 도메인 임시 Rate Limit (팀 공통 정책 확정 시 제거) =====
     CARD_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "카드 API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");

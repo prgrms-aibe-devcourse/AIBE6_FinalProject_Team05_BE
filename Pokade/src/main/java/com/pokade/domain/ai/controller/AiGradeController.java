@@ -3,16 +3,17 @@ package com.pokade.domain.ai.controller;
 import com.pokade.domain.ai.dto.GradeRequest;
 import com.pokade.domain.ai.dto.GradeResponse;
 import com.pokade.domain.ai.service.AiGradeService;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.security.Principal;
 
 @Tag(name = "AI 등급 진단", description = "포켓몬 카드 AI 예비 등급 진단 API")
 @RestController
@@ -58,27 +59,41 @@ public class AiGradeController {
             @Parameter(description = "무료 재업로드 시 원본 grade_result_id")
             @RequestParam(required = false) Long retryOfId,
 
-            Principal principal
+            @AuthenticationPrincipal Long principalUserId
     ) {
-        // TODO: OAuth2 연동 완료 후 principal에서 실제 userId 추출
-        Long userId = extractUserId(principal);
+        Long userId = resolveUserId(principalUserId);
 
         GradeRequest request = new GradeRequest(front, back, cornerTl, cornerTr, cornerBl, cornerBr, retryOfId);
         GradeResponse response = aiGradeService.grade(userId, request);
         return ResponseEntity.ok(response);
     }
 
-    private Long extractUserId(Principal principal) {
-        // TODO: OAuth2 UserDetails에서 userId 추출로 교체
-        if (principal == null) {
-            // TODO: 로컬 테스트용 임시 고정 userId — 인증 연동 후 제거할 것
-            return 1L;
+    @Operation(
+            summary = "AI 등급 진단 결과 조회",
+            description = "진단 요청(POST /api/ai/grade) 응답으로 받은 resultId로 상세 결과를 조회합니다. 본인이 요청한 결과만 조회 가능합니다."
+    )
+    @GetMapping("/grade/{resultId}")
+    public ResponseEntity<GradeResponse> getGradeResult(
+            @Parameter(description = "조회할 진단 결과 ID", required = true)
+            @PathVariable Long resultId,
+
+            @AuthenticationPrincipal Long principalUserId
+    ) {
+        Long userId = requireUserId(principalUserId);
+        GradeResponse response = aiGradeService.getGradeResult(userId, resultId);
+        return ResponseEntity.ok(response);
+    }
+
+    // TODO: 프론트 로그인 연동 완료 후 permitAll·기본값 제거하고 @AuthenticationPrincipal 값을 그대로 사용할 것
+    private Long resolveUserId(Long principalUserId) {
+        return principalUserId != null ? principalUserId : 1L;
+    }
+
+    // 결과/이력 조회는 타인 데이터 노출 위험이 있어 인증 없는 접근을 허용하지 않는다
+    private Long requireUserId(Long principalUserId) {
+        if (principalUserId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
-        // 임시: principal.getName()이 userId인 경우 (개발 단계)
-        try {
-            return Long.parseLong(principal.getName());
-        } catch (NumberFormatException e) {
-            throw new IllegalStateException("유효하지 않은 사용자 정보입니다.");
-        }
+        return principalUserId;
     }
 }

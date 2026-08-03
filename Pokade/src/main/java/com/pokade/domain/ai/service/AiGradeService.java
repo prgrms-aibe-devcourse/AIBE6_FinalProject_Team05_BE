@@ -7,6 +7,8 @@ import com.pokade.domain.ai.dto.VisionResult;
 import com.pokade.domain.ai.entity.*;
 import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -20,6 +22,7 @@ import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,6 +119,17 @@ public class AiGradeService {
         return GradeResponse.from(gradeResult);
     }
 
+    public GradeResponse getGradeResult(Long userId, Long resultId) {
+        GradeResult gradeResult = gradeResultRepository.findById(resultId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GRADE_RESULT_NOT_FOUND));
+
+        if (!gradeResult.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        return GradeResponse.from(gradeResult);
+    }
+
     private void validateImageFormats(GradeRequest request) {
         List<MultipartFile> files = List.of(
                 request.front(), request.back(),
@@ -186,7 +200,7 @@ public class AiGradeService {
         try {
             return new InputStreamResource(file.getInputStream());
         } catch (IOException e) {
-            throw new RuntimeException("이미지를 읽을 수 없습니다: " + file.getOriginalFilename(), e);
+            throw new UncheckedIOException("이미지를 읽을 수 없습니다: " + file.getOriginalFilename(), e);
         }
     }
 
