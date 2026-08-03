@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
+import software.amazon.awssdk.core.exception.SdkClientException;
 
 import java.io.UncheckedIOException;
 
@@ -24,6 +25,8 @@ class ExceptionTranslationAspectTest {
 
         void throwDataAccess();
 
+        void throwSdkException();
+
         void throwBusiness();
 
         void succeed();
@@ -38,6 +41,11 @@ class ExceptionTranslationAspectTest {
         @Override
         public void throwDataAccess() {
             throw new DataAccessResourceFailureException("DB 연결 실패");
+        }
+
+        @Override
+        public void throwSdkException() {
+            throw SdkClientException.create("S3 업로드 실패");
         }
 
         @Override
@@ -72,6 +80,15 @@ class ExceptionTranslationAspectTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.DATABASE_ERROR);
+    }
+
+    @Test
+    @DisplayName("SdkException(AWS SDK)은 BusinessException(FILE_IO_ERROR)로 변환된다")
+    void translatesSdkException() {
+        assertThatThrownBy(() -> proxy().throwSdkException())
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.FILE_IO_ERROR);
     }
 
     @Test
