@@ -33,6 +33,7 @@ public class RedisVerificationCodeStore implements VerificationCodeStore {
     public void save(String email, String code) {
         redisTemplate.opsForValue().set(CODE_KEY_PREFIX + email, code, CODE_TTL);
         redisTemplate.opsForValue().set(COOLDOWN_KEY_PREFIX + email, "1", COOLDOWN_TTL);
+        redisTemplate.delete(ATTEMPT_KEY_PREFIX + email);
     }
 
     @Override
