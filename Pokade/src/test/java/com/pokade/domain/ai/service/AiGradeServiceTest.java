@@ -1,7 +1,10 @@
 package com.pokade.domain.ai.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import java.util.List;
 
@@ -21,6 +24,8 @@ import com.pokade.domain.ai.entity.GradeResult;
 import com.pokade.domain.ai.entity.GradeStatus;
 import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import org.springframework.ai.chat.client.ChatClient;
 
 @ExtendWith(MockitoExtension.class)
@@ -65,5 +70,19 @@ class AiGradeServiceTest {
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).grade()).isEqualTo("A");
+    }
+
+    @Test
+    @DisplayName("페이지 크기가 상한(100)을 초과하면 BusinessException(INVALID_INPUT)을 던진다")
+    void getGradeHistory_throwsWhenPageSizeExceedsLimit() {
+        Long userId = 1L;
+        Pageable pageable = PageRequest.of(0, 101);
+
+        assertThatThrownBy(() -> aiGradeService.getGradeHistory(userId, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+
+        verify(gradeResultRepository, never()).findByUserId(userId, pageable);
     }
 }

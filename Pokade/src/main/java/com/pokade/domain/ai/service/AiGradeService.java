@@ -37,6 +37,7 @@ import java.util.Set;
 public class AiGradeService {
 
     private static final int FREE_LIMIT = 3;
+    private static final int MAX_PAGE_SIZE = 100;
 
     // OpenAI Vision이 실제로 지원하는 이미지 포맷 (ImageIO는 디코딩되지만 Vision은 거부하는 bmp/tiff 등을 사전 차단)
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
@@ -133,8 +134,16 @@ public class AiGradeService {
     }
 
     public Page<GradeResponse> getGradeHistory(Long userId, Pageable pageable) {
+        validatePageSize(pageable);
         return gradeResultRepository.findByUserId(userId, pageable)
                 .map(GradeResponse::from);
+    }
+
+    private void validatePageSize(Pageable pageable) {
+        if (pageable.getPageSize() > MAX_PAGE_SIZE) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "size는 최대 " + MAX_PAGE_SIZE + "까지 요청할 수 있습니다.");
+        }
     }
 
     private void validateImageFormats(GradeRequest request) {
