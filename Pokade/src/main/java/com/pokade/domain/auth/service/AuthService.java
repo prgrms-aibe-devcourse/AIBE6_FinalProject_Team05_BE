@@ -31,12 +31,16 @@ public class AuthService {
 
     @Transactional
     public SignupResponse signup(SignupRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+        User existing = userRepository.findByEmail(request.email()).orElse(null);
+        if (existing != null) {
+            throw new BusinessException(existing.getStatus() != UserStatus.ACTIVE
+                    ? ErrorCode.EMAIL_NOT_VERIFIED : ErrorCode.DUPLICATE_EMAIL);
         }
+
         if (userRepository.existsByNickname(request.nickname())) {
             throw new BusinessException(ErrorCode.DUPLICATE_NICKNAME);
         }
+
         String encodedPassword = passwordEncoder.encode(request.password());
         User user = userRepository.save(
                 User.createLocalUser(request.email(), encodedPassword, request.nickname())
@@ -105,13 +109,13 @@ public class AuthService {
             return new TokenPair(newAccessToken, newRefreshToken); // Option X: refresh 재
         }
 
-       if (refreshTokenStore.matchesGrace(userId, refreshToken)) { // 직전 refresh(동시요청) -> 새 access만
-           String accessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
-           return new TokenPair(accessToken, null); // Option Y: refresh 재발급,재세팅 안 함
-       }
+        if (refreshTokenStore.matchesGrace(userId, refreshToken)) { // 직전 refresh(동시요청) -> 새 access만
+            String accessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
+            return new TokenPair(accessToken, null); // Option Y: refresh 재발급,재세팅 안 함
+        }
 
-       refreshTokenStore.delete(userId); // 키는 있는데 어느 것과도 불일치 -> 탈취 의심, 전면 폐기
-       throw new BusinessException(ErrorCode.TOKEN_STOLEN);
+        refreshTokenStore.delete(userId); // 키는 있는데 어느 것과도 불일치 -> 탈취 의심, 전면 폐기
+        throw new BusinessException(ErrorCode.TOKEN_STOLEN);
     }
 
 
