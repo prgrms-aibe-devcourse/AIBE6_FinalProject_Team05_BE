@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,4 +43,7 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
     @Query("UPDATE Listing l SET l.status = com.pokade.domain.listing.entity.ListingStatus.TRADING "
             + "WHERE l.id = :id AND l.status = com.pokade.domain.listing.entity.ListingStatus.ACTIVE")
     int markAsTrading(@Param("id") Long listingId);
+
+    // FR-TRADE-10: cutoff(등록 후 30일) 이전에 등록되었고 아직 알림을 안 보낸 ACTIVE 매물 조회
+    List<Listing> findByStatusAndStaleNoticeSentFalseAndCreatedAtBefore(ListingStatus status, LocalDateTime cutoff);
 }
