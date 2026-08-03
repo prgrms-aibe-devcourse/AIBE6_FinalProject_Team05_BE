@@ -9,6 +9,7 @@ import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.web.PageableValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -16,6 +17,8 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
@@ -35,6 +38,7 @@ import java.util.Set;
 public class AiGradeService {
 
     private static final int FREE_LIMIT = 3;
+    private static final int MAX_PAGE_SIZE = 100;
 
     // OpenAI Vision이 실제로 지원하는 이미지 포맷 (ImageIO는 디코딩되지만 Vision은 거부하는 bmp/tiff 등을 사전 차단)
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
@@ -128,6 +132,12 @@ public class AiGradeService {
         }
 
         return GradeResponse.from(gradeResult);
+    }
+
+    public Page<GradeResponse> getGradeHistory(Long userId, Pageable pageable) {
+        PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
+        return gradeResultRepository.findByUserId(userId, pageable)
+                .map(GradeResponse::from);
     }
 
     private void validateImageFormats(GradeRequest request) {
