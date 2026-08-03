@@ -72,7 +72,7 @@ class TradeControllerTest {
                 .willReturn(response);
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 200L)
+                        .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -86,7 +86,7 @@ class TradeControllerTest {
         TradeCreateRequest invalidRequest = new TradeCreateRequest(null);
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 200L)
+                        .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
@@ -101,7 +101,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.SELF_PURCHASE_NOT_ALLOWED));
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 100L)
+                        .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -116,7 +116,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 200L)
+                        .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound())
@@ -131,7 +131,7 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.TRADE_CONFLICT));
 
         mockMvc.perform(post("/api/trades")
-                        .header("X-USER-ID", 200L)
+                        .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -218,6 +218,67 @@ class TradeControllerTest {
                 .willThrow(new BusinessException(ErrorCode.INVALID_TRADE_STATUS));
 
         mockMvc.perform(patch("/api/trades/{id}/confirm", 1L)
+                        .with(userId(200L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRADE_STATUS"));
+    }
+
+    @Test
+    void 구매자가_취소하면_200과_CANCELLED_상태를_반환한다() throws Exception {
+        TradeResponse response = new TradeResponse(
+                1L, 1L, 200L, 10000, TradeStatus.CANCELLED,
+                null, null, null, LocalDateTime.now());
+
+        given(tradeService.cancelTrade(200L, 1L)).willReturn(response);
+
+        mockMvc.perform(patch("/api/trades/{id}/cancel", 1L)
+                        .with(userId(200L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void 판매자가_취소하면_200과_CANCELLED_상태를_반환한다() throws Exception {
+        TradeResponse response = new TradeResponse(
+                1L, 1L, 200L, 10000, TradeStatus.CANCELLED,
+                null, null, null, LocalDateTime.now());
+
+        given(tradeService.cancelTrade(100L, 1L)).willReturn(response);
+
+        mockMvc.perform(patch("/api/trades/{id}/cancel", 1L)
+                        .with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void 본인_거래가_아니면_취소시_403을_반환한다() throws Exception {
+        given(tradeService.cancelTrade(999L, 1L))
+                .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
+
+        mockMvc.perform(patch("/api/trades/{id}/cancel", 1L)
+                        .with(userId(999L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 존재하지_않는_거래를_취소하면_404를_반환한다() throws Exception {
+        given(tradeService.cancelTrade(200L, 999L))
+                .willThrow(new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        mockMvc.perform(patch("/api/trades/{id}/cancel", 999L)
+                        .with(userId(200L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRADE_NOT_FOUND"));
+    }
+
+    @Test
+    void 이미_완료된_거래를_취소하면_400을_반환한다() throws Exception {
+        given(tradeService.cancelTrade(200L, 1L))
+                .willThrow(new BusinessException(ErrorCode.INVALID_TRADE_STATUS));
+
+        mockMvc.perform(patch("/api/trades/{id}/cancel", 1L)
                         .with(userId(200L)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_TRADE_STATUS"));

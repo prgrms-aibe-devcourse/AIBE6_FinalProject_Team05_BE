@@ -100,8 +100,9 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
-    # 이미 리뷰가 진행된 PR에 새 커밋이 추가되면 변경분만 자동으로 다시 리뷰합니다.
-    auto_incremental_review: true
+    # 커밋 추가 시마다 재리뷰하면 개발자별 리뷰 한도(rate limit)를 빨리 소진하므로 끕니다.
+    # 재리뷰가 필요하면 PR 코멘트에 "@coderabbitai review"를 직접 입력하세요.
+    auto_incremental_review: false
     base_branches:
       - "main"
       - "develop"

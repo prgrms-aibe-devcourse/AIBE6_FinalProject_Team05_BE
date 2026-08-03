@@ -47,4 +47,12 @@ public class TradeController {
     ) {
         return ResponseEntity.ok(tradeService.confirmTrade(buyerId, id));
     }
+
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<TradeResponse> cancelTrade(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(tradeService.cancelTrade(userId, id));
+    }
 }

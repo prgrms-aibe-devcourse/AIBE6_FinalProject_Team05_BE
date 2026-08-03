@@ -12,6 +12,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.UUID;
 
@@ -42,7 +43,7 @@ public class S3UploadService {
                     .build();
             s3Client.putObject(request, RequestBody.fromBytes(file.getBytes()));
         } catch (IOException e) {
-            throw new RuntimeException("S3 업로드 실패: " + file.getOriginalFilename(), e);
+            throw new UncheckedIOException("S3 업로드 실패: " + file.getOriginalFilename(), e);
         }
         return key;
     }
