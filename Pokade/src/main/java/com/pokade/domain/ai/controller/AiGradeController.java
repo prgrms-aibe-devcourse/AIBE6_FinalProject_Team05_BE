@@ -98,7 +98,7 @@ public class AiGradeController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable
     ) {
-        Long userId = resolveUserId(principalUserId);
+        Long userId = requireUserId(principalUserId);
         Page<GradeResponse> response = aiGradeService.getGradeHistory(userId, pageable);
         return ResponseEntity.ok(response);
     }
