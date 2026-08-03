@@ -16,6 +16,8 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
@@ -128,6 +130,11 @@ public class AiGradeService {
         }
 
         return GradeResponse.from(gradeResult);
+    }
+
+    public Page<GradeResponse> getGradeHistory(Long userId, Pageable pageable) {
+        return gradeResultRepository.findByUserId(userId, pageable)
+                .map(GradeResponse::from);
     }
 
     private void validateImageFormats(GradeRequest request) {
