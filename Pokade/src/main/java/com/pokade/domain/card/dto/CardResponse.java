@@ -14,10 +14,15 @@ public record CardResponse(
         List<String> types,
         String imageSmall,
         String imageMedium,
-        String expansionId
+        String expansionId,
+        List<String> grades
 ) {
 
     public static CardResponse from(Card card) {
+        return from(card, List.of());
+    }
+
+    public static CardResponse from(Card card, List<String> grades) {
         return new CardResponse(
                 card.getId(),
                 card.getExternalId(),
@@ -28,7 +33,8 @@ public record CardResponse(
                 card.getTypes(),
                 card.getImageSmall(),
                 card.getImageMedium(),
-                card.getExpansion() != null ? card.getExpansion().getId() : null
+                card.getExpansion() != null ? card.getExpansion().getId() : null,
+                grades
         );
     }
 }

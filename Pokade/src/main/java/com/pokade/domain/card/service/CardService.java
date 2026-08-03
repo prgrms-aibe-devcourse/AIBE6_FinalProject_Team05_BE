@@ -14,8 +14,13 @@ import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 
 import lombok.RequiredArgsConstructor;
 
@@ -30,17 +35,24 @@ public class CardService {
     private static final int MAX_FILTER_VALUES = 20;
     // 키워드 검색어 상한: cards.name 컬럼 길이(200자)보다 짧게 잡아 과도하게 긴 ILIKE 패턴을 차단.
     private static final int MAX_KEYWORD_LENGTH = 100;
+    // 카드 목록/상세 응답에 표시할 등급 값. PSA10/9/8은 감정 등급이라 표시 대상이 아니다.
+    // 네이티브 쿼리 IN (:validGrades) 바인드 파라미터로 전달하기 위한 리스트 형태.
+    private static final List<String> GRADE_WHITELIST_LIST = List.of("S", "A", "B");
+    // 응답에 노출하는 등급 표시 순서. 화이트리스트와 동일한 범위로 제한한다.
+    private static final List<String> GRADE_DISPLAY_ORDER = List.of("S", "A", "B");
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
 
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(List<String> types, List<String> rarity, String expansionId, String sort, Pageable pageable) {
+    public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         validatePageSize(pageable);
         validateFilterSize(types, "types");
-        validateFilterSize(rarity, "rarity");
-        return cardRepository.search(types, rarity, expansionId, sort, pageable)
-                .map(CardResponse::from);
+        validateFilterSize(rarities, "rarity");
+        validatePriceRange(minPrice, maxPrice);
+        Page<Card> cards = cardRepository.search(types, rarities, expansionId, minPrice, maxPrice, sort, pageable);
+        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
     }
 
     @Transactional
@@ -49,7 +61,19 @@ public class CardService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
         cardRepository.incrementViewCount(id);
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
-        return CardDetailResponse.of(card, variants);
+        Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id, GRADE_WHITELIST_LIST),
+                CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade);
+        return CardDetailResponse.of(card, variants, gradesByVariantId);
+    }
+
+    private <T, K> Map<K, List<String>> groupByKey(List<T> views, Function<T, K> keyFn, Function<T, String> gradeFn) {
+        Map<K, Set<String>> grouped = new HashMap<>();
+        for (T view : views) {
+            grouped.computeIfAbsent(keyFn.apply(view), k -> new HashSet<>()).add(gradeFn.apply(view));
+        }
+        Map<K, List<String>> result = new HashMap<>();
+        grouped.forEach((key, gradeSet) -> result.put(key, GRADE_DISPLAY_ORDER.stream().filter(gradeSet::contains).toList()));
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -63,8 +87,9 @@ public class CardService {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
         }
-        return cardRepository.findByNameContainingIgnoreCase(keyword, pageable)
-                .map(CardResponse::from);
+        Page<Card> cards = cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
+        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
     }
 
     @Transactional(readOnly = true)
@@ -79,9 +104,19 @@ public class CardService {
         } else {
             related = List.of();
         }
+        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(CardResponse::from)
+                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of())))
                 .toList();
+    }
+
+    private Map<Long, List<String>> fetchGradesByCardIds(List<Card> cards) {
+        if (cards.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> cardIds = cards.stream().map(Card::getId).toList();
+        return groupByKey(cardRepository.findGradesByCardIds(cardIds, GRADE_WHITELIST_LIST),
+                CardRepository.CardGradeView::getCardId, CardRepository.CardGradeView::getGrade);
     }
 
     /**
@@ -108,6 +143,12 @@ public class CardService {
         if (values != null && values.size() > MAX_FILTER_VALUES) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     fieldName + "는 최대 " + MAX_FILTER_VALUES + "개까지 지정할 수 있습니다.");
+        }
+    }
+
+    private void validatePriceRange(Integer minPrice, Integer maxPrice) {
+        if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "minPrice는 maxPrice보다 클 수 없습니다.");
         }
     }
 }
