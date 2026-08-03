@@ -128,4 +128,54 @@ class TradeServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
     }
+
+    @Test
+    void 구매자가_취소하면_거래상태가_CANCELLED로_바뀐다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        TradeResponse response = tradeService.cancelTrade(200L, 1L);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.CANCELLED);
+    }
+
+    @Test
+    void 판매자가_취소하면_거래상태가_CANCELLED로_바뀐다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        TradeResponse response = tradeService.cancelTrade(100L, 1L);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.CANCELLED);
+    }
+
+    @Test
+    void 구매자도_판매자도_아니면_취소시_ACCESS_DENIED_예외가_발생한다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.cancelTrade(999L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    void 존재하지_않는_거래를_취소하면_TRADE_NOT_FOUND_예외가_발생한다() {
+        given(tradeRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> tradeService.cancelTrade(200L, 999L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TRADE_NOT_FOUND);
+    }
+
+    @Test
+    void 이미_완료된_거래를_취소하면_INVALID_TRADE_STATUS_예외가_발생한다() {
+        Trade trade = tradeOf(100L, 200L);
+        trade.complete();
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.cancelTrade(200L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
+    }
 }
