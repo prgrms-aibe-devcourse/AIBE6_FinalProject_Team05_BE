@@ -1,48 +1,157 @@
 package com.pokade.domain.card.repository;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.pokade.domain.card.entity.Card;
 
 public interface CardRepository extends JpaRepository<Card, Long> {
 
-    @Query(value = """
+    String SORT_LATEST = "latest";
+    String SORT_NAME = "name";
+    String SORT_POPULAR = "popular";
+
+    /**
+     * sort 요청 파라미터 화이트리스트. 값은 아래 default search()의 if/else 디스패치에서
+     * 어떤 @Query를 실행할지 고르는 키로만 쓰이고 SQL 문자열에 직접 삽입되지 않으므로
+     * (고정된 세 개의 @Query 중 택일), 인젝션 여지가 없다.
+     */
+    Set<String> SORT_COLUMN_WHITELIST = Set.of(SORT_LATEST, SORT_NAME, SORT_POPULAR);
+
+    /**
+     * searchOrderBy* 3개 @Query가 공유하는 SELECT ~ WHERE 절 (ORDER BY 제외).
+     * ORDER BY는 인덱스 정렬 최적화를 위해 메서드별로 분리 유지한다.
+     */
+    String CARD_SEARCH_BASE = """
             SELECT c.* FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasPrice = false OR EXISTS (
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE'
+                AND (:minPrice IS NULL OR l.price >= :minPrice)
+                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
+            )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            """,
-            countQuery = """
+            """;
+
+    /** searchOrderBy* 3개 @Query가 공유하는 countQuery. ORDER BY가 없어 셋 다 동일하다. */
+    String CARD_SEARCH_COUNT = """
             SELECT COUNT(*) FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasPrice = false OR EXISTS (
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE'
+                AND (:minPrice IS NULL OR l.price >= :minPrice)
+                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
+            )) AND
             (:expansionId IS NULL OR c.expansion_id = :expansionId)
+            """;
+
+    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
+            countQuery = CARD_SEARCH_COUNT,
+            nativeQuery = true)
+    Page<Card> searchOrderByLatest(@Param("hasTypes") boolean hasTypes,
+                                    @Param("types") List<String> types,
+                                    @Param("hasRarities") boolean hasRarities,
+                                    @Param("rarities") List<String> rarities,
+                                    @Param("hasPrice") boolean hasPrice,
+                                    @Param("minPrice") Integer minPrice,
+                                    @Param("maxPrice") Integer maxPrice,
+                                    @Param("expansionId") String expansionId,
+                                    Pageable pageable);
+
+    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CARD_SEARCH_COUNT,
+            nativeQuery = true)
+    Page<Card> searchOrderByName(@Param("hasTypes") boolean hasTypes,
+                                  @Param("types") List<String> types,
+                                  @Param("hasRarities") boolean hasRarities,
+                                  @Param("rarities") List<String> rarities,
+                                  @Param("hasPrice") boolean hasPrice,
+                                  @Param("minPrice") Integer minPrice,
+                                  @Param("maxPrice") Integer maxPrice,
+                                  @Param("expansionId") String expansionId,
+                                  Pageable pageable);
+
+    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+            countQuery = CARD_SEARCH_COUNT,
+            nativeQuery = true)
+    Page<Card> searchOrderByPopular(@Param("hasTypes") boolean hasTypes,
+                                     @Param("types") List<String> types,
+                                     @Param("hasRarities") boolean hasRarities,
+                                     @Param("rarities") List<String> rarities,
+                                     @Param("hasPrice") boolean hasPrice,
+                                     @Param("minPrice") Integer minPrice,
+                                     @Param("maxPrice") Integer maxPrice,
+                                     @Param("expansionId") String expansionId,
+                                     Pageable pageable);
+
+    @Transactional
+    @Modifying
+    @Query(value = "UPDATE cards SET view_count = view_count + 1 WHERE id = :id", nativeQuery = true)
+    void incrementViewCount(@Param("id") Long id);
+
+    /**
+     * 카드별 ACTIVE 매물에 존재하는 등급(S/A/B) 집합을 배치로 조회한다.
+     * 카드 목록 응답에 등급 정보를 붙일 때 카드 수와 무관하게 쿼리 1회로 처리하기 위해 사용한다.
+     */
+    @Query(value = """
+            SELECT DISTINCT l.card_id AS cardId, l.grade AS grade
+            FROM listings l
+            WHERE l.card_id IN (:cardIds)
+              AND l.status = 'ACTIVE'
+              AND l.grade IN (:validGrades)
             """,
             nativeQuery = true)
-    Page<Card> searchInternal(@Param("hasTypes") boolean hasTypes,
-                               @Param("types") List<String> types,
-                               @Param("hasRarities") boolean hasRarities,
-                               @Param("rarities") List<String> rarities,
-                               @Param("expansionId") String expansionId,
-                               Pageable pageable);
+    List<CardGradeView> findGradesByCardIds(@Param("cardIds") List<Long> cardIds, @Param("validGrades") List<String> validGrades);
 
-    default Page<Card> search(List<String> types, List<String> rarities, String expansionId, Pageable pageable) {
-        boolean hasTypes = types != null && !types.isEmpty();
-        boolean hasRarities = rarities != null && !rarities.isEmpty();
-        return searchInternal(
-                hasTypes, hasTypes ? types : List.of(""),
-                hasRarities, hasRarities ? rarities : List.of(""),
-                expansionId,
-                pageable);
+    interface CardGradeView {
+        Long getCardId();
+        String getGrade();
+    }
+
+    default Page<Card> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+        // 빈 문자열("")이 섞여 들어오면 실제 필터 조건 없이 IN ('') 비교만 남아 매칭이 전혀 안 되므로
+        // hasTypes/hasRarities 판단 전에 제거한다.
+        List<String> filteredTypes = types == null ? null
+                : types.stream().filter(v -> v != null && !v.isBlank()).toList();
+        List<String> filteredRarities = rarities == null ? null
+                : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
+
+        boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
+        boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
+        boolean hasPrice = minPrice != null || maxPrice != null;
+        // Pageable에 담긴 Sort는 버린다: Spring의 Pageable 리졸버가 우리와 같은 "sort" 파라미터명을
+        // 공유하기 때문에(예: ?sort=latest) 정렬 프로퍼티로 오인해 파싱해 넣을 수 있고, 그 값을 그대로
+        // 네이티브 쿼리에 넘기면 이미 고정된 ORDER BY와 충돌한다. 정렬은 아래 화이트리스트로만 결정한다.
+        Pageable unsortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        String resolvedSort = sort != null && SORT_COLUMN_WHITELIST.contains(sort) ? sort : SORT_LATEST;
+
+        List<String> safeTypes = hasTypes ? filteredTypes : List.of("");
+        List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
+
+        if (SORT_NAME.equals(resolvedSort)) {
+            return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
+        }
+        if (SORT_POPULAR.equals(resolvedSort)) {
+            return searchOrderByPopular(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
+        }
+        return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
     }
 
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+    Optional<Card> findByExternalId(String externalId);
 
     @Query(value = """
             SELECT c.* FROM cards c

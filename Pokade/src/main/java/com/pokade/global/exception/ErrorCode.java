@@ -11,6 +11,7 @@ public enum ErrorCode {
     INVALID_LISTING_STATUS(HttpStatus.BAD_REQUEST, "현재 상태에서는 처리할 수 없는 매물입니다."),
     INVALID_TRADE_STATUS(HttpStatus.BAD_REQUEST, "현재 상태에서는 처리할 수 없는 거래입니다."),
     SELF_PURCHASE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인이 등록한 매물은 구매할 수 없습니다."),
+    INVALID_PERIOD(HttpStatus.BAD_REQUEST, "잘못된 기간 값입니다."),
 
     PAYMENT_FAILED(HttpStatus.PAYMENT_REQUIRED, "결제에 실패했습니다."),
 
@@ -31,6 +32,7 @@ public enum ErrorCode {
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 일치하지 않습니다."),
+    LOGIN_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS,"로그인 시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 리프레시 토큰입니다."),
     TOKEN_STOLEN(HttpStatus.UNAUTHORIZED, "비정상적인 접근이 감지되어 로그아웃되었습니다."),
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN,"이메일 인증이 완료되지 않았습니다."),
@@ -46,7 +48,10 @@ public enum ErrorCode {
 
     // ===== 인프라 (AOP 자동 변환) =====
     FILE_IO_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 처리 중 오류가 발생했습니다."),
-    DATABASE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "데이터베이스 처리 중 오류가 발생했습니다.");
+    DATABASE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "데이터베이스 처리 중 오류가 발생했습니다."),
+
+    // ===== 카드 도메인 임시 Rate Limit (팀 공통 정책 확정 시 제거) =====
+    CARD_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "카드 API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
 
     private final HttpStatus status;
     private final String message;

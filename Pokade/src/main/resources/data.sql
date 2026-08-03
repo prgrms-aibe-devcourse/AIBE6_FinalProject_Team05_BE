@@ -87,6 +87,20 @@ INSERT INTO card_variants (card_id, variant_name, is_primary, synced_at) VALUES 
 INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high, market, currency, change_1d_pct, change_7d_pct, change_14d_pct, change_30d_pct, change_90d_pct, change_180d_pct, change_7d_amount, updated_at) VALUES ((SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv10_ja-1') AND variant_name = 'normal'), 'graded', '10', 'PSA', 5.0, 5.6, 6.2, 5.7, 'JPY', NULL, 0.0, NULL, 1.79, 3.64, NULL, 0.0, now()) ON CONFLICT (variant_id, price_type, grade, company) DO NOTHING;
 INSERT INTO card_prices (variant_id, price_type, grade, company, low, mid, high, market, currency, change_1d_pct, change_7d_pct, change_14d_pct, change_30d_pct, change_90d_pct, change_180d_pct, change_7d_amount, updated_at) VALUES ((SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'sv10_ja-1') AND variant_name = 'normal'), 'graded', '9', 'PSA', 2.0, 2.3, 2.6, 2.35, 'JPY', NULL, 0.0, NULL, 2.22, 4.44, NULL, 0.0, now()) ON CONFLICT (variant_id, price_type, grade, company) DO NOTHING;
 
+-- GET /api/cards?sort=popular 테스트용 view_count 더미 값 (신규 카드는 위 INSERT가 0으로 넣으므로 매 재기동 시 덮어써서 편차를 유지)
+UPDATE cards SET view_count = 15000 WHERE external_id = 'base1-4';
+UPDATE cards SET view_count = 12000 WHERE external_id = 'sv3pt5-6';
+UPDATE cards SET view_count = 9000 WHERE external_id = 'sm3-20';
+UPDATE cards SET view_count = 7000 WHERE external_id = 'base1-2';
+UPDATE cards SET view_count = 6000 WHERE external_id = 'base1-58';
+UPDATE cards SET view_count = 5500 WHERE external_id = 'sv3pt5-25';
+UPDATE cards SET view_count = 4000 WHERE external_id = 'sv3pt5-54';
+UPDATE cards SET view_count = 3000 WHERE external_id = 'zsv10pt5-105';
+UPDATE cards SET view_count = 2500 WHERE external_id = 'me1-12';
+UPDATE cards SET view_count = 1800 WHERE external_id = 'xy7-54';
+UPDATE cards SET view_count = 1200 WHERE external_id = 'sm11-95';
+UPDATE cards SET view_count = 300 WHERE external_id = 'sv10_ja-1';
+
 
 -- =========================================================
 -- FR-PRICE-01 검증용 시드 (users / listings / buy_offers)
@@ -342,3 +356,42 @@ VALUES (
            (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
            2600000, NULL, 'HIDDEN', now(), now()
        );
+
+-- =========================================================
+-- FR-PRICE-03 검증용 시드 (chart — 30일/90일/1년 구간별 추이 확인용 체결 데이터 확장)
+-- Charizard base1-4 : 기존 3건(1일/3일/10일 전)에 13건을 추가해 총 16건.
+-- 30일 이내 6건, 90일 이내 10건, 1년 이내 16건이 조회되도록 confirmed_at을 스태거링하고,
+-- 등급(RAW/S/PSA10)별로 과거→최근 갈수록 가격이 오르는 추이를 갖도록 구성 (프론트 차트 목업용)
+-- =========================================================
+
+-- ---------- listings (체결 완료, 등급별/기간별 분산) ----------
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at) VALUES
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 2830000, 'S', 'SOLD', now() - interval '15 days', now() - interval '15 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller2@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 4720000, 'PSA10', 'SOLD', now() - interval '20 days', now() - interval '20 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 2330000, NULL, 'SOLD', now() - interval '25 days', now() - interval '25 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller2@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 2630000, 'S', 'SOLD', now() - interval '40 days', now() - interval '40 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 4530000, 'PSA10', 'SOLD', now() - interval '50 days', now() - interval '50 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller2@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 2130000, NULL, 'SOLD', now() - interval '65 days', now() - interval '65 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 2430000, 'S', 'SOLD', now() - interval '75 days', now() - interval '75 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller2@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 4230000, 'PSA10', 'SOLD', now() - interval '120 days', now() - interval '120 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 2230000, 'S', 'SOLD', now() - interval '150 days', now() - interval '150 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller2@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 1930000, NULL, 'SOLD', now() - interval '200 days', now() - interval '200 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 3830000, 'PSA10', 'SOLD', now() - interval '250 days', now() - interval '250 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller2@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 2030000, 'S', 'SOLD', now() - interval '300 days', now() - interval '300 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 1730000, NULL, 'SOLD', now() - interval '340 days', now() - interval '340 days');
+
+-- ---------- trades (위 listings에 1:1 대응하는 체결 완료 내역) ----------
+INSERT INTO trades (listing_id, buyer_id, price, status, confirmed_at, settled_at, created_at) VALUES
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2830000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller2@test.com'), 2830000, 'COMPLETED', now() - interval '15 days', now() - interval '15 days', now() - interval '15 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 4720000 AND grade = 'PSA10'), (SELECT id FROM users WHERE email = 'seller1@test.com'), 4720000, 'COMPLETED', now() - interval '20 days', now() - interval '20 days', now() - interval '20 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2330000 AND grade IS NULL), (SELECT id FROM users WHERE email = 'seller2@test.com'), 2330000, 'COMPLETED', now() - interval '25 days', now() - interval '25 days', now() - interval '25 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2630000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller1@test.com'), 2630000, 'COMPLETED', now() - interval '40 days', now() - interval '40 days', now() - interval '40 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 4530000 AND grade = 'PSA10'), (SELECT id FROM users WHERE email = 'seller2@test.com'), 4530000, 'COMPLETED', now() - interval '50 days', now() - interval '50 days', now() - interval '50 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2130000 AND grade IS NULL), (SELECT id FROM users WHERE email = 'seller1@test.com'), 2130000, 'COMPLETED', now() - interval '65 days', now() - interval '65 days', now() - interval '65 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2430000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller2@test.com'), 2430000, 'COMPLETED', now() - interval '75 days', now() - interval '75 days', now() - interval '75 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 4230000 AND grade = 'PSA10'), (SELECT id FROM users WHERE email = 'seller1@test.com'), 4230000, 'COMPLETED', now() - interval '120 days', now() - interval '120 days', now() - interval '120 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2230000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller2@test.com'), 2230000, 'COMPLETED', now() - interval '150 days', now() - interval '150 days', now() - interval '150 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 1930000 AND grade IS NULL), (SELECT id FROM users WHERE email = 'seller1@test.com'), 1930000, 'COMPLETED', now() - interval '200 days', now() - interval '200 days', now() - interval '200 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 3830000 AND grade = 'PSA10'), (SELECT id FROM users WHERE email = 'seller2@test.com'), 3830000, 'COMPLETED', now() - interval '250 days', now() - interval '250 days', now() - interval '250 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2030000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller1@test.com'), 2030000, 'COMPLETED', now() - interval '300 days', now() - interval '300 days', now() - interval '300 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 1730000 AND grade IS NULL), (SELECT id FROM users WHERE email = 'seller2@test.com'), 1730000, 'COMPLETED', now() - interval '340 days', now() - interval '340 days', now() - interval '340 days');

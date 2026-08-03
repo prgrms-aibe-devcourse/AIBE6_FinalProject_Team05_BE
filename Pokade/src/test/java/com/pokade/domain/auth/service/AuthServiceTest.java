@@ -40,6 +40,8 @@ class AuthServiceTest {
     JwtTokenProvider jwtTokenProvider;
     @Mock
     RefreshTokenStore refreshTokenStore;
+    @Mock
+    LoginAttemptStore loginAttemptStore;
     @InjectMocks
     AuthService authService;
 
@@ -121,6 +123,7 @@ class AuthServiceTest {
         assertThat(result.accessToken()).isEqualTo("access-token");
         assertThat(result.refreshToken()).isEqualTo("refresh-token");
         then(refreshTokenStore).should().save(1L, "refresh-token");
+        then(loginAttemptStore).should().reset(email);          // 성공 → 카운터 리셋
     }
 
     @Test
@@ -135,10 +138,11 @@ class AuthServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_FAILED);
 
         then(refreshTokenStore).should(never()).save(any(), any());
+        then(loginAttemptStore).should().recordFailure(email);  // 실패 → 카운트
     }
 
     @Test
-    @DisplayName("가입되지 않은 이메일이면 LOGIN_FAILED 예외를 던진다")
+    @DisplayName("가입되지 않은 이메일이면 더미 BCrypt 비교로 응답시간을 맞추고 LOGIN_FAILED를 던진다")
     void login_userNotFound() {
         String email = "unknown@pokade.com";
         given(userRepository.findByEmail(email)).willReturn(Optional.empty());
@@ -147,7 +151,9 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_FAILED);
 
+        then(passwordEncoder).should().matches(any(), any());   // ← 추가: 유저 없어도 더미 비교 호출
         then(refreshTokenStore).should(never()).save(any(), any());
+        then(loginAttemptStore).should().recordFailure(email);  // 실패 → 카운트
     }
 
     @Test
@@ -165,22 +171,22 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("저장된 refresh와 일치하면 회전(새 access+새 refresh)하고 직전 refresh를 grace에 보관한다")
+    @DisplayName("저장된 refresh와 일치하면 원자 회전(compareAndRotate)하고 새 access+새 refresh를 반환한다")
     void reissue_success() {
         String oldRefresh = "old-refresh";
         given(jwtTokenProvider.isValid(oldRefresh)).willReturn(true);
         given(jwtTokenProvider.getUserId(oldRefresh)).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn(oldRefresh);
+        given(refreshTokenStore.exists(1L)).willReturn(true);
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
+        given(refreshTokenStore.compareAndRotate(1L, oldRefresh, "new-refresh")).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
 
         TokenPair result = authService.reissue(oldRefresh);
 
         assertThat(result.accessToken()).isEqualTo("new-access");
         assertThat(result.refreshToken()).isEqualTo("new-refresh");
-        then(refreshTokenStore).should().saveGrace(1L, oldRefresh);
-        then(refreshTokenStore).should().save(1L, "new-refresh");
+        then(refreshTokenStore).should().compareAndRotate(1L, oldRefresh, "new-refresh");
     }
 
     @Test
@@ -198,7 +204,7 @@ class AuthServiceTest {
     void reissue_noStoredToken() {
         given(jwtTokenProvider.isValid("r")).willReturn(true);
         given(jwtTokenProvider.getUserId("r")).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn(null);
+        given(refreshTokenStore.exists(1L)).willReturn(false);
 
         assertThatThrownBy(() -> authService.reissue("r"))
                 .isInstanceOf(BusinessException.class)
@@ -206,13 +212,15 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("저장값과 불일치하고 grace도 아니면 TOKEN_STOLEN 예외를 던지고 저장 토큰을 삭제한다")
+    @DisplayName("저장값·grace 모두와 불일치하면 TOKEN_STOLEN을 던지고 저장 토큰을 삭제한다")
     void reissue_stolen() {
         String presented = "stale-refresh";
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn("current-refresh");
-        given(refreshTokenStore.findGrace(1L)).willReturn(null);
+        given(refreshTokenStore.exists(1L)).willReturn(true);
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("unused-new");
+        given(refreshTokenStore.compareAndRotate(1L, presented, "unused-new")).willReturn(false);
+        given(refreshTokenStore.matchesGrace(1L, presented)).willReturn(false);
 
         assertThatThrownBy(() -> authService.reissue(presented))
                 .isInstanceOf(BusinessException.class)
@@ -222,20 +230,22 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("저장값과 불일치해도 grace와 일치하면 재회전 없이 새 access만 발급하고 현재 refresh로 수렴한다")
+    @DisplayName("저장값과 불일치해도 grace와 일치하면 재회전 없이 새 access만 발급하고 refresh는 재세팅하지 않는다")
     void reissue_graceConverges() {
         String presented = "old-refresh";
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn("current-refresh");
-        given(refreshTokenStore.findGrace(1L)).willReturn(presented);
+        given(refreshTokenStore.exists(1L)).willReturn(true);
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("unused-new");
+        given(refreshTokenStore.compareAndRotate(1L, presented, "unused-new")).willReturn(false);
+        given(refreshTokenStore.matchesGrace(1L, presented)).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
 
         TokenPair result = authService.reissue(presented);
 
         assertThat(result.accessToken()).isEqualTo("new-access");
-        assertThat(result.refreshToken()).isEqualTo("current-refresh");
+        assertThat(result.refreshToken()).isNull(); // Option Y: grace 수렴은 새 access만, refresh 없음
         then(refreshTokenStore).should(never()).save(any(), any());
     }
 
@@ -245,7 +255,9 @@ class AuthServiceTest {
         String presented = "current-refresh";
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
-        given(refreshTokenStore.find(1L)).willReturn(presented);
+        given(refreshTokenStore.exists(1L)).willReturn(true);
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
+        given(refreshTokenStore.compareAndRotate(1L, presented, "new-refresh")).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.reissue(presented))
@@ -273,5 +285,19 @@ class AuthServiceTest {
         authService.logout("bad");
 
         then(refreshTokenStore).should(never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("시도 초과로 차단된 이메일이면 LOGIN_ATTEMPTS_EXCEEDED를 던지고 유저 조회·비번 검증을 하지 않는다")
+    void login_blocked() {
+        String email = "user@pokade.com";
+        given(loginAttemptStore.isBlocked(email)).willReturn(true);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(email, "pokade1234")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_ATTEMPTS_EXCEEDED);
+
+        then(userRepository).should(never()).findByEmail(any());   // BCrypt 전에 차단
+        then(passwordEncoder).should(never()).matches(any(), any());
     }
 }

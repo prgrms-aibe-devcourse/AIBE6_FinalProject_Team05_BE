@@ -5,6 +5,7 @@ import com.pokade.domain.auth.service.AuthService;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtAuthenticationFilter;
 import com.pokade.global.security.JwtProperties;
+import com.pokade.global.web.RefreshTokenCookieFactory;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ import static org.mockito.Mockito.never;
 
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(AuthControllerTest.TestConfig.class)
+@Import({AuthControllerTest.TestConfig.class, RefreshTokenCookieFactory.class})
 class AuthControllerTest {
 
     @Autowired
@@ -124,5 +125,20 @@ class AuthControllerTest {
 
         assertThat(result).hasStatusOk();
         then(authService).should().logout(null);
+    }
+
+    @Test
+    @DisplayName("grace 수렴 재발급이면 refresh 쿠키를 세팅하지 않고 새 access만 반환한다")
+    void reissue_graceConverges_noCookie() {
+        given(authService.reissue("old-refresh")).willReturn(new TokenPair("new-access", null));
+
+        MvcTestResult result = mockMvcTester.post()
+                .uri("/api/auth/reissue")
+                .cookie(new Cookie("refreshToken", "old-refresh"))
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).isNull(); // 쿠키 미세팅
+        then(authService).should().reissue("old-refresh");
     }
 }

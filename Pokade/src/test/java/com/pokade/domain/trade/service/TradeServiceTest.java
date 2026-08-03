@@ -4,6 +4,7 @@ import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.repository.PaymentRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.global.exception.BusinessException;
@@ -86,5 +87,45 @@ class TradeServiceTest {
         assertThatThrownBy(() -> tradeService.getTrade(200L, 999L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TRADE_NOT_FOUND);
+    }
+
+    @Test
+    void 구매자가_확정하면_거래상태가_COMPLETED로_바뀐다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        TradeResponse response = tradeService.confirmTrade(200L, 1L);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.COMPLETED);
+    }
+
+    @Test
+    void 구매자가_아니면_확정시_ACCESS_DENIED_예외가_발생한다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.confirmTrade(100L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    void 존재하지_않는_거래를_확정하면_TRADE_NOT_FOUND_예외가_발생한다() {
+        given(tradeRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> tradeService.confirmTrade(200L, 999L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TRADE_NOT_FOUND);
+    }
+
+    @Test
+    void 이미_완료된_거래를_다시_확정하면_INVALID_TRADE_STATUS_예외가_발생한다() {
+        Trade trade = tradeOf(100L, 200L);
+        trade.complete();
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.confirmTrade(200L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
     }
 }

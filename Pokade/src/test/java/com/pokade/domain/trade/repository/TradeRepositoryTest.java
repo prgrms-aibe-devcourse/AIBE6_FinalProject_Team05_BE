@@ -151,4 +151,55 @@ class TradeRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(result).isEmpty();
     }
+
+    @Test
+    @DisplayName("t5 기간 내 체결 완료 건을 confirmed_at 오래된순으로 조회한다")
+    void t5() {
+        Long sellerId = ((Number) entityManager.createNativeQuery(
+                "SELECT id FROM users WHERE email = 'trade-seller@test.com'").getSingleResult()).longValue();
+
+        Listing psa10 = persistListing(sellerId, 5000000, ListingGrade.PSA10);
+        Listing s = persistListing(sellerId, 3000000, ListingGrade.S);
+        Listing raw = persistListing(sellerId, 2500000, null);
+
+        persistCompletedTrade(psa10, LocalDateTime.now().minusDays(1));
+        persistCompletedTrade(s, LocalDateTime.now().minusDays(3));
+        persistCompletedTrade(raw, LocalDateTime.now().minusDays(10));
+
+        List<Trade> result = tradeRepository.findCompletedTradesSince(
+                cardId, TradeStatus.COMPLETED, LocalDateTime.now().minusDays(30));
+
+        assertThat(result)
+                .extracting(t -> t.getListing().getGrade())
+                .containsExactly(null, ListingGrade.S, ListingGrade.PSA10);
+    }
+
+    @Test
+    @DisplayName("t6 기준 시각 이전의 체결 완료 건은 조회되지 않는다")
+    void t6() {
+        Long sellerId = ((Number) entityManager.createNativeQuery(
+                "SELECT id FROM users WHERE email = 'trade-seller@test.com'").getSingleResult()).longValue();
+
+        Listing recent = persistListing(sellerId, 1000000, ListingGrade.A);
+        Listing old = persistListing(sellerId, 2000000, ListingGrade.B);
+
+        persistCompletedTrade(recent, LocalDateTime.now().minusDays(5));
+        persistCompletedTrade(old, LocalDateTime.now().minusDays(100));
+
+        List<Trade> result = tradeRepository.findCompletedTradesSince(
+                cardId, TradeStatus.COMPLETED, LocalDateTime.now().minusDays(30));
+
+        assertThat(result)
+                .extracting(t -> t.getListing().getGrade())
+                .containsExactly(ListingGrade.A);
+    }
+
+    @Test
+    @DisplayName("t7 기간 내 체결 이력이 없으면 빈 목록을 반환한다")
+    void t7() {
+        List<Trade> result = tradeRepository.findCompletedTradesSince(
+                cardId, TradeStatus.COMPLETED, LocalDateTime.now().minusDays(30));
+
+        assertThat(result).isEmpty();
+    }
 }

@@ -92,6 +92,10 @@ public class Card {
     @Column(name = "language_code", length = 10)
     private String languageCode;
 
+    @Builder.Default
+    @Column(name = "view_count", nullable = false)
+    private Integer viewCount = 0;
+
     @Column(name = "synced_at")
     private LocalDateTime syncedAt;
 }

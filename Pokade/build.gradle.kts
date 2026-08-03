@@ -55,6 +55,8 @@ dependencies {
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    // 카드 도메인 한정 임시 Rate Limit 필터용 — 팀 공통 정책 확정 시 재검토
+    implementation("com.bucket4j:bucket4j-core:8.10.1")
 }
 
 dependencyManagement {

@@ -2,6 +2,7 @@ package com.pokade.domain.card.dto;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
@@ -24,7 +25,7 @@ public record CardDetailResponse(
         List<VariantSummary> variants
 ) {
 
-    public static CardDetailResponse of(Card card, List<CardVariant> variants) {
+    public static CardDetailResponse of(Card card, List<CardVariant> variants, Map<Long, List<String>> gradesByVariantId) {
         return new CardDetailResponse(
                 card.getId(),
                 card.getExternalId(),
@@ -39,7 +40,9 @@ public record CardDetailResponse(
                 card.getImageMedium(),
                 card.getImageLarge(),
                 ExpansionSummary.from(card.getExpansion()),
-                variants.stream().map(VariantSummary::from).toList()
+                variants.stream()
+                        .map(variant -> VariantSummary.from(variant, gradesByVariantId.getOrDefault(variant.getId(), List.of())))
+                        .toList()
         );
     }
 
@@ -76,16 +79,18 @@ public record CardDetailResponse(
             String variantName,
             boolean primary,
             String imageSmall,
-            String imageLarge
+            String imageLarge,
+            List<String> grades
     ) {
 
-        public static VariantSummary from(CardVariant variant) {
+        public static VariantSummary from(CardVariant variant, List<String> grades) {
             return new VariantSummary(
                     variant.getId(),
                     variant.getVariantName(),
                     variant.isPrimary(),
                     variant.getImageSmall(),
-                    variant.getImageLarge()
+                    variant.getImageLarge(),
+                    grades
             );
         }
     }
