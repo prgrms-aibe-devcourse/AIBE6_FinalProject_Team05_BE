@@ -78,6 +78,19 @@ public class RedisVerificationCodeStoreTest {
     }
 
     @Test
+    @DisplayName("save(재발송)하면 실패 카운터가 리셋되어 getAttemptCount가 0이 된다")
+    void save_resetsAttemptCount() {
+        String email = "resend@pokade.com";
+        store.incrementAttempt(email);
+        store.incrementAttempt(email);
+        assertThat(store.getAttemptCount(email)).isEqualTo(2L);
+
+        store.save(email, "123456");
+
+        assertThat(store.getAttemptCount(email)).isZero();
+    }
+
+    @Test
     @DisplayName("delete하면 실패 카운터도 제거되어 getAttemptCount가 0이 된다")
     void delete_resetsAttemptCount() {
         String email = "attempt-del@pokade.com";
