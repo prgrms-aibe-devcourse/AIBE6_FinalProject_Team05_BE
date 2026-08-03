@@ -9,6 +9,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -81,6 +85,21 @@ public class AiGradeController {
     ) {
         Long userId = requireUserId(principalUserId);
         GradeResponse response = aiGradeService.getGradeResult(userId, resultId);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "AI 등급 진단 이력 조회",
+            description = "본인이 요청한 AI 등급 진단 이력을 최신순으로 페이징 조회합니다."
+    )
+    @GetMapping("/grade/history")
+    public ResponseEntity<Page<GradeResponse>> getGradeHistory(
+            @AuthenticationPrincipal Long principalUserId,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
+        Long userId = resolveUserId(principalUserId);
+        Page<GradeResponse> response = aiGradeService.getGradeHistory(userId, pageable);
         return ResponseEntity.ok(response);
     }
 
