@@ -156,7 +156,7 @@ class ListingControllerTest {
 
         given(listingService.getOrderbook(1L, null, null)).willReturn(orderbook);
 
-        mockMvc.perform(get("/api/listings/1/orderbook"))
+        mockMvc.perform(get("/api/listings/1/orderbook").with(userId(100L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(3))
                 .andExpect(jsonPath("$.data[0].price").value(2700000))
@@ -168,7 +168,7 @@ class ListingControllerTest {
     void 매도호가가_없으면_200과_빈_목록을_반환한다() throws Exception {
         given(listingService.getOrderbook(1L, null, null)).willReturn(List.of());
 
-        mockMvc.perform(get("/api/listings/1/orderbook"))
+        mockMvc.perform(get("/api/listings/1/orderbook").with(userId(100L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(0));
     }
@@ -178,7 +178,7 @@ class ListingControllerTest {
         given(listingService.getOrderbook(999L, null, null))
                 .willThrow(new BusinessException(ErrorCode.CARD_NOT_FOUND));
 
-        mockMvc.perform(get("/api/listings/999/orderbook"))
+        mockMvc.perform(get("/api/listings/999/orderbook").with(userId(100L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("CARD_NOT_FOUND"));
     }
@@ -191,7 +191,7 @@ class ListingControllerTest {
 
         given(listingService.getOrderbook(1L, null, ListingGrade.A)).willReturn(filtered);
 
-        mockMvc.perform(get("/api/listings/1/orderbook").param("grade", "A"))
+        mockMvc.perform(get("/api/listings/1/orderbook").with(userId(100L)).param("grade", "A"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].grade").value("A"));
