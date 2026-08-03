@@ -22,6 +22,7 @@ import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -199,7 +200,7 @@ public class AiGradeService {
         try {
             return new InputStreamResource(file.getInputStream());
         } catch (IOException e) {
-            throw new RuntimeException("이미지를 읽을 수 없습니다: " + file.getOriginalFilename(), e);
+            throw new UncheckedIOException("이미지를 읽을 수 없습니다: " + file.getOriginalFilename(), e);
         }
     }
 
