@@ -9,6 +9,7 @@ import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.web.PageableValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -134,16 +135,9 @@ public class AiGradeService {
     }
 
     public Page<GradeResponse> getGradeHistory(Long userId, Pageable pageable) {
-        validatePageSize(pageable);
+        PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
         return gradeResultRepository.findByUserId(userId, pageable)
                 .map(GradeResponse::from);
-    }
-
-    private void validatePageSize(Pageable pageable) {
-        if (pageable.getPageSize() > MAX_PAGE_SIZE) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT,
-                    "size는 최대 " + MAX_PAGE_SIZE + "까지 요청할 수 있습니다.");
-        }
     }
 
     private void validateImageFormats(GradeRequest request) {
