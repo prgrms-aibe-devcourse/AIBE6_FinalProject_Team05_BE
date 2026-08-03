@@ -3,6 +3,8 @@ package com.pokade.domain.ai.controller;
 import com.pokade.domain.ai.dto.GradeRequest;
 import com.pokade.domain.ai.dto.GradeResponse;
 import com.pokade.domain.ai.service.AiGradeService;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -77,7 +79,7 @@ public class AiGradeController {
 
             @AuthenticationPrincipal Long principalUserId
     ) {
-        Long userId = resolveUserId(principalUserId);
+        Long userId = requireUserId(principalUserId);
         GradeResponse response = aiGradeService.getGradeResult(userId, resultId);
         return ResponseEntity.ok(response);
     }
@@ -85,5 +87,13 @@ public class AiGradeController {
     // TODO: 프론트 로그인 연동 완료 후 permitAll·기본값 제거하고 @AuthenticationPrincipal 값을 그대로 사용할 것
     private Long resolveUserId(Long principalUserId) {
         return principalUserId != null ? principalUserId : 1L;
+    }
+
+    // 결과/이력 조회는 타인 데이터 노출 위험이 있어 인증 없는 접근을 허용하지 않는다
+    private Long requireUserId(Long principalUserId) {
+        if (principalUserId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+        return principalUserId;
     }
 }
