@@ -7,6 +7,8 @@ import com.pokade.domain.ai.dto.VisionResult;
 import com.pokade.domain.ai.entity.*;
 import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -112,6 +114,17 @@ public class AiGradeService {
                         .photoType(type)
                         .imageUrl(key)
                         .build()));
+
+        return GradeResponse.from(gradeResult);
+    }
+
+    public GradeResponse getGradeResult(Long userId, Long resultId) {
+        GradeResult gradeResult = gradeResultRepository.findById(resultId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GRADE_RESULT_NOT_FOUND));
+
+        if (!gradeResult.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
 
         return GradeResponse.from(gradeResult);
     }

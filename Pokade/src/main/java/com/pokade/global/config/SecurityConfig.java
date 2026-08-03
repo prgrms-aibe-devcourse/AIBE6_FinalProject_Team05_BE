@@ -37,7 +37,8 @@ public class SecurityConfig {
             "/v3/api-docs/**",
             "/actuator/health",
             "/actuator/prometheus",
-            "/api/ai/grade" // TODO: 로컬 테스트용 임시 permitAll — 인증 연동 후 제거할 것
+            "/api/ai/grade", // TODO: 로컬 테스트용 임시 permitAll — 인증 연동 후 제거할 것
+            "/api/ai/grade/*" // TODO: 로컬 테스트용 임시 permitAll — 인증 연동 후 제거할 것
     };
 
     // 보안 필터체인 — CSRF/CORS 설정과 경로별 인가 규칙을 정의
