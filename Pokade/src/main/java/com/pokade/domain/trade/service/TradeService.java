@@ -1,5 +1,7 @@
 package com.pokade.domain.trade.service;
 
+import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
@@ -23,6 +25,14 @@ public class TradeService {
     private final ListingRepository listingRepository;
     private final TradeRepository tradeRepository;
     private final PaymentRepository paymentRepository;
+    private final CardRepository cardRepository;
+
+    private TradeResponse toResponse(Trade trade) {
+        String cardName = cardRepository.findById(trade.getListing().getCardId())
+                .map(Card::getName)
+                .orElse(null);
+        return TradeResponse.of(trade, cardName);
+    }
 
     @Transactional
     public TradeResponse createTrade(Long buyerId, TradeCreateRequest request) {
@@ -56,7 +66,7 @@ public class TradeService {
                         .build()
         );
 
-        return TradeResponse.of(trade);
+        return toResponse(trade);
     }
 
     public TradeResponse getTrade(Long userId, Long tradeId) {
@@ -69,7 +79,7 @@ public class TradeService {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
 
-        return TradeResponse.of(trade);
+        return toResponse(trade);
     }
 
     @Transactional
@@ -83,7 +93,7 @@ public class TradeService {
 
         trade.complete();
 
-        return TradeResponse.of(trade);
+        return toResponse(trade);
     }
 
     @Transactional
@@ -99,6 +109,6 @@ public class TradeService {
 
         trade.cancel();
 
-        return TradeResponse.of(trade);
+        return toResponse(trade);
     }
 }

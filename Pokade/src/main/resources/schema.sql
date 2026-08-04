@@ -161,13 +161,6 @@ CREATE TABLE IF NOT EXISTS buy_offers (
 CREATE INDEX IF NOT EXISTS idx_buy_offers_orderbook
     ON buy_offers(card_id, variant_id, status, price DESC);
 
-CREATE TABLE IF NOT EXISTS listing_images (
-    id           BIGSERIAL PRIMARY KEY,
-    listing_id   BIGINT NOT NULL REFERENCES listings(id),
-    image_url    VARCHAR(255) NOT NULL,
-    sort_order   INTEGER DEFAULT 0
-);
-
 CREATE TABLE IF NOT EXISTS trades (
     id             BIGSERIAL PRIMARY KEY,
     listing_id     BIGINT NOT NULL REFERENCES listings(id),

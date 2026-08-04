@@ -1,5 +1,6 @@
 package com.pokade.domain.trade.service;
 
+import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.trade.dto.TradeResponse;
@@ -32,6 +33,9 @@ class TradeServiceTest {
 
     @Mock
     private PaymentRepository paymentRepository;
+
+    @Mock
+    private CardRepository cardRepository;
 
     @InjectMocks
     private TradeService tradeService;

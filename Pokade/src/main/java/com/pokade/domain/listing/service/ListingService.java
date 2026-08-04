@@ -10,7 +10,6 @@ import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.domain.listing.dto.OrderbookEntryResponse;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
-import com.pokade.domain.listing.entity.ListingImage;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.global.exception.BusinessException;
@@ -44,13 +43,8 @@ public class ListingService {
                 .grade(request.grade())
                 .build();
 
-        List<String> imageUrls = request.imageUrls();
-        for (int i = 0; i < imageUrls.size(); i++) {
-            listing.addImage(imageUrls.get(i), i);
-        }
-
         Listing saved = listingRepository.save(listing);
-        return ListingResponse.of(saved, imageUrls);
+        return ListingResponse.of(saved);
     }
 
     public List<ListingSummaryResponse> getActiveListings(Long cardId) {
@@ -99,10 +93,7 @@ public class ListingService {
 
         listing.changePrice(request.price());
 
-        List<String> imageUrls = listing.getImages().stream()
-                .map(ListingImage::getImageUrl)
-                .toList();
-        return ListingResponse.of(listing, imageUrls);
+        return ListingResponse.of(listing);
     }
 
     @Transactional
