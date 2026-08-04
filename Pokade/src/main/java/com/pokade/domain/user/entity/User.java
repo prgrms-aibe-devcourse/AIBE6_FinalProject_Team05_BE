@@ -28,7 +28,7 @@ public class User {
 
     private String password;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 20, unique = true)
     private String nickname;
 
     @Column(name = "nickname_changed_at")

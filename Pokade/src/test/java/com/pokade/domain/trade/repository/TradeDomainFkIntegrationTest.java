@@ -97,10 +97,12 @@ class TradeDomainFkIntegrationTest {
     }
 
     private Long insertUser(String email) {
+        String nickname = email.split("@")[0];
         return ((Number) entityManager.createNativeQuery(
                         "INSERT INTO users (email, nickname, provider, role, status, terms_agreed_at) " +
-                                "VALUES (:email, 'tester', 'LOCAL', 'USER', 'ACTIVE', now()) RETURNING id")
+                                "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE', now()) RETURNING id")
                 .setParameter("email", email)
+                .setParameter("nickname", nickname)
                 .getSingleResult()).longValue();
     }
 

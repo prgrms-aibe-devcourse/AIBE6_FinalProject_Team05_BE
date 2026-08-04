@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
@@ -159,6 +161,20 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.updateNickname(999L, "리코"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("동시 요청 경합으로 DB 유니크 제약을 위반하면 DUPLICATE_NICKNAME 예외를 던진다")
+    void updateNickname_uniqueViolation() {
+        User user = localUser("지우", null);
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userRepository.existsByNickname("리코")).willReturn(false);
+        willThrow(new DataIntegrityViolationException("uk_users_nickname"))
+                .given(userRepository).flush();
+
+        assertThatThrownBy(() -> userService.updateNickname(1L, "리코"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.DUPLICATE_NICKNAME);
     }
 
     @Test
