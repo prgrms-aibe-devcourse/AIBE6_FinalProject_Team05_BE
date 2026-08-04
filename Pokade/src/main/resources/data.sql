@@ -395,3 +395,26 @@ INSERT INTO trades (listing_id, buyer_id, price, status, confirmed_at, settled_a
     ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 3830000 AND grade = 'PSA10'), (SELECT id FROM users WHERE email = 'seller2@test.com'), 3830000, 'COMPLETED', now() - interval '250 days', now() - interval '250 days', now() - interval '250 days'),
     ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2030000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller1@test.com'), 2030000, 'COMPLETED', now() - interval '300 days', now() - interval '300 days', now() - interval '300 days'),
     ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 1730000 AND grade IS NULL), (SELECT id FROM users WHERE email = 'seller2@test.com'), 1730000, 'COMPLETED', now() - interval '340 days', now() - interval '340 days', now() - interval '340 days');
+
+-- =========================================================
+-- FR-PRICE-04 검증용 시드 (등락률/거래량 — S등급 최근 7일 vs 그 이전 7일 블록 비교)
+-- Charizard base1-4 : GET /api/prices/{cardId}/stats가 "최근 7일 평균가 vs 이전 7일(8~14일 전) 평균가"를
+-- 블록 단위로 비교하는 방식이라, 두 블록 모두에 S등급 체결이 있어야 등락률이 0이 아닌 실제 값으로 나온다.
+-- - 최근 블록(0~7일): 4건(-1/-3/-5/-6일) → 평균 3,060,000원, 거래량(volume)=4
+-- - 이전 블록(7~14일): 1건(-10일) → 평균 2,950,000원
+-- => changeRate ≈ (3,060,000-2,950,000)/2,950,000*100 ≈ +3.73%
+-- =========================================================
+
+-- ---------- listings (체결 완료, 최근 7일 이내 + 이전 7일 블록 분산) ----------
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at) VALUES
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 3060000, 'S', 'SOLD', now() - interval '6 days', now() - interval '6 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller2@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 3080000, 'S', 'SOLD', now() - interval '5 days', now() - interval '5 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller1@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 3100000, 'S', 'SOLD', now() - interval '1 days', now() - interval '1 days'),
+    ((SELECT id FROM cards WHERE external_id = 'base1-4'), (SELECT id FROM users WHERE email = 'seller2@test.com'), (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'), 2950000, 'S', 'SOLD', now() - interval '10 days', now() - interval '10 days');
+
+-- ---------- trades (위 listings에 1:1 대응하는 체결 완료 내역) ----------
+INSERT INTO trades (listing_id, buyer_id, price, status, confirmed_at, settled_at, created_at) VALUES
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 3060000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller2@test.com'), 3060000, 'COMPLETED', now() - interval '6 days', now() - interval '6 days', now() - interval '6 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 3080000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller1@test.com'), 3080000, 'COMPLETED', now() - interval '5 days', now() - interval '5 days', now() - interval '5 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 3100000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller2@test.com'), 3100000, 'COMPLETED', now() - interval '1 days', now() - interval '1 days', now() - interval '1 days'),
+    ((SELECT id FROM listings WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND price = 2950000 AND grade = 'S'), (SELECT id FROM users WHERE email = 'seller1@test.com'), 2950000, 'COMPLETED', now() - interval '10 days', now() - interval '10 days', now() - interval '10 days');
