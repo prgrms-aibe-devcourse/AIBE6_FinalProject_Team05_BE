@@ -9,6 +9,8 @@ import java.time.LocalDateTime;
 public record ListingSummaryResponse(
         Long id,
         Long sellerId,
+        Long cardId,
+        String cardName,
         Integer price,
         ListingGrade grade,
         ListingStatus status,
@@ -16,7 +18,7 @@ public record ListingSummaryResponse(
         LocalDateTime createdAt
 ) {
 
-    public static ListingSummaryResponse of(Listing listing) {
+    public static ListingSummaryResponse of(Listing listing, String cardName) {
         String thumbnailUrl = listing.getImages().isEmpty()
                 ? null
                 : listing.getImages().get(0).getImageUrl();
@@ -24,6 +26,8 @@ public record ListingSummaryResponse(
         return new ListingSummaryResponse(
                 listing.getId(),
                 listing.getSellerId(),
+                listing.getCardId(),
+                cardName,
                 listing.getPrice(),
                 listing.getGrade(),
                 listing.getStatus(),

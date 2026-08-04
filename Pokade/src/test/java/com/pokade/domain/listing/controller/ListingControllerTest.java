@@ -119,7 +119,7 @@ class ListingControllerTest {
     @Test
     void 활성_매물이_있으면_200과_가격순_목록을_반환한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                1L, 100L, 10000, ListingGrade.A, ListingStatus.ACTIVE,
+                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE,
                 "https://example.com/a.png", LocalDateTime.now());
 
         given(listingService.getActiveListings(1L)).willReturn(List.of(summary));
@@ -200,7 +200,7 @@ class ListingControllerTest {
     @Test
     void 내_매물이_있으면_200과_목록을_반환한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                1L, 100L, 10000, ListingGrade.A, ListingStatus.ACTIVE,
+                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE,
                 "https://example.com/a.png", LocalDateTime.now());
 
         given(listingService.getMyListings(100L, null)).willReturn(List.of(summary));
@@ -223,7 +223,7 @@ class ListingControllerTest {
     @Test
     void status_파라미터로_필터링해서_조회한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                2L, 100L, 5000, ListingGrade.B, ListingStatus.SOLD,
+                2L, 100L, 2L, "테스트카드2", 5000, ListingGrade.B, ListingStatus.SOLD,
                 null, LocalDateTime.now());
 
         given(listingService.getMyListings(100L, ListingStatus.SOLD)).willReturn(List.of(summary));
