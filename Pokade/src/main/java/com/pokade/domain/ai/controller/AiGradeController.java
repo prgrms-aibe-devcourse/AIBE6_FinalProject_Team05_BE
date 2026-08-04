@@ -9,6 +9,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -61,7 +65,7 @@ public class AiGradeController {
 
             @AuthenticationPrincipal Long principalUserId
     ) {
-        Long userId = resolveUserId(principalUserId);
+        Long userId = requireUserId(principalUserId);
 
         GradeRequest request = new GradeRequest(front, back, cornerTl, cornerTr, cornerBl, cornerBr, retryOfId);
         GradeResponse response = aiGradeService.grade(userId, request);
@@ -84,12 +88,21 @@ public class AiGradeController {
         return ResponseEntity.ok(response);
     }
 
-    // TODO: 프론트 로그인 연동 완료 후 permitAll·기본값 제거하고 @AuthenticationPrincipal 값을 그대로 사용할 것
-    private Long resolveUserId(Long principalUserId) {
-        return principalUserId != null ? principalUserId : 1L;
+    @Operation(
+            summary = "AI 등급 진단 이력 조회",
+            description = "본인이 요청한 AI 등급 진단 이력을 최신순으로 페이징 조회합니다."
+    )
+    @GetMapping("/grade/history")
+    public ResponseEntity<Page<GradeResponse>> getGradeHistory(
+            @AuthenticationPrincipal Long principalUserId,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
+        Long userId = requireUserId(principalUserId);
+        Page<GradeResponse> response = aiGradeService.getGradeHistory(userId, pageable);
+        return ResponseEntity.ok(response);
     }
 
-    // 결과/이력 조회는 타인 데이터 노출 위험이 있어 인증 없는 접근을 허용하지 않는다
     private Long requireUserId(Long principalUserId) {
         if (principalUserId == null) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);

@@ -64,7 +64,7 @@ class AuthServiceTest {
     void signup_success() {
         // given
         SignupRequest req = request("test@pokade.com", "pokade1234", "홍길동");
-        given(userRepository.existsByEmail(req.email())).willReturn(false);
+        given(userRepository.findByEmail(req.email())).willReturn(Optional.empty());
         given(userRepository.existsByNickname(req.nickname())).willReturn(false);
         given(passwordEncoder.encode(req.password())).willReturn("ENCODED_PW");
         given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
@@ -85,10 +85,11 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("이메일이 중복되면 DUPLICATE_EMAIL 예외를 던지고 저장하지 않는다")
+    @DisplayName("이미 활성(ACTIVE) 계정 이메일이면 DUPLICATE_EMAIL 예외를 던지고 저장하지 않는다")
     void signup_duplicateEmail() {
         SignupRequest req = request("dup@pokade.com", "pokade1234", "홍길동");
-        given(userRepository.existsByEmail(req.email())).willReturn(true);
+        given(userRepository.findByEmail(req.email()))
+                .willReturn(Optional.of(userWithStatus("dup@pokade.com", UserStatus.ACTIVE)));
 
         assertThatThrownBy(() -> authService.signup(req))
                 .isInstanceOf(BusinessException.class)
@@ -98,10 +99,24 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("미인증(PENDING) 계정 이메일이면 EMAIL_NOT_VERIFIED 예외를 던지고 저장하지 않는다")
+    void signup_pendingEmail() {
+        SignupRequest req = request("pending@pokade.com", "pokade1234", "홍길동");
+        given(userRepository.findByEmail(req.email()))
+                .willReturn(Optional.of(userWithStatus("pending@pokade.com", UserStatus.PENDING)));
+
+        assertThatThrownBy(() -> authService.signup(req))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED);
+
+        then(userRepository).should(never()).save(any());
+    }
+
+    @Test
     @DisplayName("닉네임이 중복되면 DUPLICATE_NICKNAME 예외를 던진다")
     void signup_duplicateNickname() {
         SignupRequest req = request("new@pokade.com", "pokade1234", "중복닉");
-        given(userRepository.existsByEmail(req.email())).willReturn(false);
+        given(userRepository.findByEmail(req.email())).willReturn(Optional.empty());
         given(userRepository.existsByNickname(req.nickname())).willReturn(true);
 
         assertThatThrownBy(() -> authService.signup(req))

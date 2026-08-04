@@ -13,6 +13,7 @@ import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.web.PageableValidator;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,7 +47,7 @@ public class CardService {
 
     @Transactional(readOnly = true)
     public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
-        validatePageSize(pageable);
+        PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
         validateFilterSize(types, "types");
         validateFilterSize(rarities, "rarity");
         validatePriceRange(minPrice, maxPrice);
@@ -81,7 +82,7 @@ public class CardService {
         if (q == null || q.isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
-        validatePageSize(pageable);
+        PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
         String keyword = q.trim();
         if (keyword.length() > MAX_KEYWORD_LENGTH) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
@@ -130,13 +131,6 @@ public class CardService {
 
     private boolean hasPokedexNumber(Card card) {
         return card.getNationalPokedexNumbers() != null && !card.getNationalPokedexNumbers().isEmpty();
-    }
-
-    private void validatePageSize(Pageable pageable) {
-        if (pageable.getPageSize() > MAX_PAGE_SIZE) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT,
-                    "size는 최대 " + MAX_PAGE_SIZE + "까지 요청할 수 있습니다.");
-        }
     }
 
     private void validateFilterSize(List<String> values, String fieldName) {
