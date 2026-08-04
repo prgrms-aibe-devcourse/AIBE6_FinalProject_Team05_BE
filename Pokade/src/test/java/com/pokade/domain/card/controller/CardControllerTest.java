@@ -319,4 +319,27 @@ class CardControllerTest {
                 .bodyJson()
                 .extractingPath("$.code").isEqualTo("CARD_NOT_FOUND");
     }
+
+    @Test
+    @DisplayName("t22 숫자가 아닌 카드 id로 상세조회하면 400과 일반화된 메시지를 반환하고 내부 예외 정보를 노출하지 않는다")
+    void t22() {
+        var result = mockMvcTester.get()
+                .uri("/api/cards/abc")
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST);
+        result.bodyJson().extractingPath("$.code").isEqualTo("INVALID_INPUT");
+        result.bodyJson().extractingPath("$.msg").isEqualTo("잘못된 요청 형식입니다.");
+        result.bodyText().doesNotContain("MethodArgumentTypeMismatchException", "java.lang.Long", "NumberFormatException");
+    }
+
+    @Test
+    @DisplayName("t23 숫자가 아닌 카드 id로 유사 카드를 조회하면 400과 일반화된 메시지를 반환한다")
+    void t23() {
+        mockMvcTester.get()
+                .uri("/api/cards/abc/related")
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson()
+                .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
 }
