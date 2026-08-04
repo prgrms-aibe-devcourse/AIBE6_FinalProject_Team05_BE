@@ -3,7 +3,6 @@ package com.pokade.domain.auth.service;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
-import com.pokade.global.infra.mail.MailSender;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -18,9 +17,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
@@ -36,7 +32,7 @@ public class EmailVerificationServiceTest {
     @Mock
     VerificationCodeGenerator codeGenerator;
     @Mock
-    MailSender mailSender;
+    VerificationMailSender verificationMailSender;
     @InjectMocks
     EmailVerificationService emailVerificationService;
 
@@ -117,7 +113,7 @@ public class EmailVerificationServiceTest {
 
         emailVerificationService.send(email);
 
-        then(mailSender).should().send(eq(email), anyString(), contains("123456"));
+        then(verificationMailSender).should().sendCode(email, "123456");
     }
 
     @Test
