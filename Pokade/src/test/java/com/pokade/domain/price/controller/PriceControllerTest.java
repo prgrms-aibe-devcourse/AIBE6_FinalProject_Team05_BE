@@ -2,6 +2,7 @@ package com.pokade.domain.price.controller;
 
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.exception.BusinessException;
@@ -15,6 +16,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -161,5 +163,36 @@ class PriceControllerTest {
         mockMvc.perform(get("/api/prices/summaries").param("cardIds", "1,2,3"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 시세_등락률과_거래량을_조회하면_200과_값을_반환한다() throws Exception {
+        given(priceService.getStats(1L, null))
+                .willReturn(new PriceStatsResponse(new BigDecimal("6.01"), 1L));
+
+        mockMvc.perform(get("/api/prices/1/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.changeRate").value(6.01))
+                .andExpect(jsonPath("$.data.volume").value(1));
+    }
+
+    @Test
+    void 시세_통계_조회시_존재하지_않는_카드면_404를_반환한다() throws Exception {
+        given(priceService.getStats(999L, null))
+                .willThrow(new BusinessException(ErrorCode.CARD_NOT_FOUND));
+
+        mockMvc.perform(get("/api/prices/999/stats"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CARD_NOT_FOUND"));
+    }
+
+    @Test
+    void 시세_통계_조회시_대표_변형이_없으면_404를_반환한다() throws Exception {
+        given(priceService.getStats(1L, null))
+                .willThrow(new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
+
+        mockMvc.perform(get("/api/prices/1/stats"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRIMARY_VARIANT_NOT_FOUND"));
     }
 }

@@ -7,8 +7,10 @@ import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.repository.BuyOfferRepository;
+import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.repository.TradeRepository;
@@ -21,6 +23,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -49,6 +52,9 @@ class PriceServiceTest {
 
     @Mock
     private TradeRepository tradeRepository;
+
+    @Mock
+    private PriceTradeStatsRepository priceTradeStatsRepository;
 
     @InjectMocks
     private PriceService priceService;
@@ -146,6 +152,82 @@ class PriceServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("t8 존재하지 않는 카드면 CARD_NOT_FOUND 예외가 발생하고 거래 리포지토리를 조회하지 않는다")
+    void t8() {
+        given(cardRepository.existsById(999L)).willReturn(false);
+
+        assertThatThrownBy(() -> priceService.getStats(999L, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CARD_NOT_FOUND);
+        verify(priceTradeStatsRepository, never()).countCompletedTradesByGradeSince(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("t9 variantId 미지정이고 대표 변형이 없으면 PRIMARY_VARIANT_NOT_FOUND 예외가 발생한다")
+    void t9() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> priceService.getStats(1L, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PRIMARY_VARIANT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("t10 S등급 체결 이력이 전혀 없으면 등락률 0, 거래량 0을 반환한다")
+    void t10() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(priceTradeStatsRepository.countCompletedTradesByGradeSince(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(0L);
+        given(priceTradeStatsRepository.findAveragePriceByGradeSince(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(null);
+        given(priceTradeStatsRepository.findAveragePriceByGradeBetween(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(null);
+
+        PriceStatsResponse result = priceService.getStats(1L, 10L);
+
+        assertThat(result.changeRate()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(result.volume()).isZero();
+    }
+
+    @Test
+    @DisplayName("t11 최근 7일 체결은 있지만 그 이전 블록에 체결 이력이 없으면 등락률 0, 거래량은 실제 건수를 반환한다")
+    void t11() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(priceTradeStatsRepository.countCompletedTradesByGradeSince(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(1L);
+        given(priceTradeStatsRepository.findAveragePriceByGradeSince(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(3000000.0);
+        given(priceTradeStatsRepository.findAveragePriceByGradeBetween(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(null);
+
+        PriceStatsResponse result = priceService.getStats(1L, 10L);
+
+        assertThat(result.changeRate()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(result.volume()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("t12 최근 7일 평균가와 그 이전 7일 평균가가 모두 있으면 블록 간 등락률을 계산해 반환한다")
+    void t12() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(priceTradeStatsRepository.countCompletedTradesByGradeSince(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(4L);
+        given(priceTradeStatsRepository.findAveragePriceByGradeSince(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(3000000.0);
+        given(priceTradeStatsRepository.findAveragePriceByGradeBetween(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(2830000.0);
+
+        PriceStatsResponse result = priceService.getStats(1L, 10L);
+
+        // (3,000,000 - 2,830,000) / 2,830,000 * 100 ≈ 6.01
+        assertThat(result.changeRate()).isEqualByComparingTo(new BigDecimal("6.01"));
+        assertThat(result.volume()).isEqualTo(4L);
     }
 
     private CardVariantRepository.PrimaryVariantIdView primaryVariantIdView(Long cardId, Long variantId) {
