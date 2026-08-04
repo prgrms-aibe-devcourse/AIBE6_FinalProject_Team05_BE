@@ -18,10 +18,6 @@ public record CardResponse(
         List<String> grades
 ) {
 
-    public static CardResponse from(Card card) {
-        return from(card, List.of());
-    }
-
     public static CardResponse from(Card card, List<String> grades) {
         return new CardResponse(
                 card.getId(),
