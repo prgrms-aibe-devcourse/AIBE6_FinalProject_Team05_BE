@@ -92,4 +92,28 @@ public class User {
     public void verifyEmail() {
         this.status = UserStatus.ACTIVE;
     }
+
+    private static final int NICKNAME_CHANGE_COOLDOWN_DAYS = 30;
+
+    // 닉네임을 마지막 변경 후 쿨 다운이 지났는지 여부
+    public boolean canChangeNickname(LocalDateTime now) {
+        return nicknameChangedAt == null || !now.isBefore(nicknameChangedAt.plusDays(NICKNAME_CHANGE_COOLDOWN_DAYS));
+    }
+
+    // 닉네임을 변경하고 변경 시각을 기록한다.
+    public void changeNickname(String newNickname, LocalDateTime now) {
+        this.nickname = newNickname;
+        this.nicknameChangedAt = now;
+    }
+
+    // 자체(LOCAL) 가입 계정인지 여부
+    public boolean isLocalUser() {
+        return provider == Provider.LOCAL;
+    }
+
+    // 비밀번호를 변경한다 (인코딩된 값)
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
 }
