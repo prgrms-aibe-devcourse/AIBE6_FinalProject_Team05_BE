@@ -32,6 +32,7 @@ public class UserController {
     @PutMapping("/me/password")
     public ApiResponse<Void> changePassword(@AuthenticationPrincipal Long userId,
                                             @Valid @RequestBody PasswordUpdateRequest request) {
+        userService.changePassword(userId, request.currentPassword(), request.newPassword());
         return ApiResponse.ok("비밀번호가 변경되었습니다.");
     }
 }
