@@ -1,5 +1,6 @@
 package com.pokade.domain.listing.service;
 
+import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
@@ -19,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -51,9 +54,11 @@ public class ListingService {
     }
 
     public List<ListingSummaryResponse> getActiveListings(Long cardId) {
+        String cardName = cardRepository.findById(cardId).map(Card::getName).orElse(null);
+
         return listingRepository.findByCardIdAndStatusOrderByPriceAsc(cardId, ListingStatus.ACTIVE)
                 .stream()
-                .map(ListingSummaryResponse::of)
+                .map(listing -> ListingSummaryResponse.of(listing, cardName))
                 .toList();
     }
 
@@ -79,8 +84,12 @@ public class ListingService {
                 ? listingRepository.findBySellerIdAndStatus(sellerId, status)
                 : listingRepository.findBySellerId(sellerId);
 
+        List<Long> cardIds = listings.stream().map(Listing::getCardId).distinct().toList();
+        Map<Long, String> cardNamesById = cardRepository.findAllById(cardIds).stream()
+                .collect(Collectors.toMap(Card::getId, Card::getName));
+
         return listings.stream()
-                .map(ListingSummaryResponse::of)
+                .map(listing -> ListingSummaryResponse.of(listing, cardNamesById.get(listing.getCardId())))
                 .toList();
     }
 
