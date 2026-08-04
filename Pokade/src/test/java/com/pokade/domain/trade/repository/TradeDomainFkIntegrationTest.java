@@ -2,7 +2,6 @@ package com.pokade.domain.trade.repository;
 
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
-import com.pokade.domain.listing.entity.ListingImage;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.trade.entity.Payment;
 import com.pokade.domain.trade.entity.PaymentMethod;
@@ -50,13 +49,6 @@ class TradeDomainFkIntegrationTest {
                         .grade(ListingGrade.A)
                         .build()
         );
-
-        ListingImage image = ListingImage.builder()
-                .listing(listing)
-                .imageUrl("https://example.com/image.png")
-                .sortOrder(0)
-                .build();
-        entityManager.persist(image);
 
         Trade trade = tradeRepository.save(
                 Trade.builder()

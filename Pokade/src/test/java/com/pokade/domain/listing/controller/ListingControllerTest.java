@@ -70,11 +70,9 @@ class ListingControllerTest {
 
     @Test
     void 매물_등록에_성공하면_201과_등록된_매물을_반환한다() throws Exception {
-        ListingCreateRequest request = new ListingCreateRequest(
-                1L, null, 10000, ListingGrade.A, List.of("https://example.com/a.png"));
+        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A);
         ListingResponse response = new ListingResponse(
-                1L, 1L, 100L, null, 10000, ListingGrade.A, ListingStatus.ACTIVE,
-                List.of("https://example.com/a.png"), LocalDateTime.now());
+                1L, 1L, 100L, null, 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
 
         given(listingService.createListing(anyLong(), any(ListingCreateRequest.class)))
                 .willReturn(response);
@@ -90,7 +88,7 @@ class ListingControllerTest {
 
     @Test
     void 필수값이_없으면_400을_반환한다() throws Exception {
-        ListingCreateRequest invalidRequest = new ListingCreateRequest(null, null, null, null, List.of());
+        ListingCreateRequest invalidRequest = new ListingCreateRequest(null, null, null, null);
 
         mockMvc.perform(post("/api/listings")
                         .with(userId(100L))
@@ -102,8 +100,7 @@ class ListingControllerTest {
 
     @Test
     void 중복_등록이면_409를_반환한다() throws Exception {
-        ListingCreateRequest request = new ListingCreateRequest(
-                1L, null, 10000, ListingGrade.A, List.of("https://example.com/a.png"));
+        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A);
 
         given(listingService.createListing(anyLong(), any(ListingCreateRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.DUPLICATE_LISTING));
@@ -119,8 +116,7 @@ class ListingControllerTest {
     @Test
     void 활성_매물이_있으면_200과_가격순_목록을_반환한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE,
-                "https://example.com/a.png", LocalDateTime.now());
+                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
 
         given(listingService.getActiveListings(1L)).willReturn(List.of(summary));
 
@@ -200,8 +196,7 @@ class ListingControllerTest {
     @Test
     void 내_매물이_있으면_200과_목록을_반환한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE,
-                "https://example.com/a.png", LocalDateTime.now());
+                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
 
         given(listingService.getMyListings(100L, null)).willReturn(List.of(summary));
 
@@ -223,8 +218,7 @@ class ListingControllerTest {
     @Test
     void status_파라미터로_필터링해서_조회한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                2L, 100L, 2L, "테스트카드2", 5000, ListingGrade.B, ListingStatus.SOLD,
-                null, LocalDateTime.now());
+                2L, 100L, 2L, "테스트카드2", 5000, ListingGrade.B, ListingStatus.SOLD, LocalDateTime.now());
 
         given(listingService.getMyListings(100L, ListingStatus.SOLD)).willReturn(List.of(summary));
 
@@ -239,8 +233,7 @@ class ListingControllerTest {
     void 매물_수정에_성공하면_200과_수정된_매물을_반환한다() throws Exception {
         ListingUpdateRequest request = new ListingUpdateRequest(20000);
         ListingResponse response = new ListingResponse(
-                1L, 1L, 100L, null, 20000, ListingGrade.A, ListingStatus.ACTIVE,
-                List.of("https://example.com/a.png"), LocalDateTime.now());
+                1L, 1L, 100L, null, 20000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
 
         given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
                 .willReturn(response);

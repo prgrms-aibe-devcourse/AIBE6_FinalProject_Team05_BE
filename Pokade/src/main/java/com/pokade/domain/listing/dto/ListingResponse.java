@@ -5,7 +5,6 @@ import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 public record ListingResponse(
         Long id,
@@ -15,11 +14,10 @@ public record ListingResponse(
         Integer price,
         ListingGrade grade,
         ListingStatus status,
-        List<String> imageUrls,
         LocalDateTime createdAt
 ) {
 
-    public static ListingResponse of(Listing listing, List<String> imageUrls) {
+    public static ListingResponse of(Listing listing) {
         return new ListingResponse(
                 listing.getId(),
                 listing.getCardId(),
@@ -28,7 +26,6 @@ public record ListingResponse(
                 listing.getPrice(),
                 listing.getGrade(),
                 listing.getStatus(),
-                imageUrls,
                 listing.getCreatedAt()
         );
     }
