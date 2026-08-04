@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS users (
     id                    BIGSERIAL PRIMARY KEY,
     email                 VARCHAR(255) UNIQUE NOT NULL,
     password              VARCHAR(255),                        -- 소셜 로그인 시 null 가능
-    nickname              VARCHAR(50) NOT NULL,
+    nickname              VARCHAR(50) UNIQUE NOT NULL,
     nickname_changed_at   TIMESTAMP,
     provider              VARCHAR(20) NOT NULL,                -- LOCAL / GOOGLE / KAKAO
     role                  VARCHAR(20) NOT NULL,                -- USER / ADMIN
