@@ -136,7 +136,7 @@ class PriceControllerTest {
                 new CardPriceSummaryResponse(1L, 3000000, null, "KRW"),
                 new CardPriceSummaryResponse(2L, null, 2000000, "KRW")
         );
-        given(priceService.getSummaries(List.of(1L, 2L))).willReturn(summaries);
+        given(priceService.getSummaries(List.of(1L, 2L), null)).willReturn(summaries);
 
         mockMvc.perform(get("/api/prices/summaries").param("cardIds", "1,2"))
                 .andExpect(status().isOk())
@@ -157,10 +157,30 @@ class PriceControllerTest {
 
     @Test
     void 배치_요약_조회시_상한을_넘으면_400을_반환한다() throws Exception {
-        given(priceService.getSummaries(any()))
+        given(priceService.getSummaries(any(), any()))
                 .willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최대 100개까지 조회할 수 있습니다."));
 
         mockMvc.perform(get("/api/prices/summaries").param("cardIds", "1,2,3"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 배치_요약_조회시_grade를_지정하면_해당_등급의_요약만_반환한다() throws Exception {
+        List<CardPriceSummaryResponse> summaries = List.of(
+                new CardPriceSummaryResponse(1L, 3000000, null, "KRW")
+        );
+        given(priceService.getSummaries(List.of(1L), ListingGrade.S)).willReturn(summaries);
+
+        mockMvc.perform(get("/api/prices/summaries").param("cardIds", "1").param("grade", "S"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].buyPrice").value(3000000));
+    }
+
+    @Test
+    void 배치_요약_조회시_잘못된_grade_값이면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/prices/summaries").param("cardIds", "1").param("grade", "INVALID"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }

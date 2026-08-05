@@ -121,12 +121,12 @@ class PriceServiceTest {
                         primaryVariantIdView(2L, 20L)
                         // 3L은 대표 판본이 없는 카드로 취급(응답에서 variantId 없음)
                 ));
-        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L, 20L), ListingStatus.ACTIVE))
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L, 20L), ListingStatus.ACTIVE, null))
                 .willReturn(List.of(listingPriceView(10L, 3000000)));
         given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L, 20L)))
                 .willReturn(List.of(buyOfferPriceView(20L, 2000000)));
 
-        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L, 2L, 3L));
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L, 2L, 3L), null);
 
         assertThat(result).hasSize(3);
         assertThat(result.get(0)).isEqualTo(new CardPriceSummaryResponse(1L, 3000000, null, "KRW"));
@@ -137,7 +137,7 @@ class PriceServiceTest {
     @Test
     @DisplayName("t6 cardIds가 비어 있으면 INVALID_INPUT 예외가 발생한다")
     void t6() {
-        assertThatThrownBy(() -> priceService.getSummaries(List.of()))
+        assertThatThrownBy(() -> priceService.getSummaries(List.of(), null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -148,7 +148,7 @@ class PriceServiceTest {
     void t7() {
         List<Long> tooMany = java.util.stream.LongStream.rangeClosed(1, 101).boxed().toList();
 
-        assertThatThrownBy(() -> priceService.getSummaries(tooMany))
+        assertThatThrownBy(() -> priceService.getSummaries(tooMany, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -228,6 +228,36 @@ class PriceServiceTest {
         // (3,000,000 - 2,830,000) / 2,830,000 * 100 ≈ 6.01
         assertThat(result.changeRate()).isEqualByComparingTo(new BigDecimal("6.01"));
         assertThat(result.volume()).isEqualTo(4L);
+    }
+
+    @Test
+    @DisplayName("t13 grade를 지정하면 해당 등급의 활성 매물 중 최저가만 반환한다")
+    void t13() {
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L)))
+                .willReturn(List.of(primaryVariantIdView(1L, 10L)));
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L), ListingStatus.ACTIVE, ListingGrade.S))
+                .willReturn(List.of(listingPriceView(10L, 3000000)));
+        given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
+                .willReturn(List.of());
+
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.S);
+
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, 3000000, null, "KRW"));
+    }
+
+    @Test
+    @DisplayName("t14 grade를 지정했지만 해당 등급의 활성 매물이 없는 카드는 buyPrice를 null로 반환한다")
+    void t14() {
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L)))
+                .willReturn(List.of(primaryVariantIdView(1L, 10L)));
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L), ListingStatus.ACTIVE, ListingGrade.A))
+                .willReturn(List.of());
+        given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
+                .willReturn(List.of());
+
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.A);
+
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, null, null, "KRW"));
     }
 
     private CardVariantRepository.PrimaryVariantIdView primaryVariantIdView(Long cardId, Long variantId) {

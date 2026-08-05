@@ -1,0 +1,214 @@
+> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :resolveMainClassName UP-TO-DATE
+
+> Task :bootRun
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.7)
+
+2026-08-05T11:03:37.324+09:00  INFO 16724 --- [Pokade] [           main] com.pokade.PokadeApplication             : Starting PokadeApplication using Java 21.0.10 with PID 16724 (C:\aibe6\AIBE6_FinalProject_Team05_BE\Pokade\build\classes\java\main started by 태규 in C:\aibe6\AIBE6_FinalProject_Team05_BE\Pokade)
+2026-08-05T11:03:37.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.pokade.PokadeApplication             : Running with Spring Boot v4.0.7, Spring v7.0.8
+2026-08-05T11:03:37.329+09:00  INFO 16724 --- [Pokade] [           main] com.pokade.PokadeApplication             : The following 1 profile is active: "dev"
+2026-08-05T11:03:38.876+09:00  INFO 16724 --- [Pokade] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-08-05T11:03:38.879+09:00  INFO 16724 --- [Pokade] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-05T11:03:39.094+09:00  INFO 16724 --- [Pokade] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 205 ms. Found 11 JPA repository interfaces.
+2026-08-05T11:03:39.136+09:00  INFO 16724 --- [Pokade] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-08-05T11:03:39.138+09:00  INFO 16724 --- [Pokade] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-08-05T11:03:39.175+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.ai.repository.GradeResultImageRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.175+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.ai.repository.GradeResultRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.175+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.card.repository.CardRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.175+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.card.repository.CardVariantRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.176+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.listing.repository.ListingRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.176+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.price.repository.BuyOfferRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.176+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.price.repository.PriceTradeStatsRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.176+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.sync.repository.SyncLogRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.176+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.trade.repository.PaymentRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.177+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.trade.repository.TradeRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.177+09:00  INFO 16724 --- [Pokade] [           main] .RepositoryConfigurationExtensionSupport : Spring Data Redis - Could not safely identify store assignment for repository candidate interface com.pokade.domain.user.repository.UserRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-08-05T11:03:39.177+09:00  INFO 16724 --- [Pokade] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 30 ms. Found 0 Redis repository interfaces.
+2026-08-05T11:03:40.483+09:00  INFO 16724 --- [Pokade] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-08-05T11:03:40.519+09:00  INFO 16724 --- [Pokade] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-05T11:03:40.519+09:00  INFO 16724 --- [Pokade] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-05T11:03:40.615+09:00  INFO 16724 --- [Pokade] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 3220 ms
+2026-08-05T11:03:40.999+09:00 DEBUG 16724 --- [Pokade] [           main] c.p.g.security.JwtAuthenticationFilter   : Filter 'jwtAuthenticationFilter' configured for use
+2026-08-05T11:03:41.003+09:00 DEBUG 16724 --- [Pokade] [           main] c.p.d.card.filter.CardRateLimitFilter    : Filter 'cardRateLimitFilterRegistration' configured for use
+2026-08-05T11:03:41.068+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.util.UtilityElf        : Class org.postgresql.Driver found in Thread context class loader jdk.internal.loader.ClassLoaders$AppClassLoader@6bc7c054
+2026-08-05T11:03:41.256+09:00  INFO 16724 --- [Pokade] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-05T11:03:41.349+09:00  INFO 16724 --- [Pokade] [           main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.2.19.Final
+2026-08-05T11:03:42.246+09:00  INFO 16724 --- [Pokade] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-05T11:03:42.321+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : HikariPool-1 - configuration:
+2026-08-05T11:03:42.323+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : allowPoolSuspension.............false
+2026-08-05T11:03:42.323+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : autoCommit......................true
+2026-08-05T11:03:42.323+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : catalog.........................none
+2026-08-05T11:03:42.324+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : connectionInitSql...............none
+2026-08-05T11:03:42.324+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : connectionTestQuery.............none
+2026-08-05T11:03:42.324+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : connectionTimeout...............30000
+2026-08-05T11:03:42.324+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : credentials.....................com.zaxxer.hikari.util.Credentials@74d3b331
+2026-08-05T11:03:42.326+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : credentialsProvider.............none
+2026-08-05T11:03:42.326+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : credentialsProviderClassName....none
+2026-08-05T11:03:42.326+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : dataSource......................none
+2026-08-05T11:03:42.326+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : dataSourceClassName.............none
+2026-08-05T11:03:42.326+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : dataSourceJNDI..................none
+2026-08-05T11:03:42.327+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : dataSourceProperties............{password=<masked>}
+2026-08-05T11:03:42.327+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : driverClassName................."org.postgresql.Driver"
+2026-08-05T11:03:42.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : exceptionOverride...............none
+2026-08-05T11:03:42.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : exceptionOverrideClassName......none
+2026-08-05T11:03:42.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : healthCheckProperties...........{}
+2026-08-05T11:03:42.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : healthCheckRegistry.............none
+2026-08-05T11:03:42.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : idleTimeout.....................600000
+2026-08-05T11:03:42.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : initializationFailTimeout.......1
+2026-08-05T11:03:42.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : isolateInternalQueries..........false
+2026-08-05T11:03:42.328+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : jdbcUrl.........................jdbc:postgresql://localhost:5432/pokade
+2026-08-05T11:03:42.329+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : keepaliveTime...................120000
+2026-08-05T11:03:42.329+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : leakDetectionThreshold..........0
+2026-08-05T11:03:42.329+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : maxLifetime.....................1800000
+2026-08-05T11:03:42.329+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : maximumPoolSize.................10
+2026-08-05T11:03:42.329+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : metricRegistry..................none
+2026-08-05T11:03:42.329+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : metricsTrackerFactory...........none
+2026-08-05T11:03:42.330+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : minimumIdle.....................10
+2026-08-05T11:03:42.330+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : password........................<masked>
+2026-08-05T11:03:42.330+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : poolName........................"HikariPool-1"
+2026-08-05T11:03:42.330+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : readOnly........................false
+2026-08-05T11:03:42.330+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : registerMbeans..................false
+2026-08-05T11:03:42.331+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : scheduledExecutor...............none
+2026-08-05T11:03:42.331+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : schema..........................none
+2026-08-05T11:03:42.331+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : threadFactory...................internal
+2026-08-05T11:03:42.331+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : transactionIsolation............default
+2026-08-05T11:03:42.331+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : username........................"pokade"
+2026-08-05T11:03:42.331+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariConfig           : validationTimeout...............5000
+2026-08-05T11:03:42.331+09:00  INFO 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-08-05T11:03:42.351+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (78c0ac05-6813-43d6-aea1-828fb75be955)
+2026-08-05T11:03:42.567+09:00 DEBUG 16724 --- [Pokade] [           main] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (78c0ac05-6813-43d6-aea1-828fb75be955)
+2026-08-05T11:03:42.570+09:00  INFO 16724 --- [Pokade] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fd77205
+2026-08-05T11:03:42.573+09:00  INFO 16724 --- [Pokade] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-08-05T11:03:42.687+09:00 DEBUG 16724 --- [Pokade] [l-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Pool stats (total=1/10, idle=1/10, active=0, waiting=0)
+2026-08-05T11:03:42.687+09:00  INFO 16724 --- [Pokade] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/pokade]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.10
+	Default catalog/schema: pokade/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-08-05T11:03:42.688+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (fe0fdf3c-fc4a-4abe-bdb0-840a3b15780c)
+2026-08-05T11:03:42.712+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (fe0fdf3c-fc4a-4abe-bdb0-840a3b15780c)
+2026-08-05T11:03:42.712+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@4413fc87
+2026-08-05T11:03:42.748+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=2/10, idle=2/10, active=0, waiting=0)
+2026-08-05T11:03:42.749+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (b1a17c1d-f1b1-41cf-9497-1d12107a2fa4)
+2026-08-05T11:03:42.776+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (b1a17c1d-f1b1-41cf-9497-1d12107a2fa4)
+2026-08-05T11:03:42.776+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@4ad41a75
+2026-08-05T11:03:42.810+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=3/10, idle=3/10, active=0, waiting=0)
+2026-08-05T11:03:42.810+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (86c52870-5a64-4438-a0f6-42a3b32d9866)
+2026-08-05T11:03:42.839+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (86c52870-5a64-4438-a0f6-42a3b32d9866)
+2026-08-05T11:03:42.839+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@4eeb97f7
+2026-08-05T11:03:42.870+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=4/10, idle=4/10, active=0, waiting=0)
+2026-08-05T11:03:42.870+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (3c7c3cde-e489-4ccf-bbb3-a250c546b5ba)
+2026-08-05T11:03:42.904+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (3c7c3cde-e489-4ccf-bbb3-a250c546b5ba)
+2026-08-05T11:03:42.904+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@be9104e
+2026-08-05T11:03:42.947+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=5/10, idle=5/10, active=0, waiting=0)
+2026-08-05T11:03:42.947+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (8d8c529b-f76f-46fb-ae03-32bb40ef205c)
+2026-08-05T11:03:42.976+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (8d8c529b-f76f-46fb-ae03-32bb40ef205c)
+2026-08-05T11:03:42.976+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@50452270
+2026-08-05T11:03:43.008+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=6/10, idle=6/10, active=0, waiting=0)
+2026-08-05T11:03:43.008+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (ce0c007e-121f-42d7-8b59-aa703f922bb5)
+2026-08-05T11:03:43.033+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (ce0c007e-121f-42d7-8b59-aa703f922bb5)
+2026-08-05T11:03:43.033+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@3aa89dbf
+2026-08-05T11:03:43.069+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=7/10, idle=7/10, active=0, waiting=0)
+2026-08-05T11:03:43.069+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (e16419a0-4b04-44e1-b8d2-76ade2114885)
+2026-08-05T11:03:43.095+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (e16419a0-4b04-44e1-b8d2-76ade2114885)
+2026-08-05T11:03:43.095+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@28eef132
+2026-08-05T11:03:43.130+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=8/10, idle=8/10, active=0, waiting=0)
+2026-08-05T11:03:43.130+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (5b0f0545-3f2f-4920-aa0a-ee52c25d55b5)
+2026-08-05T11:03:43.157+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (5b0f0545-3f2f-4920-aa0a-ee52c25d55b5)
+2026-08-05T11:03:43.158+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@6bc6ef01
+2026-08-05T11:03:43.193+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=9/10, idle=9/10, active=0, waiting=0)
+2026-08-05T11:03:43.193+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Attempting to create/setup new connection (14cd7112-d9ed-483a-9036-7045b3dbb4e8)
+2026-08-05T11:03:43.221+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Established new connection (14cd7112-d9ed-483a-9036-7045b3dbb4e8)
+2026-08-05T11:03:43.221+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@12e906ab
+2026-08-05T11:03:43.254+09:00 DEBUG 16724 --- [Pokade] [onnection-adder] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - After adding stats (total=10/10, idle=10/10, active=0, waiting=0)
+2026-08-05T11:03:44.650+09:00  INFO 16724 --- [Pokade] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-05T11:03:44.663+09:00  INFO 16724 --- [Pokade] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-05T11:03:45.120+09:00  WARN 16724 --- [Pokade] [           main] com.pokade.global.config.S3Config        : AWS 자격증명이 설정되지 않았습니다. S3 업로드 기능은 동작하지 않습니다.
+2026-08-05T11:03:45.700+09:00  WARN 16724 --- [Pokade] [           main] com.pokade.global.config.S3Config        : AWS 자격증명이 설정되지 않았습니다. S3 업로드 기능은 동작하지 않습니다.
+2026-08-05T11:03:46.011+09:00  INFO 16724 --- [Pokade] [           main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-08-05T11:03:51.151+09:00  INFO 16724 --- [Pokade] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-08-05T11:03:51.260+09:00  INFO 16724 --- [Pokade] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-08-05T11:03:51.276+09:00  INFO 16724 --- [Pokade] [           main] com.pokade.PokadeApplication             : Started PokadeApplication in 14.549 seconds (process running for 15.069)
+2026-08-05T11:03:51.560+09:00 DEBUG 16724 --- [Pokade] [           main] org.hibernate.SQL                        : 
+    select
+        u1_0.id 
+    from
+        users u1_0 
+    where
+        u1_0.email=? 
+    fetch
+        first ? rows only
+Hibernate: 
+    select
+        u1_0.id 
+    from
+        users u1_0 
+    where
+        u1_0.email=? 
+    fetch
+        first ? rows only
+2026-08-05T11:03:51.570+09:00 TRACE 16724 --- [Pokade] [           main] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [test1@pokade.com]
+2026-08-05T11:03:51.570+09:00 TRACE 16724 --- [Pokade] [           main] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [1]
+2026-08-05T11:03:51.599+09:00 DEBUG 16724 --- [Pokade] [           main] org.hibernate.SQL                        : 
+    select
+        u1_0.id 
+    from
+        users u1_0 
+    where
+        u1_0.email=? 
+    fetch
+        first ? rows only
+Hibernate: 
+    select
+        u1_0.id 
+    from
+        users u1_0 
+    where
+        u1_0.email=? 
+    fetch
+        first ? rows only
+2026-08-05T11:03:51.599+09:00 TRACE 16724 --- [Pokade] [           main] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [test2@pokade.com]
+2026-08-05T11:03:51.599+09:00 TRACE 16724 --- [Pokade] [           main] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [1]
+2026-08-05T11:03:51.603+09:00 DEBUG 16724 --- [Pokade] [           main] org.hibernate.SQL                        : 
+    select
+        u1_0.id 
+    from
+        users u1_0 
+    where
+        u1_0.email=? 
+    fetch
+        first ? rows only
+Hibernate: 
+    select
+        u1_0.id 
+    from
+        users u1_0 
+    where
+        u1_0.email=? 
+    fetch
+        first ? rows only
+2026-08-05T11:03:51.603+09:00 TRACE 16724 --- [Pokade] [           main] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [test3@pokade.com]
+2026-08-05T11:03:51.603+09:00 TRACE 16724 --- [Pokade] [           main] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [1]
+2026-08-05T11:03:51.606+09:00  WARN 16724 --- [Pokade] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-08-05T11:03:51.607+09:00  WARN 16724 --- [Pokade] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+2026-08-05T11:04:12.691+09:00 DEBUG 16724 --- [Pokade] [l-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Pool stats (total=10/10, idle=10/10, active=0, waiting=0)
+2026-08-05T11:04:12.691+09:00 DEBUG 16724 --- [Pokade] [l-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Fill pool skipped, pool has sufficient level or currently being filled.
+2026-08-05T11:04:42.695+09:00 DEBUG 16724 --- [Pokade] [l-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Pool stats (total=10/10, idle=10/10, active=0, waiting=0)
+2026-08-05T11:04:42.695+09:00 DEBUG 16724 --- [Pokade] [l-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Fill pool skipped, pool has sufficient level or currently being filled.
