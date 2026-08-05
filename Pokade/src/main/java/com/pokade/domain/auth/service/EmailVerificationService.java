@@ -29,11 +29,10 @@ public class EmailVerificationService {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
         }
 
-        if(codeStore.isRecentlySent(email)) {
+        String code = codeGenerator.generate();
+        if (!codeStore.save(email, code)) {
             throw new BusinessException(ErrorCode.EMAIL_SEND_RATE_LIMITED);
         }
-        String code = codeGenerator.generate();
-        codeStore.save(email, code);
         verificationMailSender.sendCode(email, code);
     }
 
@@ -42,18 +41,18 @@ public class EmailVerificationService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        if(user.getStatus() != UserStatus.PENDING) {
+        if (user.getStatus() != UserStatus.PENDING) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
         }
 
-        if(codeStore.getAttemptCount(email) >= MAX_VERIFY_ATTEMPTS) {
+        if (codeStore.getAttemptCount(email) >= MAX_VERIFY_ATTEMPTS) {
             throw new BusinessException(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
         }
 
         String storedCode = codeStore.find(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_CODE_EXPIRED));
 
-        if(!storedCode.equals(code)) {
+        if (!storedCode.equals(code)) {
             codeStore.incrementAttempt(email);
             throw new BusinessException(ErrorCode.EMAIL_CODE_MISMATCH);
         }

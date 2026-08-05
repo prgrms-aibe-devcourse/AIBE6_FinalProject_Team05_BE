@@ -25,15 +25,15 @@ public class RedisVerificationCodeStore implements VerificationCodeStore {
     private final StringRedisTemplate redisTemplate;
 
     @Override
-    public boolean isRecentlySent(String email) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(COOLDOWN_KEY_PREFIX + email));
-    }
-
-    @Override
-    public void save(String email, String code) {
+    public boolean save(String email, String code) {
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(COOLDOWN_KEY_PREFIX + email, "1", COOLDOWN_TTL);
+        if (!Boolean.TRUE.equals(acquired)) {
+            return false;
+        }
         redisTemplate.opsForValue().set(CODE_KEY_PREFIX + email, code, CODE_TTL);
-        redisTemplate.opsForValue().set(COOLDOWN_KEY_PREFIX + email, "1", COOLDOWN_TTL);
         redisTemplate.delete(ATTEMPT_KEY_PREFIX + email);
+        return true;
     }
 
     @Override
