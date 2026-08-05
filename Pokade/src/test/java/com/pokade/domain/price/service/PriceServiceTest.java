@@ -192,6 +192,7 @@ class PriceServiceTest {
         PriceStatsResponse result = priceService.getStats(1L, 10L);
 
         assertThat(result.changeRate()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(result.changeAmount()).isZero();
         assertThat(result.volume()).isZero();
     }
 
@@ -209,6 +210,7 @@ class PriceServiceTest {
         PriceStatsResponse result = priceService.getStats(1L, 10L);
 
         assertThat(result.changeRate()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(result.changeAmount()).isZero();
         assertThat(result.volume()).isEqualTo(1L);
     }
 
@@ -227,6 +229,7 @@ class PriceServiceTest {
 
         // (3,000,000 - 2,830,000) / 2,830,000 * 100 ≈ 6.01
         assertThat(result.changeRate()).isEqualByComparingTo(new BigDecimal("6.01"));
+        assertThat(result.changeAmount()).isEqualTo(170000L);
         assertThat(result.volume()).isEqualTo(4L);
     }
 
