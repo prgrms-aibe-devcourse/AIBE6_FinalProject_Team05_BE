@@ -34,9 +34,10 @@ public class PriceController {
     @GetMapping("/summaries")
     public ApiResponse<List<CardPriceSummaryResponse>> getSummaries(
             @RequestParam List<Long> cardIds,
-            @RequestParam(required = false) ListingGrade grade
+            @RequestParam(required = false) ListingGrade grade,
+            @RequestParam(required = false, defaultValue = "false") boolean includeRecentTradePrice
     ) {
-        return ApiResponse.ok(priceService.getSummaries(cardIds, grade));
+        return ApiResponse.ok(priceService.getSummaries(cardIds, grade, includeRecentTradePrice));
     }
 
     @GetMapping("/{cardId}/trades")

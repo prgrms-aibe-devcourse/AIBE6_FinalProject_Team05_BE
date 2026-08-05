@@ -5,13 +5,13 @@ import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
-// FR-PRICE-04(시세 등락률/거래량) 전용 조회. trades 테이블은 domain.trade의 Trade/TradeRepository가 이미 소유하고
-// 있으므로, domain.price는 그 리포지토리를 직접 수정하지 않고 읽기 전용 쿼리만 담은 별도 리포지토리로 필요한 조회를 추가한다.
+// domain.trade의 TradeRepository를 직접 수정하지 않고 필요한 조회만 담은 별도 리포지토리.
 public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
 
     // 등락률 비교의 "최근 블록" 평균가(최근 N일 이내, 상한 없음)
@@ -38,4 +38,20 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
                                            @Param("grade") ListingGrade grade,
                                            @Param("status") TradeStatus status,
                                            @Param("from") LocalDateTime from);
+
+    // 카드별 가장 최근 체결가 1건(grade 지정 시 해당 등급만)
+    @Query("SELECT l.cardId AS cardId, t.price AS price FROM Trade t JOIN t.listing l "
+            + "WHERE l.cardId IN :cardIds AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
+            + "AND t.confirmedAt = ("
+            + "    SELECT MAX(t2.confirmedAt) FROM Trade t2 JOIN t2.listing l2 "
+            + "    WHERE l2.cardId = l.cardId AND (:grade IS NULL OR l2.grade = :grade) AND t2.status = :status"
+            + ")")
+    List<CardPriceView> findRecentCompletedTradePricesByCardIds(@Param("cardIds") List<Long> cardIds,
+                                                                  @Param("grade") ListingGrade grade,
+                                                                  @Param("status") TradeStatus status);
+
+    interface CardPriceView {
+        Long getCardId();
+        Integer getPrice();
+    }
 }
