@@ -1,0 +1,22 @@
+### IntelliJ IDEA ###
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+### Env ###
+.env
+*.env
+!.env.example
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### AI Tools ###
+.omc/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.md

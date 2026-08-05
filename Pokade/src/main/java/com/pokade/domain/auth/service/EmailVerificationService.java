@@ -1,0 +1,66 @@
+package com.pokade.domain.auth.service;
+
+import com.pokade.domain.auth.store.VerificationCodeStore;
+import com.pokade.domain.auth.support.VerificationCodeGenerator;
+import com.pokade.domain.auth.support.VerificationMailSender;
+import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.entity.type.UserStatus;
+import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+
+@Service
+@RequiredArgsConstructor
+public class EmailVerificationService {
+
+    private final UserRepository userRepository;
+    private final VerificationCodeStore codeStore;
+    private final VerificationCodeGenerator codeGenerator;
+    private final VerificationMailSender verificationMailSender;
+
+    private static final int MAX_VERIFY_ATTEMPTS = 5;
+
+    public void send(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getStatus() != UserStatus.PENDING) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+
+        String code = codeGenerator.generate();
+        if (!codeStore.save(email, code)) {
+            throw new BusinessException(ErrorCode.EMAIL_SEND_RATE_LIMITED);
+        }
+        verificationMailSender.sendCode(email, code);
+    }
+
+    @Transactional
+    public void verify(String email, String code) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getStatus() != UserStatus.PENDING) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+
+        if (codeStore.getAttemptCount(email) >= MAX_VERIFY_ATTEMPTS) {
+            throw new BusinessException(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
+        }
+
+        String storedCode = codeStore.find(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_CODE_EXPIRED));
+
+        if (!storedCode.equals(code)) {
+            codeStore.incrementAttempt(email);
+            throw new BusinessException(ErrorCode.EMAIL_CODE_MISMATCH);
+        }
+
+        user.verifyEmail();
+        codeStore.delete(email);
+    }
+}
