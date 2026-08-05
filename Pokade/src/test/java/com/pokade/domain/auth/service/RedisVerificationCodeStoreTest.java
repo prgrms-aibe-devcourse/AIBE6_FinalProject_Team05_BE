@@ -1,5 +1,6 @@
 package com.pokade.domain.auth.service;
 
+import com.pokade.domain.auth.store.RedisVerificationCodeStore;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,5 +1,6 @@
 package com.pokade.domain.auth.service;
 
+import com.pokade.domain.auth.support.VerificationCodeGenerator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
 

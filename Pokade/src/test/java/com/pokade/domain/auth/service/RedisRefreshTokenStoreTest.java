@@ -1,5 +1,6 @@
 package com.pokade.domain.auth.service;
 
+import com.pokade.domain.auth.store.RedisRefreshTokenStore;
 import com.pokade.global.security.JwtProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

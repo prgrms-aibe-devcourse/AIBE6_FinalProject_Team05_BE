@@ -1,5 +1,8 @@
 package com.pokade.domain.auth.service;
 
+import com.pokade.domain.auth.store.VerificationCodeStore;
+import com.pokade.domain.auth.support.VerificationCodeGenerator;
+import com.pokade.domain.auth.support.VerificationMailSender;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
