@@ -158,16 +158,18 @@ public class PriceService {
                 cardId, STATS_GRADE, TradeStatus.COMPLETED, previousFrom, recentFrom);
 
         if (recentAvg == null || previousAvg == null) {
-            return new PriceStatsResponse(BigDecimal.ZERO, volume);
+            return new PriceStatsResponse(BigDecimal.ZERO, 0L, volume);
         }
 
         BigDecimal recentAvgAmount = BigDecimal.valueOf(recentAvg);
         BigDecimal previousAvgAmount = BigDecimal.valueOf(previousAvg);
-        BigDecimal changeRate = recentAvgAmount.subtract(previousAvgAmount)
+        BigDecimal diff = recentAvgAmount.subtract(previousAvgAmount);
+        BigDecimal changeRate = diff
                 .divide(previousAvgAmount, 4, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100))
                 .setScale(2, RoundingMode.HALF_UP);
+        long changeAmount = diff.setScale(0, RoundingMode.HALF_UP).longValue();
 
-        return new PriceStatsResponse(changeRate, volume);
+        return new PriceStatsResponse(changeRate, changeAmount, volume);
     }
 }

@@ -168,11 +168,12 @@ class PriceControllerTest {
     @Test
     void 시세_등락률과_거래량을_조회하면_200과_값을_반환한다() throws Exception {
         given(priceService.getStats(1L, null))
-                .willReturn(new PriceStatsResponse(new BigDecimal("6.01"), 1L));
+                .willReturn(new PriceStatsResponse(new BigDecimal("6.01"), 170000L, 1L));
 
         mockMvc.perform(get("/api/prices/1/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.changeRate").value(6.01))
+                .andExpect(jsonPath("$.data.changeAmount").value(170000))
                 .andExpect(jsonPath("$.data.volume").value(1));
     }
 
