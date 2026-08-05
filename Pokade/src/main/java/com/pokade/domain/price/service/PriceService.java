@@ -65,7 +65,7 @@ public class PriceService {
     }
 
     // N+1을 피하기 위한 배치 버전.
-    public List<CardPriceSummaryResponse> getSummaries(List<Long> cardIds) {
+    public List<CardPriceSummaryResponse> getSummaries(List<Long> cardIds, ListingGrade grade) {
         if (cardIds == null || cardIds.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최소 1개 이상 필요합니다.");
         }
@@ -86,7 +86,7 @@ public class PriceService {
 
         Map<Long, Integer> buyPriceByVariant = variantIds.isEmpty()
                 ? Map.of()
-                : listingRepository.findLowestActivePricesByVariantIds(variantIds, ListingStatus.ACTIVE).stream()
+                : listingRepository.findLowestActivePricesByVariantIds(variantIds, ListingStatus.ACTIVE, grade).stream()
                         .collect(Collectors.toMap(
                                 ListingRepository.VariantPriceView::getVariantId,
                                 ListingRepository.VariantPriceView::getPrice));
