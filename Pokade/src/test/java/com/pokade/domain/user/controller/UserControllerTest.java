@@ -1,6 +1,7 @@
 package com.pokade.domain.user.controller;
 
 import com.pokade.domain.user.dto.response.UserResponse;
+import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.service.UserService;
@@ -56,7 +57,7 @@ class UserControllerTest {
     void getMyInfo_success() throws Exception {
         UserResponse res = new UserResponse(
                 1L, "user@pokade.com", "트레이너김",
-                Role.USER, UserStatus.ACTIVE, "https://img/x.png", 30);
+                Role.USER, UserStatus.ACTIVE, "https://img/x.png", 30, Provider.LOCAL);
         given(userService.getMyInfo(1L)).willReturn(res);
 
         mockMvc.perform(get("/api/users/me").with(userId(1L)))
@@ -66,7 +67,8 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.nickname").value("트레이너김"))
                 .andExpect(jsonPath("$.data.role").value("USER"))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.data.pointBalance").value(30));
+                .andExpect(jsonPath("$.data.pointBalance").value(30))
+                .andExpect(jsonPath("$.data.provider").value("LOCAL"));
     }
 
     @Test
