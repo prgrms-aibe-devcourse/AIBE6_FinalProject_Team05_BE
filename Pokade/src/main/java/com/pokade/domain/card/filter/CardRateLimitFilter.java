@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.global.exception.ErrorCode;
-import com.pokade.global.exception.ErrorResponse;
+import com.pokade.global.response.ApiResponse;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
@@ -64,7 +64,7 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
 
         response.setStatus(ErrorCode.CARD_RATE_LIMIT_EXCEEDED.getStatus().value());
         response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write(objectMapper.writeValueAsString(ErrorResponse.of(ErrorCode.CARD_RATE_LIMIT_EXCEEDED)));
+        response.getWriter().write(objectMapper.writeValueAsString(ApiResponse.fail(ErrorCode.CARD_RATE_LIMIT_EXCEEDED)));
     }
 
     @Override
