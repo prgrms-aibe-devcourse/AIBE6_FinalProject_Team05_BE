@@ -65,11 +65,14 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // CORS 설정 — 프론트(localhost:3000)의 인증정보 포함 요청 허용
+    // CORS 설정 — 로컬 개발(localhost:3000) 및 Vercel 배포 프론트의 인증정보 포함 요청 허용
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:3000",
+                "https://aibe-6-final-project-team05-fe.vercel.app"
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
