@@ -126,18 +126,18 @@ class PriceServiceTest {
         given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L, 20L)))
                 .willReturn(List.of(buyOfferPriceView(20L, 2000000)));
 
-        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L, 2L, 3L), null);
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L, 2L, 3L), null, false);
 
         assertThat(result).hasSize(3);
-        assertThat(result.get(0)).isEqualTo(new CardPriceSummaryResponse(1L, 3000000, null, "KRW"));
-        assertThat(result.get(1)).isEqualTo(new CardPriceSummaryResponse(2L, null, 2000000, "KRW"));
-        assertThat(result.get(2)).isEqualTo(new CardPriceSummaryResponse(3L, null, null, "KRW"));
+        assertThat(result.get(0)).isEqualTo(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW"));
+        assertThat(result.get(1)).isEqualTo(new CardPriceSummaryResponse(2L, null, 2000000, null, "KRW"));
+        assertThat(result.get(2)).isEqualTo(new CardPriceSummaryResponse(3L, null, null, null, "KRW"));
     }
 
     @Test
     @DisplayName("t6 cardIds가 비어 있으면 INVALID_INPUT 예외가 발생한다")
     void t6() {
-        assertThatThrownBy(() -> priceService.getSummaries(List.of(), null))
+        assertThatThrownBy(() -> priceService.getSummaries(List.of(), null, false))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -148,7 +148,7 @@ class PriceServiceTest {
     void t7() {
         List<Long> tooMany = java.util.stream.LongStream.rangeClosed(1, 101).boxed().toList();
 
-        assertThatThrownBy(() -> priceService.getSummaries(tooMany, null))
+        assertThatThrownBy(() -> priceService.getSummaries(tooMany, null, false))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -243,9 +243,9 @@ class PriceServiceTest {
         given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
                 .willReturn(List.of());
 
-        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.S);
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.S, false);
 
-        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, 3000000, null, "KRW"));
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW"));
     }
 
     @Test
@@ -258,9 +258,42 @@ class PriceServiceTest {
         given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
                 .willReturn(List.of());
 
-        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.A);
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.A, false);
 
-        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, null, null, "KRW"));
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, null, null, null, "KRW"));
+    }
+
+    @Test
+    @DisplayName("t15 includeRecentTradePrice가 true면 최근 체결가를 함께 반환한다")
+    void t15() {
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L)))
+                .willReturn(List.of(primaryVariantIdView(1L, 10L)));
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L), ListingStatus.ACTIVE, null))
+                .willReturn(List.of());
+        given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
+                .willReturn(List.of());
+        given(priceTradeStatsRepository.findRecentCompletedTradePricesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(cardPriceView(1L, 2950000)));
+
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), null, true);
+
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, null, null, 2950000, "KRW"));
+    }
+
+    @Test
+    @DisplayName("t16 includeRecentTradePrice가 false면 최근 체결가 조회를 하지 않는다")
+    void t16() {
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L)))
+                .willReturn(List.of(primaryVariantIdView(1L, 10L)));
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L), ListingStatus.ACTIVE, null))
+                .willReturn(List.of(listingPriceView(10L, 3000000)));
+        given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
+                .willReturn(List.of());
+
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), null, false);
+
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW"));
+        verify(priceTradeStatsRepository, never()).findRecentCompletedTradePricesByCardIds(any(), any(), any());
     }
 
     private CardVariantRepository.PrimaryVariantIdView primaryVariantIdView(Long cardId, Long variantId) {
@@ -296,6 +329,20 @@ class PriceServiceTest {
             @Override
             public Long getVariantId() {
                 return variantId;
+            }
+
+            @Override
+            public Integer getPrice() {
+                return price;
+            }
+        };
+    }
+
+    private PriceTradeStatsRepository.CardPriceView cardPriceView(Long cardId, Integer price) {
+        return new PriceTradeStatsRepository.CardPriceView() {
+            @Override
+            public Long getCardId() {
+                return cardId;
             }
 
             @Override
