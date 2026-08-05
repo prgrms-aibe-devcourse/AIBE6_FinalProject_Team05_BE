@@ -39,9 +39,12 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
                                              @Param("status") ListingStatus status);
     
     @Query("SELECT l.variantId AS variantId, MIN(l.price) AS price FROM Listing l "
-            + "WHERE l.variantId IN :variantIds AND l.status = :status GROUP BY l.variantId")
+            + "WHERE l.variantId IN :variantIds AND l.status = :status "
+            + "AND (:grade IS NULL OR l.grade = :grade) "
+            + "GROUP BY l.variantId")
     List<VariantPriceView> findLowestActivePricesByVariantIds(@Param("variantIds") List<Long> variantIds,
-                                                               @Param("status") ListingStatus status);
+                                                               @Param("status") ListingStatus status,
+                                                               @Param("grade") ListingGrade grade);
 
     interface VariantPriceView {
         Long getVariantId();
