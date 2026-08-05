@@ -22,18 +22,23 @@ public class RedisVerificationCodeStore implements VerificationCodeStore {
             "local c = redis.call('INCR', KEYS[1]) " +
                     "if c == 1 or redis.call('TTL', KEYS[1]) == -1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end " +
                     "return c", Long.class);
+    private static final RedisScript<Long> SAVE_WITH_COOLDOWN = RedisScript.of(
+            "if redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[2]) then " +
+                    "  redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[3]) " +
+                    "  redis.call('DEL', KEYS[3]) " +
+                    "  return 1 " +
+                    "else return 0 end", Long.class);
+
     private final StringRedisTemplate redisTemplate;
 
     @Override
-    public boolean isRecentlySent(String email) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(COOLDOWN_KEY_PREFIX + email));
-    }
-
-    @Override
-    public void save(String email, String code) {
-        redisTemplate.opsForValue().set(CODE_KEY_PREFIX + email, code, CODE_TTL);
-        redisTemplate.opsForValue().set(COOLDOWN_KEY_PREFIX + email, "1", COOLDOWN_TTL);
-        redisTemplate.delete(ATTEMPT_KEY_PREFIX + email);
+    public boolean save(String email, String code) {
+        Long result = redisTemplate.execute(SAVE_WITH_COOLDOWN,
+                List.of(COOLDOWN_KEY_PREFIX + email, CODE_KEY_PREFIX + email, ATTEMPT_KEY_PREFIX + email),
+                code,
+                String.valueOf(COOLDOWN_TTL.getSeconds()),
+                String.valueOf(CODE_TTL.getSeconds()));
+        return result != null && result == 1L;
     }
 
     @Override
