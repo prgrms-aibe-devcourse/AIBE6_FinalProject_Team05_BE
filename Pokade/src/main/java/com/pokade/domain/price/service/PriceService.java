@@ -65,7 +65,8 @@ public class PriceService {
     }
 
     // N+1을 피하기 위한 배치 버전.
-    public List<CardPriceSummaryResponse> getSummaries(List<Long> cardIds, ListingGrade grade) {
+    public List<CardPriceSummaryResponse> getSummaries(List<Long> cardIds, ListingGrade grade,
+                                                         boolean includeRecentTradePrice) {
         if (cardIds == null || cardIds.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최소 1개 이상 필요합니다.");
         }
@@ -98,12 +99,22 @@ public class PriceService {
                                 BuyOfferRepository.VariantPriceView::getVariantId,
                                 BuyOfferRepository.VariantPriceView::getPrice));
 
+        // 참고용 표시값 - buyPrice의 매물 유무 신호는 그대로 유지하며, 요청 시에만 조회한다.
+        Map<Long, Integer> recentTradePriceByCard = !includeRecentTradePrice
+                ? Map.of()
+                : priceTradeStatsRepository
+                        .findRecentCompletedTradePricesByCardIds(distinctCardIds, grade, TradeStatus.COMPLETED).stream()
+                        .collect(Collectors.toMap(
+                                PriceTradeStatsRepository.CardPriceView::getCardId,
+                                PriceTradeStatsRepository.CardPriceView::getPrice));
+
         return distinctCardIds.stream()
                 .map(cardId -> {
                     Long variantId = primaryVariantByCard.get(cardId);
                     Integer buyPrice = variantId != null ? buyPriceByVariant.get(variantId) : null;
                     Integer sellPrice = variantId != null ? sellPriceByVariant.get(variantId) : null;
-                    return new CardPriceSummaryResponse(cardId, buyPrice, sellPrice, CURRENCY);
+                    Integer recentTradePrice = recentTradePriceByCard.get(cardId);
+                    return new CardPriceSummaryResponse(cardId, buyPrice, sellPrice, recentTradePrice, CURRENCY);
                 })
                 .toList();
     }
