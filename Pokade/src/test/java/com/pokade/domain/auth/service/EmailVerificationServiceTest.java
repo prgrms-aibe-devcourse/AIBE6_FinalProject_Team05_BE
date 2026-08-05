@@ -52,8 +52,8 @@ public class EmailVerificationServiceTest {
     void send_storesGeneratedCode() {
         String email = "user@pokade.com";
         given(userRepository.findByEmail(email)).willReturn(Optional.of(pendingUser(email)));
-        given(codeStore.isRecentlySent(email)).willReturn(false);
         given(codeGenerator.generate()).willReturn("123456");
+        given(codeStore.save(email, "123456")).willReturn(true);
 
         emailVerificationService.send(email);
 
@@ -61,18 +61,18 @@ public class EmailVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("60초 내 재요청이면 EMAIL_SEND_RATE_LIMITED 예외를 던지고 저장·생성하지 않는다")
-    void send_rejectsWhenRecentlySent() {
+    @DisplayName("쿨다운 선점 실패(동시 요청·60초 내 재요청)면 EMAIL_SEND_RATE_LIMITED 예외를 던지고 메일을 발송하지 않는다")
+    void send_rejectsWhenCooldownActive() {
         String email = "user@pokade.com";
         given(userRepository.findByEmail(email)).willReturn(Optional.of(pendingUser(email)));
-        given(codeStore.isRecentlySent(email)).willReturn(true);
+        given(codeGenerator.generate()).willReturn("123456");
+        given(codeStore.save(email, "123456")).willReturn(false);
 
         assertThatThrownBy(() -> emailVerificationService.send(email))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_SEND_RATE_LIMITED);
 
-        then(codeGenerator).should(never()).generate();
-        then(codeStore).should(never()).save(any(), any());
+        then(verificationMailSender).should(never()).sendCode(any(), any());
     }
 
     @Test
@@ -108,8 +108,8 @@ public class EmailVerificationServiceTest {
     void send_sendsVerificationEmail() {
         String email = "user@pokade.com";
         given(userRepository.findByEmail(email)).willReturn(Optional.of(pendingUser(email)));
-        given(codeStore.isRecentlySent(email)).willReturn(false);
         given(codeGenerator.generate()).willReturn("123456");
+        given(codeStore.save(email, "123456")).willReturn(true);
 
         emailVerificationService.send(email);
 

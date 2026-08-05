@@ -33,14 +33,12 @@ public class RedisVerificationCodeStoreTest {
     RedisVerificationCodeStore store;
 
     @Test
-    @DisplayName("save하면 isRecentlySent가 true, 저장 전엔 false")
-    void isRecentlySent_reflectsSave() {
+    @DisplayName("save는 최초 호출 시 쿨다운을 선점해 true, 쿨다운 중 재호출은 false를 반환한다")
+    void save_acquiresCooldownOnce() {
         String email = "user@pokade.com";
-        assertThat(store.isRecentlySent(email)).isFalse();
+        assertThat(store.save(email, "123456")).isTrue();
 
-        store.save(email, "123456");
-
-        assertThat(store.isRecentlySent(email)).isTrue();
+        assertThat(store.save(email, "654321")).isFalse();
     }
 
     @Test
