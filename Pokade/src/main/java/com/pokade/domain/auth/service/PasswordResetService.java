@@ -35,12 +35,10 @@ public class PasswordResetService {
             throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
 
-        if ( codeStore.isRecentlySent(email) ) {
+        String code = codeGenerator.generate();
+        if (!codeStore.save(email, code)) {
             throw new BusinessException(ErrorCode.EMAIL_SEND_RATE_LIMITED);
         }
-
-        String code = codeGenerator.generate();
-        codeStore.save(email, code);
         verificationMailSender.sendResetCode(email, code);
     }
 

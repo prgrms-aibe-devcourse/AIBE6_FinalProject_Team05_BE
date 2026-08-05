@@ -23,14 +23,16 @@ public class PasswordResetCodeStore {
                     "return c", Long.class);
     private final StringRedisTemplate redisTemplate;
 
-    public boolean isRecentlySent(String email) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(COOLDOWN_KEY_PREFIX + email));
-    }
-
-    public void save(String email, String code) {
+    public boolean save(String email, String code) {
+        // 쿨다운 키를 원자적으로 선점 (없을 때만 성공)
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(COOLDOWN_KEY_PREFIX + email, "1", COOLDOWN_TTL);
+        if (!Boolean.TRUE.equals(acquired)) {
+            return false;   // 이미 쿨다운 중 → 선점 실패
+        }
         redisTemplate.opsForValue().set(CODE_KEY_PREFIX + email, code, CODE_TTL);
-        redisTemplate.opsForValue().set(COOLDOWN_KEY_PREFIX + email, "1", COOLDOWN_TTL);
         redisTemplate.delete(ATTEMPT_KEY_PREFIX + email);
+        return true;
     }
 
     public Optional<String> find(String email) {
