@@ -1,4 +1,4 @@
-package com.pokade.domain.auth.service;
+package com.pokade.domain.auth.store;
 
 public interface RefreshTokenStore {
     void save(Long userId, String refreshToken);

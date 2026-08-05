@@ -1,4 +1,4 @@
-package com.pokade.domain.auth.service;
+package com.pokade.domain.auth.support;
 
 import com.pokade.global.infra.mail.MailSender;
 import lombok.RequiredArgsConstructor;

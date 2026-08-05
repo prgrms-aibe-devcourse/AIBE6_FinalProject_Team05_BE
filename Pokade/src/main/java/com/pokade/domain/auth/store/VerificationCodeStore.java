@@ -1,4 +1,4 @@
-package com.pokade.domain.auth.service;
+package com.pokade.domain.auth.store;
 
 import java.util.Optional;
 

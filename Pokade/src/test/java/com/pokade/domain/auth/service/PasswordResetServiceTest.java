@@ -1,5 +1,8 @@
 package com.pokade.domain.auth.service;
 
+import com.pokade.domain.auth.store.PasswordResetCodeStore;
+import com.pokade.domain.auth.support.VerificationCodeGenerator;
+import com.pokade.domain.auth.support.VerificationMailSender;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.UserStatus;
@@ -27,9 +30,12 @@ import static org.mockito.Mockito.never;
 public class PasswordResetServiceTest {
 
     @Mock UserRepository userRepository;
-    @Mock PasswordResetCodeStore codeStore;
-    @Mock VerificationCodeGenerator codeGenerator;
-    @Mock VerificationMailSender verificationMailSender;
+    @Mock
+    PasswordResetCodeStore codeStore;
+    @Mock
+    VerificationCodeGenerator codeGenerator;
+    @Mock
+    VerificationMailSender verificationMailSender;
     @Mock PasswordEncoder passwordEncoder;
     @InjectMocks PasswordResetService passwordResetService;
 
