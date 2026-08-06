@@ -1,6 +1,7 @@
 package com.pokade.domain.user.dto.response;
 
 import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 
@@ -11,7 +12,8 @@ public record UserResponse(
         Role role,
         UserStatus status,
         String profileImageUrl,
-        Integer pointBalance
+        Integer pointBalance,
+        Provider provider
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(
@@ -21,7 +23,8 @@ public record UserResponse(
                 user.getRole(),
                 user.getStatus(),
                 user.getProfileImageUrl(),
-                user.getPointBalance()
+                user.getPointBalance(),
+                user.getProvider()
         );
     }
 }
