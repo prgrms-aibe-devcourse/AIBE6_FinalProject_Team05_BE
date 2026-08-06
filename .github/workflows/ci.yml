@@ -21,7 +21,5 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # 테스트는 실행하지 않는다 — 일부 통합테스트가 로컬 PostgreSQL을 전제로 작성돼 있어
-      # CI 환경에서 재현되지 않는다. 컴파일·패키징 성공 여부만 게이트로 사용한다.
       - name: Build
         run: ./gradlew clean build -x test
