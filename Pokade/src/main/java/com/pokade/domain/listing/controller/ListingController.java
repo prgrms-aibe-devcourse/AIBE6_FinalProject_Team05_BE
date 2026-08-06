@@ -11,8 +11,6 @@ import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.service.ListingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,17 +32,16 @@ public class ListingController {
     private final ListingService listingService;
 
     @PostMapping
-    public ResponseEntity<ListingResponse> createListing(
+    public ApiResponse<ListingResponse> createListing(
             @AuthenticationPrincipal Long sellerId,
             @Valid @RequestBody ListingCreateRequest request
     ) {
-        ListingResponse response = listingService.createListing(sellerId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ApiResponse.ok("매물이 등록되었습니다.", listingService.createListing(sellerId, request));
     }
 
     @GetMapping
-    public ResponseEntity<List<ListingSummaryResponse>> getActiveListings(@RequestParam Long cardId) {
-        return ResponseEntity.ok(listingService.getActiveListings(cardId));
+    public ApiResponse<List<ListingSummaryResponse>> getActiveListings(@RequestParam Long cardId) {
+        return ApiResponse.ok(listingService.getActiveListings(cardId));
     }
 
     @GetMapping("/{cardId}/orderbook")
@@ -57,28 +54,28 @@ public class ListingController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<List<ListingSummaryResponse>> getMyListings(
+    public ApiResponse<List<ListingSummaryResponse>> getMyListings(
             @AuthenticationPrincipal Long sellerId,
             @RequestParam(required = false) ListingStatus status
     ) {
-        return ResponseEntity.ok(listingService.getMyListings(sellerId, status));
+        return ApiResponse.ok(listingService.getMyListings(sellerId, status));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ListingResponse> updateListing(
+    public ApiResponse<ListingResponse> updateListing(
             @AuthenticationPrincipal Long sellerId,
             @PathVariable Long id,
             @Valid @RequestBody ListingUpdateRequest request
     ) {
-        return ResponseEntity.ok(listingService.updatePrice(sellerId, id, request));
+        return ApiResponse.ok("매물 가격이 수정되었습니다.", listingService.updatePrice(sellerId, id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteListing(
+    public ApiResponse<Void> deleteListing(
             @AuthenticationPrincipal Long sellerId,
             @PathVariable Long id
     ) {
         listingService.deleteListing(sellerId, id);
-        return ResponseEntity.noContent().build();
+        return ApiResponse.ok("매물이 삭제되었습니다.");
     }
 }
