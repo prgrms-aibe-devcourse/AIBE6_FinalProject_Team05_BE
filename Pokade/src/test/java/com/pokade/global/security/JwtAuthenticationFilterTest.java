@@ -26,7 +26,8 @@ class JwtAuthenticationFilterTest {
 
     private final JwtTokenProvider jwtTokenProvider =
             new JwtTokenProvider(new JwtProperties(SECRET, Duration.ofMinutes(30), Duration.ofDays(14)));
-    private final JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider);
+    private final TokenBlacklistStore tokenBlacklistStore = mock(TokenBlacklistStore.class);
+    private final JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider, tokenBlacklistStore);
 
     @AfterEach
     void clearContext() {
