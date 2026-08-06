@@ -45,4 +45,10 @@ public class UserController {
         withdrawalService.requestWithdrawal(userId, request.password());
         return ApiResponse.ok("탈퇴 신청이 접수되었습니다.");
     }
+
+    @PostMapping("/me/withdrawal/cancel")
+    public ApiResponse<Void> cancelWithdrawal(@AuthenticationPrincipal Long userId) {
+        withdrawalService.cancelWithdrawal(userId);
+        return ApiResponse.ok("탈퇴 신청이 철회되었습니다.");
+    }
 }

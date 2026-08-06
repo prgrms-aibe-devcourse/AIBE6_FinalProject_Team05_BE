@@ -3,6 +3,7 @@ package com.pokade.domain.user.service;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.global.event.UserWithdrawalCancelledEvent;
 import com.pokade.global.event.UserWithdrawalRequestedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
@@ -38,5 +39,19 @@ public class WithdrawalService {
 
         user.requestWithdrawal(LocalDateTime.now());
         eventPublisher.publishEvent(new UserWithdrawalRequestedEvent(userId));
+    }
+
+    // 탈최 신청을 철회한다(유예 상태에서만, 활성 복구 + 이벤트 발생)
+    @Transactional
+    public void cancelWithdrawal(Long userUd) {
+        User user = userRepository.findById(userUd)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getStatus() != UserStatus.WITHDRAWAL_PENDING) {
+            throw new BusinessException(ErrorCode.NOT_WITHDRAWAL_PENDING);
+        }
+
+        user.cancelWithdrawal(LocalDateTime.now());
+        eventPublisher.publishEvent(new UserWithdrawalCancelledEvent(userUd));
     }
 }

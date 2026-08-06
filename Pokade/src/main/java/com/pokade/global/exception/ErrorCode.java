@@ -32,10 +32,10 @@ public enum ErrorCode {
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 일치하지 않습니다."),
-    LOGIN_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS,"로그인 시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
+    LOGIN_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 리프레시 토큰입니다."),
     TOKEN_STOLEN(HttpStatus.UNAUTHORIZED, "비정상적인 접근이 감지되어 로그아웃되었습니다."),
-    EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN,"이메일 인증이 완료되지 않았습니다."),
+    EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 완료되지 않았습니다."),
     EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "이미 인증이 완료된 계정입니다."),
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "인증 코드 발송에 실패했습니다."),
     EMAIL_SEND_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "잠시 후 다시 시도해주세요."),
@@ -50,6 +50,10 @@ public enum ErrorCode {
 
     // ===== 회원 탈퇴 =====
     WITHDRAWAL_NOT_ALLOWED(HttpStatus.CONFLICT, "현재 상태에서는 탈퇴 신청을 할 수 없습니다."),
+    NOT_WITHDRAWAL_PENDING(HttpStatus.CONFLICT, "탈퇴 진행 중인 계정이 아닙니다."),
+
+    // ===== 회원 정지 =====
+    ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 계정입니다. 고객센터에 문의해주세요."),
 
     // ===== AI 등급 진단 =====
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다."),

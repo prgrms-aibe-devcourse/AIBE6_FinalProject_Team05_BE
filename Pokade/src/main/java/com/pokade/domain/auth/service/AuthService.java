@@ -71,8 +71,13 @@ public class AuthService {
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
 
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED); // 미인증은 실패로 안 셈
+        switch (user.getStatus()) {
+            case PENDING -> throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
+            case SUSPENDED -> throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+            case DELETED -> throw new BusinessException(ErrorCode.LOGIN_FAILED);
+            case ACTIVE, WITHDRAWAL_PENDING -> {
+                // 로그인 허용
+            }
         }
 
         loginAttemptStore.reset(email); // 로그인 성공 시 실패 기록 초기화
