@@ -145,8 +145,9 @@ class CardRateLimitFilterTest {
         }
         assertThat(filter.bucketCountForTest()).isEqualTo(5);
 
-        Thread.sleep(50);
-        filter.evictIdleEntriesForTest(10);
+        // Long.MIN_VALUE 임계값을 주면 "경과 시간 > 임계값"이 실제 경과 시간(0이어도)과 무관하게
+        // 항상 참이 되어, 실제로 시간이 흐르길 기다리지 않고도 유휴 판정 로직을 결정론적으로 검증할 수 있다.
+        filter.evictIdleEntriesForTest(Long.MIN_VALUE);
 
         assertThat(filter.bucketCountForTest()).isEqualTo(0);
     }

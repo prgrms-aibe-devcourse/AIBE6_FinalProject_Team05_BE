@@ -62,7 +62,7 @@ class TradeControllerTest {
     }
 
     @Test
-    void 즉시구매에_성공하면_201과_생성된_거래를_반환한다() throws Exception {
+    void 즉시구매에_성공하면_200과_생성된_거래를_반환한다() throws Exception {
         TradeCreateRequest request = new TradeCreateRequest(1L);
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
@@ -75,10 +75,10 @@ class TradeControllerTest {
                         .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1L))
-                .andExpect(jsonPath("$.buyerId").value(200L))
-                .andExpect(jsonPath("$.status").value("PENDING"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.buyerId").value(200L))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
     }
 
     @Test
@@ -149,9 +149,9 @@ class TradeControllerTest {
         mockMvc.perform(get("/api/trades/{id}", 1L)
                         .with(userId(200L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1L))
-                .andExpect(jsonPath("$.buyerId").value(200L))
-                .andExpect(jsonPath("$.status").value("PENDING"));
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.buyerId").value(200L))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
     }
 
     @Test
@@ -187,7 +187,7 @@ class TradeControllerTest {
         mockMvc.perform(patch("/api/trades/{id}/confirm", 1L)
                         .with(userId(200L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("COMPLETED"));
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
     }
 
     @Test
@@ -234,7 +234,7 @@ class TradeControllerTest {
         mockMvc.perform(patch("/api/trades/{id}/cancel", 1L)
                         .with(userId(200L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CANCELLED"));
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
     }
 
     @Test
@@ -248,7 +248,7 @@ class TradeControllerTest {
         mockMvc.perform(patch("/api/trades/{id}/cancel", 1L)
                         .with(userId(100L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CANCELLED"));
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
     }
 
     @Test

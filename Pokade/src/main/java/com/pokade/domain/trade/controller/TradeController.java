@@ -3,10 +3,9 @@ package com.pokade.domain.trade.controller;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.service.TradeService;
+import com.pokade.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -24,35 +23,34 @@ public class TradeController {
     private final TradeService tradeService;
 
     @PostMapping
-    public ResponseEntity<TradeResponse> createTrade(
+    public ApiResponse<TradeResponse> createTrade(
             @AuthenticationPrincipal Long buyerId,
             @Valid @RequestBody TradeCreateRequest request
     ) {
-        TradeResponse response = tradeService.createTrade(buyerId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ApiResponse.ok("구매 요청이 접수되었습니다.", tradeService.createTrade(buyerId, request));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<TradeResponse> getTrade(
+    public ApiResponse<TradeResponse> getTrade(
             @AuthenticationPrincipal Long userId,
             @PathVariable Long id
     ) {
-        return ResponseEntity.ok(tradeService.getTrade(userId, id));
+        return ApiResponse.ok(tradeService.getTrade(userId, id));
     }
 
     @PatchMapping("/{id}/confirm")
-    public ResponseEntity<TradeResponse> confirmTrade(
+    public ApiResponse<TradeResponse> confirmTrade(
             @AuthenticationPrincipal Long buyerId,
             @PathVariable Long id
     ) {
-        return ResponseEntity.ok(tradeService.confirmTrade(buyerId, id));
+        return ApiResponse.ok("구매가 확정되었습니다.", tradeService.confirmTrade(buyerId, id));
     }
 
     @PatchMapping("/{id}/cancel")
-    public ResponseEntity<TradeResponse> cancelTrade(
+    public ApiResponse<TradeResponse> cancelTrade(
             @AuthenticationPrincipal Long userId,
             @PathVariable Long id
     ) {
-        return ResponseEntity.ok(tradeService.cancelTrade(userId, id));
+        return ApiResponse.ok("거래가 취소되었습니다.", tradeService.cancelTrade(userId, id));
     }
 }

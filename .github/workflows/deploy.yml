@@ -37,6 +37,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          envs: OPENAI_API_KEY
           script: |
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull ghcr.io/${{ github.repository_owner }}/pokade-backend:latest
@@ -44,5 +45,8 @@ jobs:
             docker rm pokade-app || true
             docker run -d --name pokade-app --network host --restart unless-stopped \
               --env-file ~/AIBE6_FinalProject_Team05_BE/Pokade/.env \
-              -e SPRING_PROFILES_ACTIVE=dev \
+              -e SPRING_PROFILES_ACTIVE=prod \
+              -e OPENAI_API_KEY="$OPENAI_API_KEY" \
               ghcr.io/${{ github.repository_owner }}/pokade-backend:latest
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
