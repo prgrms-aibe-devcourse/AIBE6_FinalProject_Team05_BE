@@ -247,34 +247,31 @@ class PriceControllerTest {
     @Test
     void 급등_랭킹을_조회하면_200과_변동률_상위_목록을_반환한다() throws Exception {
         List<PriceRankingResponse> ranking = List.of(
-                new PriceRankingResponse(11L, "Mega Lucario ex", "img-11", "10", "PSA",
-                        new BigDecimal("51.20"), "USD", new BigDecimal("8.47")),
-                new PriceRankingResponse(1L, "Charizard", "img-1", "10", "PSA",
-                        new BigDecimal("2567.88"), "USD", new BigDecimal("4.55"))
+                new PriceRankingResponse(2L, "Charizard-GX", "img-2", 340000L, new BigDecimal("13.33"), 40000L),
+                new PriceRankingResponse(1L, "Blastoise", "img-1", 900000L, new BigDecimal("12.5"), 100000L)
         );
         given(priceService.getRanking("rise")).willReturn(ranking);
 
         mockMvc.perform(get("/api/prices/ranking").param("type", "rise"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(2))
-                .andExpect(jsonPath("$.data[0].cardName").value("Mega Lucario ex"))
-                .andExpect(jsonPath("$.data[0].changeRate").value(8.47))
-                .andExpect(jsonPath("$.data[1].cardName").value("Charizard"));
+                .andExpect(jsonPath("$.data[0].cardName").value("Charizard-GX"))
+                .andExpect(jsonPath("$.data[0].changeRate").value(13.33))
+                .andExpect(jsonPath("$.data[1].cardName").value("Blastoise"));
     }
 
     @Test
     void 급락_랭킹을_조회하면_200과_변동률_하위_목록을_반환한다() throws Exception {
         List<PriceRankingResponse> ranking = List.of(
-                new PriceRankingResponse(8L, "Alakazam GX", "img-8", "10", "PSA",
-                        new BigDecimal("27.40"), "USD", new BigDecimal("-1.08"))
+                new PriceRankingResponse(4L, "Charizard ex", "img-4", 430000L, new BigDecimal("-14"), -70000L)
         );
         given(priceService.getRanking("fall")).willReturn(ranking);
 
         mockMvc.perform(get("/api/prices/ranking").param("type", "fall"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].cardName").value("Alakazam GX"))
-                .andExpect(jsonPath("$.data[0].changeRate").value(-1.08));
+                .andExpect(jsonPath("$.data[0].cardName").value("Charizard ex"))
+                .andExpect(jsonPath("$.data[0].changeRate").value(-14));
     }
 
     @Test
