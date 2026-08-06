@@ -2,6 +2,7 @@ package com.pokade.domain.price.controller;
 
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
@@ -59,5 +60,10 @@ public class PriceController {
             @RequestParam(required = false) Long variantId
     ) {
         return ApiResponse.ok(priceService.getStats(cardId, variantId));
+    }
+
+    @GetMapping("/ranking")
+    public ApiResponse<List<PriceRankingResponse>> getRanking(@RequestParam String type) {
+        return ApiResponse.ok(priceService.getRanking(type));
     }
 }

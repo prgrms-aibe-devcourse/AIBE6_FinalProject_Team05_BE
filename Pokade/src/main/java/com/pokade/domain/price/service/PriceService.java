@@ -6,11 +6,15 @@ import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.price.ChartPeriod;
+import com.pokade.domain.price.RankingType;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
+import com.pokade.domain.price.entity.CardPrice;
 import com.pokade.domain.price.repository.BuyOfferRepository;
+import com.pokade.domain.price.repository.CardPriceRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.domain.trade.entity.TradeStatus;
@@ -18,6 +22,7 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +43,7 @@ public class PriceService {
     private static final int MAX_SUMMARIES_BATCH_SIZE = 100;
     private static final int STATS_PERIOD_DAYS = 7;
     private static final ListingGrade STATS_GRADE = ListingGrade.S;
+    private static final int RANKING_LIMIT = 10;
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
@@ -45,6 +51,7 @@ public class PriceService {
     private final BuyOfferRepository buyOfferRepository;
     private final TradeRepository tradeRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
+    private final CardPriceRepository cardPriceRepository;
 
     public PriceSummaryResponse getSummary(Long cardId, Long variantId) {
         if (!cardRepository.existsById(cardId)) {
@@ -182,5 +189,19 @@ public class PriceService {
         long changeAmount = diff.setScale(0, RoundingMode.HALF_UP).longValue();
 
         return new PriceStatsResponse(changeRate, changeAmount, volume);
+    }
+
+    // FR-PRICE-06: card_prices.change_7d_pct(Scrydex 동기화 배치가 채우는 값)를 그대로 정렬해 상위 10건을 보여준다.
+    // 카드 단위로 묶지 않고 card_prices 전체 행(variant/grade/company 조합) 중 변동률 상위 10건을 그대로 노출한다.
+    // 동기화 배치가 아직 안 돌아 change_7d_pct가 전부 NULL이면 자연스럽게 빈 목록이 된다.
+    public List<PriceRankingResponse> getRanking(String type) {
+        RankingType rankingType = RankingType.from(type);
+        Pageable topTen = PageRequest.of(0, RANKING_LIMIT);
+
+        List<CardPrice> rows = rankingType == RankingType.RISE
+                ? cardPriceRepository.findTopRising(topTen)
+                : cardPriceRepository.findTopFalling(topTen);
+
+        return rows.stream().map(PriceRankingResponse::of).toList();
     }
 }
