@@ -65,11 +65,15 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // CORS 설정 — 프론트(localhost:3000)의 인증정보 포함 요청 허용
+    // CORS 설정 — 프론트(로컬 개발 서버 + 운영 도메인)의 인증정보 포함 요청 허용
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:3000",
+                "https://www.pokade.store",
+                "https://pokade.store"
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
