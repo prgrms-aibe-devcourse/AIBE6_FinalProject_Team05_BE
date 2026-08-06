@@ -2,8 +2,10 @@ package com.pokade.domain.user.controller;
 
 import com.pokade.domain.user.dto.request.NicknameUpdateRequest;
 import com.pokade.domain.user.dto.request.PasswordUpdateRequest;
+import com.pokade.domain.user.dto.request.WithdrawalRequest;
 import com.pokade.domain.user.dto.response.UserResponse;
 import com.pokade.domain.user.service.UserService;
+import com.pokade.domain.user.service.WithdrawalService;
 import com.pokade.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final WithdrawalService withdrawalService;
 
     @GetMapping("/me")
     public ApiResponse<UserResponse> getMyInfo(@AuthenticationPrincipal Long userId) {
@@ -34,5 +37,12 @@ public class UserController {
                                             @Valid @RequestBody PasswordUpdateRequest request) {
         userService.changePassword(userId, request.currentPassword(), request.newPassword());
         return ApiResponse.ok("비밀번호가 변경되었습니다.");
+    }
+
+    @DeleteMapping("/me")
+    public ApiResponse<Void> requestWithdrawal(@AuthenticationPrincipal Long userId,
+                                               @Valid @RequestBody WithdrawalRequest request) {
+        withdrawalService.requestWithdrawal(userId, request.password());
+        return ApiResponse.ok("탈퇴 신청이 접수되었습니다.");
     }
 }

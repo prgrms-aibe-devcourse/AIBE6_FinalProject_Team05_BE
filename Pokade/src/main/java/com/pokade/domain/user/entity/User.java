@@ -67,6 +67,9 @@ public class User {
     @Column(name = "deleted_at")
     private LocalDateTime deleted_At;
 
+    @Column(name = "withdrawal_requested_at")
+    private LocalDateTime withdrawalRequestedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime created_At;
@@ -114,6 +117,18 @@ public class User {
     // 비밀번호를 변경한다 (인코딩된 값)
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    // 탈퇴를 신청한다 (유예 상태로 전환하고 신청 시각을 기록)
+    public void requestWithdrawal(LocalDateTime now) {
+        this.status = UserStatus.WITHDRAWAL_PENDING;
+        this.withdrawalRequestedAt = now;
+    }
+
+    // 탈퇴 신청을 철회한다 (활성 상태로 복구)
+    public void cancelWithdrawal(LocalDateTime now) {
+        this.status = UserStatus.ACTIVE;
+        this.withdrawalRequestedAt = null;
     }
 
 }

@@ -48,6 +48,9 @@ public enum ErrorCode {
     INVALID_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),
     PASSWORD_CHANGE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "소셜 로그인 계정은 비밀번호를 변경할 수 없습니다."),
 
+    // ===== 회원 탈퇴 =====
+    WITHDRAWAL_NOT_ALLOWED(HttpStatus.CONFLICT, "현재 상태에서는 탈퇴 신청을 할 수 없습니다."),
+
     // ===== AI 등급 진단 =====
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다."),
 

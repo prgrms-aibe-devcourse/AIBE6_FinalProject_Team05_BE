@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS users (
     nickname_changed_at   TIMESTAMP,
     provider              VARCHAR(20) NOT NULL,                -- LOCAL / GOOGLE / KAKAO
     role                  VARCHAR(20) NOT NULL,                -- USER / ADMIN
-    status                VARCHAR(20) NOT NULL,                -- PENDING / ACTIVE / SUSPENDED / DELETED
+    status                VARCHAR(20) NOT NULL,                -- PENDING / ACTIVE / SUSPENDED / WITHDRAWAL_PENDING / DELETED
     profile_image_url     VARCHAR(255),
     birth_date            DATE,
     phone_number          VARCHAR(20),
@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS users (
     marketing_opt_in      BOOLEAN NOT NULL DEFAULT FALSE,      -- 선택 동의(마케팅 수신)
     point_balance         INTEGER NOT NULL DEFAULT 0,
     deleted_at            TIMESTAMP,
+    withdrawal_requested_at TIMESTAMP,
     created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
