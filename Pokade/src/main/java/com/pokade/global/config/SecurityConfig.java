@@ -65,7 +65,7 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // CORS 설정 — 프론트(로컬 개발 서버 + 운영 도메인)의 인증정보 포함 요청 허용
+    // CORS 설정 — 로컬 개발(localhost:3000) 및 Vercel 배포 프론트의 인증정보 포함 요청 허용
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
