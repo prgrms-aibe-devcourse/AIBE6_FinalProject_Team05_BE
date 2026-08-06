@@ -1,0 +1,76 @@
+name: Auto Promote develop to main
+
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# 여러 push가 겹칠 때 승격이 동시에 진행되지 않도록 직렬화 — 뒤늦게 끝난 이전 실행이
+# 이미 갱신된 develop을 병합하는 것을 막는다(아래 --match-head-commit과 함께 동작).
+concurrency:
+  group: auto-promote-to-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Pokade
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # 테스트는 실행하지 않는다 — 일부 통합테스트가 로컬 PostgreSQL을 전제로 작성돼 있어
+      # CI 환경에서 재현되지 않는다. 컴파일·패키징 성공 여부만 승격 게이트로 사용한다.
+      - name: Build
+        run: ./gradlew clean build -x test
+
+  # PROMOTE_TOKEN(PAT)을 쓰는 이유: GITHUB_TOKEN으로 병합하면 그로 인한 main push가
+  # 새 워크플로를 트리거하지 않아(GitHub의 재귀 방지 정책) deploy.yml이 돌지 않는다.
+  # PAT으로 병합해야 배포까지 이어진다.
+  promote:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PROMOTE_TOKEN
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "PROMOTE_TOKEN secret이 비어 있습니다. 승격을 중단합니다." >&2
+            exit 1
+          fi
+
+      - name: Create or update PR (develop -> main)
+        id: pr
+        run: |
+          EXISTING=$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            echo "number=$EXISTING" >> "$GITHUB_OUTPUT"
+          else
+            URL=$(gh pr create --base main --head develop \
+              --title "chore: develop → main 자동 배포 반영" \
+              --body "develop에 push된 변경사항을 main으로 자동 승격합니다. 빌드가 통과했으므로 자동 병합됩니다.")
+            NUMBER=$(echo "$URL" | grep -o '[0-9]*$')
+            echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --match-head-commit: PR HEAD가 이 워크플로가 빌드한 커밋과 다르면 병합을 거부한다.
+      # 그 사이 develop이 갱신됐다는 뜻이므로, 검증되지 않은 변경이 main에 들어가지 않도록 실패시킨다.
+      - name: Merge PR
+        run: |
+          gh pr merge ${{ steps.pr.outputs.number }} --merge \
+            --match-head-commit "${{ github.sha }}"

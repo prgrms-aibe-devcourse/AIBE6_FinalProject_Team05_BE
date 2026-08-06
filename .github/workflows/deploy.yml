@@ -38,6 +38,9 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           envs: OPENAI_API_KEY
+          # GHCR 로그인·이미지 pull이 실패하면 즉시 중단 — 새 이미지 없이 기존 컨테이너만
+          # 삭제되어 서비스가 내려가는 것을 막는다(기본값 false라 명시 필요).
+          script_stop: true
           script: |
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull ghcr.io/${{ github.repository_owner }}/pokade-backend:latest
