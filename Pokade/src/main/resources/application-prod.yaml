@@ -29,6 +29,18 @@ spring:
         options:
           model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
 
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 # 운영: refresh 쿠키 Secure 플래그 on (HTTPS 전송 강제) — dev는 기본값 false 유지
 app:
   cookie:
