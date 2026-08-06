@@ -2,6 +2,7 @@ package com.pokade.domain.price.controller;
 
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.service.PriceService;
@@ -241,5 +242,61 @@ class PriceControllerTest {
         mockMvc.perform(get("/api/prices/1/stats"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PRIMARY_VARIANT_NOT_FOUND"));
+    }
+
+    @Test
+    void 급등_랭킹을_조회하면_200과_변동률_상위_목록을_반환한다() throws Exception {
+        List<PriceRankingResponse> ranking = List.of(
+                new PriceRankingResponse(2L, "Charizard-GX", "img-2", 340000L, new BigDecimal("13.33"), 40000L),
+                new PriceRankingResponse(1L, "Blastoise", "img-1", 900000L, new BigDecimal("12.5"), 100000L)
+        );
+        given(priceService.getRanking("rise")).willReturn(ranking);
+
+        mockMvc.perform(get("/api/prices/ranking").param("type", "rise"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].cardName").value("Charizard-GX"))
+                .andExpect(jsonPath("$.data[0].changeRate").value(13.33))
+                .andExpect(jsonPath("$.data[1].cardName").value("Blastoise"));
+    }
+
+    @Test
+    void 급락_랭킹을_조회하면_200과_변동률_하위_목록을_반환한다() throws Exception {
+        List<PriceRankingResponse> ranking = List.of(
+                new PriceRankingResponse(4L, "Charizard ex", "img-4", 430000L, new BigDecimal("-14"), -70000L)
+        );
+        given(priceService.getRanking("fall")).willReturn(ranking);
+
+        mockMvc.perform(get("/api/prices/ranking").param("type", "fall"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].cardName").value("Charizard ex"))
+                .andExpect(jsonPath("$.data[0].changeRate").value(-14));
+    }
+
+    @Test
+    void 랭킹_조회시_배치_미실행_등으로_결과가_없으면_200과_빈_목록을_반환한다() throws Exception {
+        given(priceService.getRanking("rise")).willReturn(List.of());
+
+        mockMvc.perform(get("/api/prices/ranking").param("type", "rise"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void 랭킹_조회시_type_파라미터가_없으면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/prices/ranking"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 랭킹_조회시_잘못된_type_값이면_400을_반환한다() throws Exception {
+        given(priceService.getRanking("up"))
+                .willThrow(new BusinessException(ErrorCode.INVALID_RANKING_TYPE));
+
+        mockMvc.perform(get("/api/prices/ranking").param("type", "up"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_RANKING_TYPE"));
     }
 }

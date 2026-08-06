@@ -12,6 +12,7 @@ public enum ErrorCode {
     INVALID_TRADE_STATUS(HttpStatus.BAD_REQUEST, "현재 상태에서는 처리할 수 없는 거래입니다."),
     SELF_PURCHASE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인이 등록한 매물은 구매할 수 없습니다."),
     INVALID_PERIOD(HttpStatus.BAD_REQUEST, "잘못된 기간 값입니다."),
+    INVALID_RANKING_TYPE(HttpStatus.BAD_REQUEST, "잘못된 랭킹 타입입니다."),
 
     PAYMENT_FAILED(HttpStatus.PAYMENT_REQUIRED, "결제에 실패했습니다."),
 

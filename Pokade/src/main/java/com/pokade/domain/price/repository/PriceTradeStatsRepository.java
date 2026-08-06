@@ -54,4 +54,26 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
         Long getCardId();
         Integer getPrice();
     }
+
+    // 랭킹용: 카드별 "최근 블록" 평균가를 한 번에 조회 (거래가 있는 카드만 결과에 포함)
+    @Query("SELECT l.cardId AS cardId, AVG(t.price) AS avgPrice FROM Trade t JOIN t.listing l "
+            + "WHERE l.grade = :grade AND t.status = :status AND t.confirmedAt >= :from "
+            + "GROUP BY l.cardId")
+    List<CardAvgPriceView> findAveragePricesByGradeSince(@Param("grade") ListingGrade grade,
+                                                          @Param("status") TradeStatus status,
+                                                          @Param("from") LocalDateTime from);
+
+    // 랭킹용: 카드별 "이전 블록" 평균가를 한 번에 조회 ([from, to) 구간)
+    @Query("SELECT l.cardId AS cardId, AVG(t.price) AS avgPrice FROM Trade t JOIN t.listing l "
+            + "WHERE l.grade = :grade AND t.status = :status AND t.confirmedAt >= :from AND t.confirmedAt < :to "
+            + "GROUP BY l.cardId")
+    List<CardAvgPriceView> findAveragePricesByGradeBetween(@Param("grade") ListingGrade grade,
+                                                            @Param("status") TradeStatus status,
+                                                            @Param("from") LocalDateTime from,
+                                                            @Param("to") LocalDateTime to);
+
+    interface CardAvgPriceView {
+        Long getCardId();
+        Double getAvgPrice();
+    }
 }
