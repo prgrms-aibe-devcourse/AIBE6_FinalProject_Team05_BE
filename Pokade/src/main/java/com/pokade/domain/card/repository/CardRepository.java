@@ -21,6 +21,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     String SORT_NAME = "name";
     String SORT_POPULAR = "popular";
 
+    /** 카드 목록/연관 카드 조회의 기본 페이지 크기·상한 개수. */
+    int DEFAULT_PAGE_SIZE = 20;
+
     /**
      * sort 요청 파라미터 화이트리스트. 값은 아래 default search()의 if/else 디스패치에서
      * 어떤 @Query를 실행할지 고르는 키로만 쓰이고 SQL 문자열에 직접 삽입되지 않으므로
@@ -159,8 +162,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             WHERE c.id <> :id
             AND c.national_pokedex_numbers && src.national_pokedex_numbers
             ORDER BY c.name
-            LIMIT 20
-            """,
+            LIMIT """ + DEFAULT_PAGE_SIZE,
             nativeQuery = true)
     List<Card> findRelatedByPokedexNumber(@Param("id") Long id);
 
@@ -169,8 +171,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             WHERE c.id <> :excludeCardId
             AND c.expansion_id = :expansionId
             ORDER BY c.name
-            LIMIT 20
-            """,
+            LIMIT """ + DEFAULT_PAGE_SIZE,
             nativeQuery = true)
     List<Card> findRelatedByExpansion(@Param("expansionId") String expansionId, @Param("excludeCardId") Long excludeCardId);
 }

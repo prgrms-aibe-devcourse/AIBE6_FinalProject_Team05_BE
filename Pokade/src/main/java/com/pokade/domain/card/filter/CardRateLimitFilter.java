@@ -37,11 +37,14 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
     // bucketsByIp 무한 증가 방지용 유휴 만료 기준 — 이 시간 동안 요청이 없으면 정리 대상
     private static final Duration IDLE_TTL = Duration.ofMinutes(10);
     private static final Duration CLEANUP_INTERVAL = Duration.ofMinutes(5);
+    private static final String CLEANUP_THREAD_NAME = "card-rate-limit-cleanup";
+    private static final String FORWARDED_FOR_HEADER = "X-Forwarded-For";
+    private static final String JSON_CONTENT_TYPE = "application/json;charset=UTF-8";
 
     private final Map<String, BucketEntry> bucketsByIp = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "card-rate-limit-cleanup");
+        Thread thread = new Thread(runnable, CLEANUP_THREAD_NAME);
         thread.setDaemon(true);
         return thread;
     });
@@ -63,7 +66,7 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
         }
 
         response.setStatus(ErrorCode.CARD_RATE_LIMIT_EXCEEDED.getStatus().value());
-        response.setContentType("application/json;charset=UTF-8");
+        response.setContentType(JSON_CONTENT_TYPE);
         response.getWriter().write(objectMapper.writeValueAsString(ApiResponse.fail(ErrorCode.CARD_RATE_LIMIT_EXCEEDED)));
     }
 
@@ -80,7 +83,7 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
 
     private String resolveClientIp(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
-        String forwardedFor = request.getHeader("X-Forwarded-For");
+        String forwardedFor = request.getHeader(FORWARDED_FOR_HEADER);
         if (forwardedFor != null && !forwardedFor.isBlank() && isTrustedProxy(remoteAddr)) {
             return forwardedFor.split(",")[0].trim();
         }
