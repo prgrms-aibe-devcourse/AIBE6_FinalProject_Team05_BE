@@ -36,7 +36,7 @@ public interface CardVariantRepository extends JpaRepository<CardVariant, Long> 
             FROM listings l
             LEFT JOIN card_variants cv ON cv.card_id = l.card_id AND cv.is_primary = true
             WHERE l.card_id = :cardId
-              AND l.status = 'ACTIVE'
+              AND l.status = '""" + CardRepository.LISTING_STATUS_ACTIVE + "'" + """
               AND l.grade IN (:validGrades)
               AND COALESCE(l.variant_id, cv.id) IS NOT NULL
             """,

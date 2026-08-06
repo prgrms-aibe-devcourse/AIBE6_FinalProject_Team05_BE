@@ -25,6 +25,15 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     int DEFAULT_PAGE_SIZE = 20;
 
     /**
+     * listings.status가 ACTIVE(매물 도메인 {@code com.pokade.domain.listing.entity.ListingStatus.ACTIVE})인
+     * 매물만 조회할 때 쓰는 네이티브 쿼리 리터럴. status 컬럼은 {@code @Enumerated(EnumType.STRING)}이라
+     * "ACTIVE"라는 문자열이 실제 저장값과 같지만, 이 상수는 그 값을 그대로 베낀 것일 뿐 enum과 타입으로
+     * 연결되어 있지 않다. 따라서 ListingStatus.ACTIVE의 이름이 바뀌면 컴파일 에러 없이 이 값만 조용히
+     * 어긋날 수 있다 — 상수화가 그 위험 자체를 없애주지는 않는다.
+     */
+    String LISTING_STATUS_ACTIVE = "ACTIVE";
+
+    /**
      * sort 요청 파라미터 화이트리스트. 값은 아래 default search()의 if/else 디스패치에서
      * 어떤 @Query를 실행할지 고르는 키로만 쓰이고 SQL 문자열에 직접 삽입되지 않으므로
      * (고정된 세 개의 @Query 중 택일), 인젝션 여지가 없다.
@@ -40,7 +49,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
             (:hasPrice = false OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE'
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
                 AND (:minPrice IS NULL OR l.price >= :minPrice)
                 AND (:maxPrice IS NULL OR l.price <= :maxPrice)
             )) AND
@@ -53,7 +62,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
             (:hasPrice = false OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = 'ACTIVE'
+                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
                 AND (:minPrice IS NULL OR l.price >= :minPrice)
                 AND (:maxPrice IS NULL OR l.price <= :maxPrice)
             )) AND
@@ -112,7 +121,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT DISTINCT l.card_id AS cardId, l.grade AS grade
             FROM listings l
             WHERE l.card_id IN (:cardIds)
-              AND l.status = 'ACTIVE'
+              AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
               AND l.grade IN (:validGrades)
             """,
             nativeQuery = true)
@@ -162,7 +171,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             WHERE c.id <> :id
             AND c.national_pokedex_numbers && src.national_pokedex_numbers
             ORDER BY c.name
-            LIMIT """ + DEFAULT_PAGE_SIZE,
+            LIMIT\s""" + DEFAULT_PAGE_SIZE,
             nativeQuery = true)
     List<Card> findRelatedByPokedexNumber(@Param("id") Long id);
 
@@ -171,7 +180,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             WHERE c.id <> :excludeCardId
             AND c.expansion_id = :expansionId
             ORDER BY c.name
-            LIMIT """ + DEFAULT_PAGE_SIZE,
+            LIMIT\s""" + DEFAULT_PAGE_SIZE,
             nativeQuery = true)
     List<Card> findRelatedByExpansion(@Param("expansionId") String expansionId, @Param("excludeCardId") Long excludeCardId);
 }
