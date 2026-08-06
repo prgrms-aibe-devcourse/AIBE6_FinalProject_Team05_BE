@@ -41,17 +41,17 @@ public class WithdrawalService {
         eventPublisher.publishEvent(new UserWithdrawalRequestedEvent(userId));
     }
 
-    // 탈최 신청을 철회한다(유예 상태에서만, 활성 복구 + 이벤트 발생)
+    // 탈퇴 신청을 철회한다(유예 상태에서만, 활성 복구 + 이벤트 발생)
     @Transactional
-    public void cancelWithdrawal(Long userUd) {
-        User user = userRepository.findById(userUd)
+    public void cancelWithdrawal(Long userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         if (user.getStatus() != UserStatus.WITHDRAWAL_PENDING) {
             throw new BusinessException(ErrorCode.NOT_WITHDRAWAL_PENDING);
         }
 
-        user.cancelWithdrawal(LocalDateTime.now());
-        eventPublisher.publishEvent(new UserWithdrawalCancelledEvent(userUd));
+        user.cancelWithdrawal();
+        eventPublisher.publishEvent(new UserWithdrawalCancelledEvent(userId));
     }
 }
