@@ -1,5 +1,7 @@
 package com.pokade.domain.price.service;
 
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.entity.CardVariant;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.entity.Listing;
@@ -7,9 +9,12 @@ import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
+import com.pokade.domain.price.entity.CardPrice;
 import com.pokade.domain.price.repository.BuyOfferRepository;
+import com.pokade.domain.price.repository.CardPriceRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
@@ -22,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,6 +40,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class PriceServiceTest {
@@ -55,6 +62,9 @@ class PriceServiceTest {
 
     @Mock
     private PriceTradeStatsRepository priceTradeStatsRepository;
+
+    @Mock
+    private CardPriceRepository cardPriceRepository;
 
     @InjectMocks
     private PriceService priceService;
@@ -350,5 +360,73 @@ class PriceServiceTest {
                 return price;
             }
         };
+    }
+
+    private CardPrice cardPrice(String cardName, String grade, BigDecimal changeRate) {
+        Card card = Card.builder().name(cardName).build();
+        CardVariant variant = CardVariant.builder().card(card).variantName("holofoil").primary(true).build();
+        return CardPrice.builder()
+                .variant(variant)
+                .priceType("graded")
+                .grade(grade)
+                .company("PSA")
+                .market(new BigDecimal("100.00"))
+                .currency("USD")
+                .change7dPct(changeRate)
+                .build();
+    }
+
+    @Test
+    @DisplayName("t17 type이 rise면 변동률 상위 10건을 급등 목록으로 조회한다")
+    void t17() {
+        List<CardPrice> rows = List.of(
+                cardPrice("Mega Lucario ex", "10", new BigDecimal("8.47")),
+                cardPrice("Charizard", "10", new BigDecimal("4.55"))
+        );
+        given(cardPriceRepository.findTopRising(eq(PageRequest.of(0, 10)))).willReturn(rows);
+
+        List<PriceRankingResponse> result = priceService.getRanking("rise");
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).cardName()).isEqualTo("Mega Lucario ex");
+        assertThat(result.get(0).changeRate()).isEqualByComparingTo("8.47");
+        assertThat(result.get(1).cardName()).isEqualTo("Charizard");
+        verify(cardPriceRepository, never()).findTopFalling(any());
+    }
+
+    @Test
+    @DisplayName("t18 type이 fall이면 변동률 하위 10건을 급락 목록으로 조회한다")
+    void t18() {
+        List<CardPrice> rows = List.of(
+                cardPrice("Alakazam GX", "10", new BigDecimal("-1.08"))
+        );
+        given(cardPriceRepository.findTopFalling(eq(PageRequest.of(0, 10)))).willReturn(rows);
+
+        List<PriceRankingResponse> result = priceService.getRanking("fall");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).cardName()).isEqualTo("Alakazam GX");
+        assertThat(result.get(0).changeRate()).isEqualByComparingTo("-1.08");
+        verify(cardPriceRepository, never()).findTopRising(any());
+    }
+
+    @Test
+    @DisplayName("t19 잘못된 type 값이면 INVALID_RANKING_TYPE 예외가 발생하고 리포지토리를 조회하지 않는다")
+    void t19() {
+        assertThatThrownBy(() -> priceService.getRanking("up"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_RANKING_TYPE);
+        verifyNoInteractions(cardPriceRepository);
+    }
+
+    @Test
+    @DisplayName("t20 동기화 배치 미실행 등으로 조회 결과가 없으면 빈 목록을 반환한다")
+    void t20() {
+        given(cardPriceRepository.findTopRising(eq(PageRequest.of(0, 10)))).willReturn(List.of());
+
+        List<PriceRankingResponse> result = priceService.getRanking("rise");
+
+        assertThat(result).isEmpty();
     }
 }

@@ -17,6 +17,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "card_prices")
@@ -47,4 +48,7 @@ public class CardPrice {
 
     @Column(name = "change_7d_pct")
     private BigDecimal change7dPct;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }
