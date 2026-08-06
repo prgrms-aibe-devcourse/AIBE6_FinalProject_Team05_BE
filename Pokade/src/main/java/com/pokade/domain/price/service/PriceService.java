@@ -1,12 +1,15 @@
 package com.pokade.domain.price.service;
 
+import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.price.ChartPeriod;
+import com.pokade.domain.price.RankingType;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
@@ -24,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -38,6 +42,7 @@ public class PriceService {
     private static final int MAX_SUMMARIES_BATCH_SIZE = 100;
     private static final int STATS_PERIOD_DAYS = 7;
     private static final ListingGrade STATS_GRADE = ListingGrade.S;
+    private static final int RANKING_LIMIT = 10;
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
@@ -182,5 +187,72 @@ public class PriceService {
         long changeAmount = diff.setScale(0, RoundingMode.HALF_UP).longValue();
 
         return new PriceStatsResponse(changeRate, changeAmount, volume);
+    }
+
+    // FR-PRICE-06: getStats()와 같은 방식(자체 AI등급 S, COMPLETED 거래, 최근 7일 vs 이전 7일 블록 평균 비교)을
+    // 전체 카드로 확장해 등락률 상위/하위 10개 카드를 랭킹으로 뽑는다. card_prices(Scrydex 동기화)는 쓰지 않는다 —
+    // 그 테이블은 PSA/CGC 같은 공인 등급만 있고 우리 자체 S등급 데이터가 없다(getStats와 동일한 이유).
+    public List<PriceRankingResponse> getRanking(String type) {
+        RankingType rankingType = RankingType.from(type);
+
+        LocalDateTime recentFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS);
+        LocalDateTime previousFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS * 2L);
+
+        Map<Long, Double> recentAvgByCard = priceTradeStatsRepository
+                .findAveragePricesByGradeSince(STATS_GRADE, TradeStatus.COMPLETED, recentFrom).stream()
+                .collect(Collectors.toMap(
+                        PriceTradeStatsRepository.CardAvgPriceView::getCardId,
+                        PriceTradeStatsRepository.CardAvgPriceView::getAvgPrice));
+
+        Map<Long, Double> previousAvgByCard = priceTradeStatsRepository
+                .findAveragePricesByGradeBetween(STATS_GRADE, TradeStatus.COMPLETED, previousFrom, recentFrom).stream()
+                .collect(Collectors.toMap(
+                        PriceTradeStatsRepository.CardAvgPriceView::getCardId,
+                        PriceTradeStatsRepository.CardAvgPriceView::getAvgPrice));
+
+        // 두 블록 모두에 S등급 체결이 있는 카드만 등락률을 계산할 수 있다 (getStats의 "둘 중 하나라도 없으면 0" 규칙과 달리,
+        // 랭킹에서는 변동률을 못 구하는 카드를 0으로 채워 순위에 끼워넣지 않고 아예 후보에서 제외한다).
+        List<CardChangeRate> changes = recentAvgByCard.keySet().stream()
+                .filter(previousAvgByCard::containsKey)
+                .map(cardId -> {
+                    BigDecimal recentAvgAmount = BigDecimal.valueOf(recentAvgByCard.get(cardId));
+                    BigDecimal previousAvgAmount = BigDecimal.valueOf(previousAvgByCard.get(cardId));
+                    BigDecimal diff = recentAvgAmount.subtract(previousAvgAmount);
+                    BigDecimal changeRate = diff
+                            .divide(previousAvgAmount, 4, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100))
+                            .setScale(2, RoundingMode.HALF_UP);
+                    return new CardChangeRate(cardId, recentAvgAmount, changeRate, diff);
+                })
+                .sorted(rankingType == RankingType.RISE
+                        ? Comparator.comparing(CardChangeRate::changeRate).reversed()
+                        : Comparator.comparing(CardChangeRate::changeRate))
+                .limit(RANKING_LIMIT)
+                .toList();
+
+        if (changes.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, Card> cardById = cardRepository
+                .findAllById(changes.stream().map(CardChangeRate::cardId).toList()).stream()
+                .collect(Collectors.toMap(Card::getId, card -> card));
+
+        return changes.stream()
+                .map(change -> {
+                    Card card = cardById.get(change.cardId());
+                    return new PriceRankingResponse(
+                            change.cardId(),
+                            card != null ? card.getName() : null,
+                            card != null ? card.getImageSmall() : null,
+                            change.recentAvgAmount().setScale(0, RoundingMode.HALF_UP).longValue(),
+                            change.changeRate(),
+                            change.diff().setScale(0, RoundingMode.HALF_UP).longValue()
+                    );
+                })
+                .toList();
+    }
+
+    private record CardChangeRate(Long cardId, BigDecimal recentAvgAmount, BigDecimal changeRate, BigDecimal diff) {
     }
 }

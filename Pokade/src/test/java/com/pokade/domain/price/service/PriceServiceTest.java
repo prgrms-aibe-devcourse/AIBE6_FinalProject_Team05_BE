@@ -1,5 +1,6 @@
 package com.pokade.domain.price.service;
 
+import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.entity.Listing;
@@ -7,6 +8,7 @@ import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.repository.BuyOfferRepository;
@@ -34,6 +36,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class PriceServiceTest {
@@ -350,5 +353,80 @@ class PriceServiceTest {
                 return price;
             }
         };
+    }
+
+    private PriceTradeStatsRepository.CardAvgPriceView cardAvgPriceView(Long cardId, Double avgPrice) {
+        return new PriceTradeStatsRepository.CardAvgPriceView() {
+            @Override
+            public Long getCardId() {
+                return cardId;
+            }
+
+            @Override
+            public Double getAvgPrice() {
+                return avgPrice;
+            }
+        };
+    }
+
+    @Test
+    @DisplayName("t17 type이 rise면 두 블록 모두 체결이 있는 카드의 등락률을 내림차순으로 상위 10개 반환한다")
+    void t17() {
+        given(priceTradeStatsRepository.findAveragePricesByGradeSince(eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of(cardAvgPriceView(1L, 900000.0), cardAvgPriceView(2L, 340000.0)));
+        given(priceTradeStatsRepository.findAveragePricesByGradeBetween(eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(List.of(cardAvgPriceView(1L, 800000.0), cardAvgPriceView(2L, 300000.0)));
+        given(cardRepository.findAllById(any()))
+                .willReturn(List.of(
+                        Card.builder().id(1L).name("Blastoise").build(),
+                        Card.builder().id(2L).name("Charizard-GX").build()
+                ));
+
+        List<PriceRankingResponse> result = priceService.getRanking("rise");
+
+        assertThat(result).hasSize(2);
+        // (900000-800000)/800000*100 = 12.5, (340000-300000)/300000*100 ≈ 13.33 → 13.33이 먼저
+        assertThat(result.get(0).changeRate()).isEqualByComparingTo("13.33");
+        assertThat(result.get(1).changeRate()).isEqualByComparingTo("12.5");
+    }
+
+    @Test
+    @DisplayName("t18 type이 fall이면 등락률을 오름차순으로 상위 10개 반환한다")
+    void t18() {
+        given(priceTradeStatsRepository.findAveragePricesByGradeSince(eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of(cardAvgPriceView(1L, 430000.0)));
+        given(priceTradeStatsRepository.findAveragePricesByGradeBetween(eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(List.of(cardAvgPriceView(1L, 500000.0)));
+        given(cardRepository.findAllById(any())).willReturn(List.of(Card.builder().id(1L).name("Charizard ex").build()));
+
+        List<PriceRankingResponse> result = priceService.getRanking("fall");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).cardName()).isEqualTo("Charizard ex");
+        assertThat(result.get(0).changeRate()).isEqualByComparingTo("-14");
+    }
+
+    @Test
+    @DisplayName("t19 잘못된 type 값이면 INVALID_RANKING_TYPE 예외가 발생하고 리포지토리를 조회하지 않는다")
+    void t19() {
+        assertThatThrownBy(() -> priceService.getRanking("up"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_RANKING_TYPE);
+        verifyNoInteractions(priceTradeStatsRepository);
+    }
+
+    @Test
+    @DisplayName("t20 최근/이전 블록 모두에 체결이 있는 카드가 없으면 빈 목록을 반환하고 카드 조회를 하지 않는다")
+    void t20() {
+        given(priceTradeStatsRepository.findAveragePricesByGradeSince(eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of(cardAvgPriceView(1L, 900000.0)));
+        given(priceTradeStatsRepository.findAveragePricesByGradeBetween(eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(List.of());
+
+        List<PriceRankingResponse> result = priceService.getRanking("rise");
+
+        assertThat(result).isEmpty();
+        verify(cardRepository, never()).findAllById(any());
     }
 }
