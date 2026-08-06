@@ -71,8 +71,9 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:3000",
-                "https://www.pokade.store",
-                "https://pokade.store"
+                "https://aibe-6-final-project-team05-fe.vercel.app",
+                "https://pokade.store",
+                "https://www.pokade.store"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
