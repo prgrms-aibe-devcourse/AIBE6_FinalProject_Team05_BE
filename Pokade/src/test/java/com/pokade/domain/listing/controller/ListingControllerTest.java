@@ -69,7 +69,7 @@ class ListingControllerTest {
     }
 
     @Test
-    void 매물_등록에_성공하면_201과_등록된_매물을_반환한다() throws Exception {
+    void 매물_등록에_성공하면_200과_등록된_매물을_반환한다() throws Exception {
         ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A);
         ListingResponse response = new ListingResponse(
                 1L, 1L, 100L, null, 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
@@ -81,9 +81,9 @@ class ListingControllerTest {
                         .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1L))
-                .andExpect(jsonPath("$.sellerId").value(100L));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.sellerId").value(100L));
     }
 
     @Test
@@ -122,8 +122,8 @@ class ListingControllerTest {
 
         mockMvc.perform(get("/api/listings").param("cardId", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(1L));
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(1L));
     }
 
     @Test
@@ -132,7 +132,7 @@ class ListingControllerTest {
 
         mockMvc.perform(get("/api/listings").param("cardId", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 
     @Test
@@ -202,8 +202,8 @@ class ListingControllerTest {
 
         mockMvc.perform(get("/api/listings/me").with(userId(100L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(1L));
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(1L));
     }
 
     @Test
@@ -212,7 +212,7 @@ class ListingControllerTest {
 
         mockMvc.perform(get("/api/listings/me").with(userId(100L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 
     @Test
@@ -226,7 +226,7 @@ class ListingControllerTest {
                         .with(userId(100L))
                         .param("status", "SOLD"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].status").value("SOLD"));
+                .andExpect(jsonPath("$.data[0].status").value("SOLD"));
     }
 
     @Test
@@ -243,7 +243,7 @@ class ListingControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.price").value(20000));
+                .andExpect(jsonPath("$.data.price").value(20000));
     }
 
     @Test
@@ -304,11 +304,11 @@ class ListingControllerTest {
     }
 
     @Test
-    void 매물_삭제에_성공하면_204를_반환한다() throws Exception {
+    void 매물_삭제에_성공하면_200을_반환한다() throws Exception {
         willDoNothing().given(listingService).deleteListing(anyLong(), anyLong());
 
         mockMvc.perform(delete("/api/listings/1").with(userId(100L)))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk());
     }
 
     @Test
