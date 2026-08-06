@@ -29,7 +29,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class CardService {
 
-    // size 상한: 응답 payload/DB 부하를 고려해 BE 기본값(20)의 5배 수준으로 제한.
+    /** CardController가 @PageableDefault에 쓰는 기본 페이지 크기. 원본 값은 {@link CardRepository#DEFAULT_PAGE_SIZE}. */
+    public static final int DEFAULT_PAGE_SIZE = CardRepository.DEFAULT_PAGE_SIZE;
+    // size 상한: 응답 payload/DB 부하를 고려해 BE 기본값(DEFAULT_PAGE_SIZE)의 5배 수준으로 제한.
     // application.yaml의 Pageable 전역 max-page-size(기본 2000)와 별개로 카드 도메인에서 한 번 더 검증.
     private static final int MAX_PAGE_SIZE = 100;
     // types/rarity 상한: 현재 FE 필터 옵션(각 6개)보다 넉넉히 여유를 둔 값.

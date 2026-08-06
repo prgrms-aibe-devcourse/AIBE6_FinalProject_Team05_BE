@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardResponse;
-import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.service.CardService;
 import com.pokade.global.response.ApiResponse;
 
@@ -34,14 +33,14 @@ public class CardController {
             @RequestParam(required = false) Integer minPrice,
             @RequestParam(required = false) Integer maxPrice,
             @RequestParam(required = false) String sort,
-            @PageableDefault(size = CardRepository.DEFAULT_PAGE_SIZE) Pageable pageable) {
+            @PageableDefault(size = CardService.DEFAULT_PAGE_SIZE) Pageable pageable) {
         return ApiResponse.ok(cardService.search(types, rarity, expansionId, minPrice, maxPrice, sort, pageable));
     }
 
     @GetMapping("/search")
     public ApiResponse<Page<CardResponse>> searchByKeyword(
             @RequestParam(required = false) String q,
-            @PageableDefault(size = CardRepository.DEFAULT_PAGE_SIZE) Pageable pageable) {
+            @PageableDefault(size = CardService.DEFAULT_PAGE_SIZE) Pageable pageable) {
         return ApiResponse.ok(cardService.searchByKeyword(q, pageable));
     }
 
