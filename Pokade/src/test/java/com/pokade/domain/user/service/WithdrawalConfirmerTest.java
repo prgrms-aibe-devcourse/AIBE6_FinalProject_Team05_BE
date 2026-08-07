@@ -9,6 +9,7 @@ import com.pokade.global.event.UserWithdrawnEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -50,7 +51,9 @@ class WithdrawalConfirmerTest {
         assertThat(user.getEmail()).isEqualTo("deleted_2@pokade.invalid");
         assertThat(user.getNickname()).isEqualTo("deleted_2");
         assertThat(user.getPassword()).isNull();
-        then(eventPublisher).should().publishEvent(any(UserWithdrawnEvent.class));
+        ArgumentCaptor<UserWithdrawnEvent> captor = ArgumentCaptor.forClass(UserWithdrawnEvent.class);
+        then(eventPublisher).should().publishEvent(captor.capture());
+        assertThat(captor.getValue().userId()).isEqualTo(2L); // payload userId까지 검증
     }
 
     @Test
