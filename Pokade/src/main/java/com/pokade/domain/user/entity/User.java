@@ -78,6 +78,10 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updated_At;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     public static User createLocalUser(String email, String encodedPassword, String nickname) {
         return User.builder()
                 .email(email)

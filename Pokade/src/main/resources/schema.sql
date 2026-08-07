@@ -126,7 +126,8 @@ CREATE TABLE IF NOT EXISTS users (
     deleted_at            TIMESTAMP,
     withdrawal_requested_at TIMESTAMP,
     created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    version               BIGINT NOT NULL DEFAULT 0
 );
 -- 참고: email_verifications는 DB 테이블로 만들지 않음 - Redis TTL로만 관리(정책 확정)
 
