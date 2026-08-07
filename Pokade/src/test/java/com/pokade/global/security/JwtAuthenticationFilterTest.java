@@ -124,6 +124,22 @@ class JwtAuthenticationFilterTest {
         verify(chain).doFilter(request, response);
     }
 
+    @Test
+    @DisplayName("토큰은 유효해도 블랙리스트에 등록된 userId면 인증하지 않고 통과한다")
+    void doFilterInternal_skipsAuthenticationWhenBlacklisted() throws Exception {
+        String token = jwtTokenProvider.createAccessToken(42L, "USER");
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        FilterChain chain = mock(FilterChain.class);
+        given(request.getHeader("Authorization")).willReturn("Bearer " + token);
+        given(tokenBlacklistStore.contains(42L)).willReturn(true);
+
+        filter.doFilterInternal(request, response, chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(chain).doFilter(request, response);
+    }
+
     // 같은 시크릿으로 서명하되 클레임을 임의 구성한 토큰 생성 (role=null이면 role 클레임 생략)
     private String signedToken(String subject, String role) {
         SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes());

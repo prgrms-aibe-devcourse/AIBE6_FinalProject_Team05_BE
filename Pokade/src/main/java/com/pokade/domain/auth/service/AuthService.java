@@ -109,30 +109,33 @@ public class AuthService {
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
-        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
-
-        if (refreshTokenStore.compareAndRotate(userId, refreshToken, newRefreshToken)) {
-            String newAccessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
-            return new TokenPair(newAccessToken, newRefreshToken); // Option X: refresh 재
-        }
-
-        if (refreshTokenStore.matchesGrace(userId, refreshToken)) { // 직전 refresh(동시요청) -> 새 access만
-            String accessToken = jwtTokenProvider.createAccessToken(userId, findRole(userId));
-            return new TokenPair(accessToken, null); // Option Y: refresh 재발급,재세팅 안 함
-        }
-
-        refreshTokenStore.delete(userId); // 키는 있는데 어느 것과도 불일치 -> 탈취 의심, 전면 폐기
-        throw new BusinessException(ErrorCode.TOKEN_STOLEN);
-    }
-
-
-    private String findRole(Long userId) {
-        return userRepository.findById(userId)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> {
                     refreshTokenStore.delete(userId);
                     return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
-                })
-                .getRole().name();
+                });
+
+        // 로그인 가능한 상태 (ACTIVE 유예)만 재발급 허용 - SUSPENDED / DELETED / PENDING 은 저장 refresh 폐기 후 거부
+        if (user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.WITHDRAWAL_PENDING) {
+            refreshTokenStore.delete(userId);
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        String role = user.getRole().name();
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
+
+        if (refreshTokenStore.compareAndRotate(userId, refreshToken, newRefreshToken)) {
+            String newAccessToken = jwtTokenProvider.createAccessToken(userId, role);
+            return new TokenPair(newAccessToken, newRefreshToken);
+        }
+
+        if (refreshTokenStore.matchesGrace(userId, refreshToken)) {
+            String accessToken = jwtTokenProvider.createAccessToken(userId, role);
+            return new TokenPair(accessToken, null); // Option Y : refresh 세팅 안함
+        }
+
+        refreshTokenStore.delete(userId);
+        throw new BusinessException(ErrorCode.TOKEN_STOLEN);
     }
 
     @PostConstruct
