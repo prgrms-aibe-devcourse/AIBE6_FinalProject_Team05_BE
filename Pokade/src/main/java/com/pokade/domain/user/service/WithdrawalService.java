@@ -75,15 +75,23 @@ public class WithdrawalService {
                 .stream()
                 .map(User::getId)
                 .toList();
-
         for (Long userId : targetIds) {
+            boolean confirmed;
             try {
-                if (withdrawalConfirmer.confirm(userId)) {
-                    refreshTokenStore.delete(userId);
-                    tokenBlacklistStore.blacklist(userId);
-                }
+                confirmed = withdrawalConfirmer.confirm(userId); // DB 확정(건별 트랜잭션)
             } catch (Exception e) {
                 log.error("탈퇴 확정 실패 - 다음 대상 계속 진행 (userId={})", userId, e);
+                continue;
+            }
+            if (!confirmed) {
+                continue; // 그새 철회/이미 확정 -> 정리 불필요
+            }
+            try {
+                refreshTokenStore.delete(userId); // refresh token 삭제
+                tokenBlacklistStore.blacklist(userId); // access token blacklist 처리
+            } catch (Exception e) {
+                // 확정(DB)은 됐으나 토큰 정리 실패 → 운영 보정 대상(기존 access가 만료 전까지 유효)
+                log.error("탈퇴 확정됨(DB) - 토큰 정리 실패, 보정 필요 (userId={})", userId, e);
             }
         }
     }
