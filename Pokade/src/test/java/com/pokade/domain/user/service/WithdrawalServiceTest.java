@@ -8,7 +8,6 @@ import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.event.UserWithdrawalCancelledEvent;
 import com.pokade.global.event.UserWithdrawalRequestedEvent;
-import com.pokade.global.event.UserWithdrawnEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.TokenBlacklistStore;
@@ -41,6 +40,7 @@ class WithdrawalServiceTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock RefreshTokenStore refreshTokenStore;
     @Mock TokenBlacklistStore tokenBlacklistStore;
+    @Mock WithdrawalConfirmer withdrawalConfirmer;
     @InjectMocks WithdrawalService withdrawalService;
 
     private User activeUser() {
@@ -125,35 +125,76 @@ class WithdrawalServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.NOT_WITHDRAWAL_PENDING);
     }
 
-    // ===== 확정 배치 =====
+    // ===== 확정 배치(오케스트레이션) =====
+    // 실제 확정(DB 익명화·이벤트)은 WithdrawalConfirmer 책임 → WithdrawalConfirmerTest에서 검증.
+    // 여기서는 스케줄러가 "건별 위임 + 커밋 성공(true)일 때만 Redis 정리 + 실패 격리"를 하는지만 본다.
     @Test
-    @DisplayName("확정: 유예 만료분을 DELETED 익명화 + 토큰 무효화·블랙리스트·이벤트")
-    void confirmExpiredWithdrawals_confirms() {
-        User user = pendingUser();
+    @DisplayName("확정: 위임이 성공(true)하면 그 유저의 refresh 삭제 + 블랙리스트 등록")
+    void confirmExpiredWithdrawals_confirmsThenCleansRedis() {
+        User user = pendingUser(); // id=2
         given(userRepository.findAllByStatusAndWithdrawalRequestedAtBefore(
                 eq(UserStatus.WITHDRAWAL_PENDING), any(LocalDateTime.class)))
                 .willReturn(List.of(user));
+        given(withdrawalConfirmer.confirm(2L)).willReturn(true);
 
         withdrawalService.confirmExpiredWithdrawals();
 
-        assertThat(user.getStatus()).isEqualTo(UserStatus.DELETED);
-        assertThat(user.getEmail()).isEqualTo("deleted_2@pokade.invalid");
-        assertThat(user.getNickname()).isEqualTo("deleted_2");
-        assertThat(user.getPassword()).isNull();
+        then(withdrawalConfirmer).should().confirm(2L);
         then(refreshTokenStore).should().delete(2L);
         then(tokenBlacklistStore).should().blacklist(2L);
-        then(eventPublisher).should().publishEvent(any(UserWithdrawnEvent.class));
     }
 
     @Test
-    @DisplayName("확정: 대상 없으면 아무 것도 안 함")
+    @DisplayName("확정: 위임이 skip(false)이면 Redis를 건드리지 않는다(그새 철회된 유저 보호)")
+    void confirmExpiredWithdrawals_skipsRedisWhenNotConfirmed() {
+        User user = pendingUser(); // id=2
+        given(userRepository.findAllByStatusAndWithdrawalRequestedAtBefore(any(), any()))
+                .willReturn(List.of(user));
+        given(withdrawalConfirmer.confirm(2L)).willReturn(false);
+
+        withdrawalService.confirmExpiredWithdrawals();
+
+        then(refreshTokenStore).should(never()).delete(any());
+        then(tokenBlacklistStore).should(never()).blacklist(any());
+    }
+
+    @Test
+    @DisplayName("확정: 대상 없으면 위임·Redis 모두 호출하지 않는다")
     void confirmExpiredWithdrawals_empty() {
         given(userRepository.findAllByStatusAndWithdrawalRequestedAtBefore(any(), any()))
                 .willReturn(List.of());
 
         withdrawalService.confirmExpiredWithdrawals();
 
+        then(withdrawalConfirmer).should(never()).confirm(any());
         then(refreshTokenStore).should(never()).delete(any());
-        then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("확정: 한 건이 실패해도 다음 대상은 계속 확정한다(건별 격리)")
+    void confirmExpiredWithdrawals_isolatesFailure() {
+        User first = pendingUser();                              // id=2 — 실패할 대상
+        User second = pendingUserWithId(3L, "bye2@pokade.com", "바이2"); // id=3 — 계속되어야 함
+        given(userRepository.findAllByStatusAndWithdrawalRequestedAtBefore(any(), any()))
+                .willReturn(List.of(first, second));
+        given(withdrawalConfirmer.confirm(2L)).willThrow(new RuntimeException("DB 순단"));
+        given(withdrawalConfirmer.confirm(3L)).willReturn(true);
+
+        withdrawalService.confirmExpiredWithdrawals();
+
+        then(withdrawalConfirmer).should().confirm(3L);         // 실패 후에도 다음 대상 처리됨
+        then(refreshTokenStore).should(never()).delete(2L);     // 실패 건은 Redis 정리 안 함
+        then(refreshTokenStore).should().delete(3L);
+        then(tokenBlacklistStore).should().blacklist(3L);
+    }
+
+    private User pendingUserWithId(long id, String email, String nickname) {
+        User u = User.builder()
+                .id(id).email(email).password("ENCODED_PW")
+                .nickname(nickname).role(Role.USER).provider(Provider.LOCAL)
+                .status(UserStatus.ACTIVE).pointBalance(0)
+                .build();
+        u.requestWithdrawal(LocalDateTime.now().minusDays(8));
+        return u;
     }
 }
