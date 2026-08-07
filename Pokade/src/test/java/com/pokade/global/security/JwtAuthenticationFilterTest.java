@@ -26,7 +26,8 @@ class JwtAuthenticationFilterTest {
 
     private final JwtTokenProvider jwtTokenProvider =
             new JwtTokenProvider(new JwtProperties(SECRET, Duration.ofMinutes(30), Duration.ofDays(14)));
-    private final JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider);
+    private final TokenBlacklistStore tokenBlacklistStore = mock(TokenBlacklistStore.class);
+    private final JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider, tokenBlacklistStore);
 
     @AfterEach
     void clearContext() {
@@ -116,6 +117,22 @@ class JwtAuthenticationFilterTest {
         HttpServletResponse response = mock(HttpServletResponse.class);
         FilterChain chain = mock(FilterChain.class);
         given(request.getHeader("Authorization")).willReturn("Bearer " + token);
+
+        filter.doFilterInternal(request, response, chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(chain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("토큰은 유효해도 블랙리스트에 등록된 userId면 인증하지 않고 통과한다")
+    void doFilterInternal_skipsAuthenticationWhenBlacklisted() throws Exception {
+        String token = jwtTokenProvider.createAccessToken(42L, "USER");
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        FilterChain chain = mock(FilterChain.class);
+        given(request.getHeader("Authorization")).willReturn("Bearer " + token);
+        given(tokenBlacklistStore.contains(42L)).willReturn(true);
 
         filter.doFilterInternal(request, response, chain);
 
