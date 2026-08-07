@@ -67,6 +67,9 @@ public class User {
     @Column(name = "deleted_at")
     private LocalDateTime deleted_At;
 
+    @Column(name = "withdrawal_requested_at")
+    private LocalDateTime withdrawalRequestedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime created_At;
@@ -74,6 +77,10 @@ public class User {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updated_At;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     public static User createLocalUser(String email, String encodedPassword, String nickname) {
         return User.builder()
@@ -116,4 +123,27 @@ public class User {
         this.password = encodedPassword;
     }
 
+    // 탈퇴를 신청한다 (유예 상태로 전환하고 신청 시각을 기록)
+    public void requestWithdrawal(LocalDateTime now) {
+        this.status = UserStatus.WITHDRAWAL_PENDING;
+        this.withdrawalRequestedAt = now;
+    }
+
+    // 탈퇴 신청을 철회한다 (활성 상태로 복구)
+    public void cancelWithdrawal() {
+        this.status = UserStatus.ACTIVE;
+        this.withdrawalRequestedAt = null;
+    }
+
+    // 탈퇴 확정 — soft-delete + 회원정보 익명화(email·nickname은 UNIQUE라 재가입 재사용 위해 비충돌 값 치환)
+    public void confirmWithdrawal(LocalDateTime now) {
+        this.status = UserStatus.DELETED;
+        this.deleted_At = now;
+        this.email = "deleted_" + id + "@pokade.invalid";
+        this.nickname = "deleted_" + id;
+        this.password = null;
+        this.phoneNumber = null;
+        this.birthDate = null;
+        this.profileImageUrl = null;
+    }
 }

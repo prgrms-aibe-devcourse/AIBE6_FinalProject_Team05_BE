@@ -19,6 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenBlacklistStore tokenBlacklistStore;
 
 
     // 매 요청마다 실행 — Authorization 헤더의 토큰을 확인해 인증 상태를 세팅
@@ -32,7 +33,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = jwtTokenProvider.getUserId(token);
                 String role = jwtTokenProvider.getRole(token);
                 // 토큰이 유효하면 인증 객체를 만들어 SecurityContext에 등록
-                if (userId != null && role != null) {
+                if (userId != null && role != null && !tokenBlacklistStore.contains(userId)) {
                     List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
