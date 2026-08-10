@@ -41,10 +41,24 @@ spring:
           starttls:
             enable: true
 
+  # 운영: Google OAuth credential은 기본값 없이 주입 강제 (미설정 시 부팅 실패 = fail-fast)
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+          kakao: # ← 추가
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
+
 # 운영: refresh 쿠키 Secure 플래그 on (HTTPS 전송 강제) — dev는 기본값 false 유지
 app:
   cookie:
     secure: true
+  oauth2:
+    redirect-base: ${APP_OAUTH2_REDIRECT_BASE:https://www.pokade.store}
 
 pokade:
   ai:
