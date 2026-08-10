@@ -58,6 +58,7 @@ public class SecurityConfig {
                                 "/api/prices/*/trades")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/listings").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .anyRequest().authenticated()
                 )

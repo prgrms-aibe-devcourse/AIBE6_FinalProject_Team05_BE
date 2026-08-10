@@ -13,6 +13,12 @@ public interface CardVariantRepository extends JpaRepository<CardVariant, Long> 
 
     List<CardVariant> findByCardIdOrderByPrimaryDescVariantNameAsc(Long cardId);
 
+    /**
+     * Scrydex 동기화 배치가 대표 판본 1개를 upsert할 때 쓰는 조회 - 현재 배치 스코프에서는 카드당
+     * card_variants 행이 최대 1개뿐이므로 findByCardId 하나로 충분하다.
+     */
+    Optional<CardVariant> findByCardId(Long cardId);
+
     @Query("SELECT cv.id FROM CardVariant cv WHERE cv.card.id = :cardId AND cv.primary = true")
     Optional<Long> findPrimaryVariantId(@Param("cardId") Long cardId);
     

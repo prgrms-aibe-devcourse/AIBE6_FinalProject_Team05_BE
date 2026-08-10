@@ -43,6 +43,12 @@ spring:
 sync:
   enabled: false
 
+scrydex:
+  api-key: ${SCRYDEX_API_KEY:}
+  team-id: ${SCRYDEX_TEAM_ID:}
+  base-url: https://api.scrydex.com
+  page-size: 100
+
 pokade:
   ai:
     grade:
