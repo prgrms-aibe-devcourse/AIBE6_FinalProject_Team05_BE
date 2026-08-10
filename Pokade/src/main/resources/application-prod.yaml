@@ -49,6 +49,9 @@ spring:
           google:
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}
+          kakao: # ← 추가
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
 
 # 운영: refresh 쿠키 Secure 플래그 on (HTTPS 전송 강제) — dev는 기본값 false 유지
 app:
