@@ -26,6 +26,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -79,6 +80,8 @@ class NotificationControllerTest {
 
         mockMvc.perform(patch("/api/notifications/1/read").with(userId(100L)))
                 .andExpect(status().isOk());
+
+        then(notificationService).should().markAsRead(100L, 1L);
     }
 
     @Test
