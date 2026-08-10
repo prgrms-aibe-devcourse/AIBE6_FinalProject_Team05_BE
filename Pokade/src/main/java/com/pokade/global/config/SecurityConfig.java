@@ -3,6 +3,7 @@ package com.pokade.global.config;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtAuthenticationFilter;
 import com.pokade.global.security.oauth.CookieAuthorizationRequestRepository;
+import com.pokade.global.security.oauth.CustomOAuth2UserService;
 import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
 import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
 import jakarta.servlet.DispatcherType;
@@ -32,6 +33,7 @@ public class SecurityConfig {
     private final CookieAuthorizationRequestRepository cookieAuthorizationRequestRepository;
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
+    private final CustomOAuth2UserService customOAuth2UserService;
 
     // 인증 없이 접근을 허용할 경로 목록
     private static final String[] AUTH_WHITELIST = {
@@ -63,7 +65,9 @@ public class SecurityConfig {
                         .redirectionEndpoint(redirection -> redirection
                                 .baseUri("/api/oauth2/callback/*"))
                         .successHandler(oAuth2LoginSuccessHandler)
-                        .failureHandler(oAuth2LoginFailureHandler))
+                        .failureHandler(oAuth2LoginFailureHandler)
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .userService(customOAuth2UserService)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/cards", "/api/cards/**").permitAll()
                         .requestMatchers(AUTH_WHITELIST).permitAll()
