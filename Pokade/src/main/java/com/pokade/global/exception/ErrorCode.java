@@ -23,6 +23,8 @@ public enum ErrorCode {
     CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다."),
     GRADE_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "진단 결과를 찾을 수 없습니다."),
     PRIMARY_VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "대표 변형이 지정되지 않은 카드입니다."),
+    WATCHLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "워치리스트 항목을 찾을 수 없습니다."),
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
 
     DUPLICATE_LISTING(HttpStatus.CONFLICT, "이미 등록된 매물입니다."),
     TRADE_CONFLICT(HttpStatus.CONFLICT, "이미 처리 중인 거래입니다."),
@@ -65,7 +67,13 @@ public enum ErrorCode {
     DATABASE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "데이터베이스 처리 중 오류가 발생했습니다."),
 
     // ===== 카드 도메인 임시 Rate Limit (팀 공통 정책 확정 시 제거) =====
-    CARD_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "카드 API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
+    CARD_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "카드 API 요청이 너무 많습니다. 잠시 후 다시 시도해주세요."),
+
+    // ===== 워치리스트 도메인 =====
+    DUPLICATE_WATCHLIST(HttpStatus.CONFLICT, "이미 등록된 카드입니다."),
+    TARGET_PRICE_REQUIRED(HttpStatus.BAD_REQUEST, "목표 구매가 또는 판매가 중 하나는 입력해야 합니다."),
+    WATCHLIST_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "워치리스트는 최대 20개까지 등록할 수 있습니다."),
+    NOTIFICATION_ALREADY_READ(HttpStatus.BAD_REQUEST, "이미 읽음 처리된 알림입니다.");
 
     private final HttpStatus status;
     private final String message;
