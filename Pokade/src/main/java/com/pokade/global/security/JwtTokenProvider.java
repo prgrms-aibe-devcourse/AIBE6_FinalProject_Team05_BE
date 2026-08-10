@@ -5,7 +5,9 @@ import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.time.Duration;
 import java.util.Date;
+import java.util.Map;
 
 // JWT access token 발급·검증을 담당하는 컴포넌트
 @Component
@@ -77,5 +79,36 @@ public class JwtTokenProvider {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    // 임의 값을 담은 단명 서명 티켓 발급 (범용 - 쿠키 인증요청, 가입 티켓 공용)
+    public String createSignedTicket(String claim, String value, Duration ttl) {
+        return Jwts.builder()
+                .claim(claim, value)
+                .expiration(new Date(System.currentTimeMillis() + ttl.toMillis()))
+                .signWith(secretKey)
+                .compact();
+    }
+
+    // 단명 서명 티켓에서 값을 추출 (서명, 만료 검증 실패 시 null)
+    public String parseSignedTicket(String token, String claim) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload()
+                    .get(claim, String.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // 여러 값을 담은 단명 서명 티켓 발급 (밤용 - 가입 티켓 등)
+    public String createSignedTicket(Map<String, String> claims, Duration ttl) {
+        var builder = Jwts.builder()
+                .expiration(new Date(System.currentTimeMillis() + ttl.toMillis()));
+        claims.forEach(builder::claim);
+        return builder.signWith(secretKey).compact();
     }
 }
