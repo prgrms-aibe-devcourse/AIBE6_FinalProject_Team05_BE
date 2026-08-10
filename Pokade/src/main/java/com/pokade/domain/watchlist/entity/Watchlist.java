@@ -30,6 +30,7 @@ public class Watchlist {
     @Column(name = "card_id", nullable = false)
     private Long cardId;
 
+    // null이면 대표 변형 기준
     @Column(name = "variant_id")
     private Long variantId;
 
