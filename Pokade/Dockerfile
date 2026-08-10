@@ -11,6 +11,8 @@ RUN ./gradlew clean bootJar -x test --no-daemon
 FROM eclipse-temurin:21-jre AS runtime
 WORKDIR /app
 
+ENV TZ=Asia/Seoul
+
 COPY --from=build /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
