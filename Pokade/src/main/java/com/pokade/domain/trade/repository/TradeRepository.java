@@ -26,4 +26,10 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
     List<Trade> findCompletedTradesSince(@Param("cardId") Long cardId,
                                           @Param("status") TradeStatus status,
                                           @Param("from") LocalDateTime from);
+
+    // 회원탈퇴 확정 정리용: 탈퇴한 유저가 구매자 또는 판매자(매물 소유자)로 참여 중인 미종결 거래 조회
+    @Query("SELECT t FROM Trade t JOIN FETCH t.listing l "
+            + "WHERE (t.buyerId = :userId OR l.sellerId = :userId) AND t.status IN :statuses")
+    List<Trade> findByParticipantIdAndStatusIn(@Param("userId") Long userId,
+                                                @Param("statuses") List<TradeStatus> statuses);
 }
