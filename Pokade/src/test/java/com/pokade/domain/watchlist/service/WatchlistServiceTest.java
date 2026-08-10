@@ -89,6 +89,34 @@ class WatchlistServiceTest {
         assertThat(response.targetBuyPrice()).isEqualTo(1000);
     }
 
+    @Test
+    @DisplayName("등록: variantId가 null이어도 정상 등록된다")
+    void addWatchlist_success_variantIdNull() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 10000, null);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.variantId()).isNull();
+        assertThat(response.targetBuyPrice()).isEqualTo(10000);
+    }
+
+    @Test
+    @DisplayName("등록: targetSellPrice만 있어도 정상 등록된다")
+    void addWatchlist_success_targetSellPriceOnly() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, null, 5000);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.targetBuyPrice()).isNull();
+        assertThat(response.targetSellPrice()).isEqualTo(5000);
+    }
+
     // ===== 목록 조회 =====
     @Test
     @DisplayName("목록 조회: 등록된 워치리스트 없으면 빈 리스트")
