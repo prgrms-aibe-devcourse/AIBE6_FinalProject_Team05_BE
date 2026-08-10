@@ -5,11 +5,13 @@ import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.service.UserService;
+import com.pokade.domain.user.service.WithdrawalService;
 import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
+import com.pokade.global.security.TokenBlacklistStore;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +47,10 @@ class UserControllerTest {
     private JwtTokenProvider jwtTokenProvider;                 // 실제 JwtAuthenticationFilter가 요구
     @MockitoBean
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint; // SecurityConfig가 요구
+    @MockitoBean
+    private TokenBlacklistStore tokenBlacklistStore;                 // JwtAuthenticationFilter가 요구
+    @MockitoBean
+    private WithdrawalService withdrawalService;                     // UserController가 요구
 
     private RequestPostProcessor userId(Long userId) {
         Authentication auth = new UsernamePasswordAuthenticationToken(

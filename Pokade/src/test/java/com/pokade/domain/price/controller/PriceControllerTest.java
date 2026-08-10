@@ -10,6 +10,7 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
+import com.pokade.global.security.TokenBlacklistStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -44,6 +45,9 @@ class PriceControllerTest {
 
     @MockitoBean
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+
+    @MockitoBean
+    private TokenBlacklistStore tokenBlacklistStore;
 
     @Test
     void 체결_내역이_있으면_200과_최신순_목록을_반환한다() throws Exception {

@@ -14,6 +14,7 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
+import com.pokade.global.security.TokenBlacklistStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -61,6 +62,9 @@ class ListingControllerTest {
 
     @MockitoBean
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+
+    @MockitoBean
+    private TokenBlacklistStore tokenBlacklistStore;
 
     private RequestPostProcessor userId(Long userId) {
         Authentication auth = new UsernamePasswordAuthenticationToken(
