@@ -13,6 +13,7 @@ import com.pokade.domain.trade.repository.PaymentRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.port.UserAccessChecker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ public class TradeService {
     private final TradeRepository tradeRepository;
     private final PaymentRepository paymentRepository;
     private final CardRepository cardRepository;
+    private final UserAccessChecker userAccessChecker;
 
     private TradeResponse toResponse(Trade trade) {
         String cardName = cardRepository.findById(trade.getListing().getCardId())
@@ -36,8 +38,11 @@ public class TradeService {
 
     @Transactional
     public TradeResponse createTrade(Long buyerId, TradeCreateRequest request) {
+        userAccessChecker.assertWritable(buyerId);
+
         Listing listing = listingRepository.findById(request.listingId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+        userAccessChecker.assertWritable(listing.getSellerId());
 
         if (listing.getSellerId().equals(buyerId)) {
             throw new BusinessException(ErrorCode.SELF_PURCHASE_NOT_ALLOWED);
@@ -84,6 +89,8 @@ public class TradeService {
 
     @Transactional
     public TradeResponse confirmTrade(Long buyerId, Long tradeId) {
+        userAccessChecker.assertWritable(buyerId);
+
         Trade trade = tradeRepository.findById(tradeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
 
@@ -98,6 +105,8 @@ public class TradeService {
 
     @Transactional
     public TradeResponse cancelTrade(Long userId, Long tradeId) {
+        userAccessChecker.assertWritable(userId);
+
         Trade trade = tradeRepository.findById(tradeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
 

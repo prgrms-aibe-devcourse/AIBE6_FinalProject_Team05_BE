@@ -14,6 +14,7 @@ import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.port.UserAccessChecker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,9 +31,11 @@ public class ListingService {
     private final ListingRepository listingRepository;
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
+    private final UserAccessChecker userAccessChecker;
 
     @Transactional
     public ListingResponse createListing(Long sellerId, ListingCreateRequest request) {
+        userAccessChecker.assertWritable(sellerId);
         validateNotDuplicate(sellerId, request.cardId(), request.variantId());
 
         Listing listing = Listing.builder()
@@ -89,6 +92,7 @@ public class ListingService {
 
     @Transactional
     public ListingResponse updatePrice(Long sellerId, Long listingId, ListingUpdateRequest request) {
+        userAccessChecker.assertWritable(sellerId);
         Listing listing = getOwnedListing(sellerId, listingId);
 
         listing.changePrice(request.price());

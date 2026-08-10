@@ -10,6 +10,7 @@ import com.pokade.domain.trade.repository.PaymentRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.port.UserAccessChecker;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -36,6 +37,9 @@ class TradeServiceTest {
 
     @Mock
     private CardRepository cardRepository;
+
+    @Mock
+    private UserAccessChecker userAccessChecker;
 
     @InjectMocks
     private TradeService tradeService;
