@@ -18,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -31,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class WithdrawalServiceTest {
@@ -196,5 +198,37 @@ class WithdrawalServiceTest {
                 .build();
         u.requestWithdrawal(LocalDateTime.now().minusDays(8));
         return u;
+    }
+
+    @Test
+    @DisplayName("확정 배치: 익명화 토큰 충돌(UNIQUE) 시 새 토큰으로 재시도해 확정한다")
+    void confirmExpired_retriesOnTokenCollision() {
+        User target = pendingUser(); // id=2, WITHDRAWAL_PENDING
+        given(userRepository.findAllByStatusAndWithdrawalRequestedAtBefore(eq(UserStatus.WITHDRAWAL_PENDING), any()))
+                .willReturn(List.of(target));
+        given(withdrawalConfirmer.confirm(2L))
+                .willThrow(new DataIntegrityViolationException("unique"))  // 1차: 충돌
+                .willReturn(true);                                          // 2차: 성공
+
+        withdrawalService.confirmExpiredWithdrawals();
+
+        then(withdrawalConfirmer).should(times(2)).confirm(2L);   // 재시도 발생
+        then(refreshTokenStore).should().delete(2L);              // 최종 정리 수행
+        then(tokenBlacklistStore).should().blacklist(2L);
+    }
+
+    @Test
+    @DisplayName("확정 배치: 재시도 초과 시 건너뛴다(정리 미수행 → 다음 배치 자가치유)")
+    void confirmExpired_givesUpAfterMaxRetries() {
+        User target = pendingUser();
+        given(userRepository.findAllByStatusAndWithdrawalRequestedAtBefore(eq(UserStatus.WITHDRAWAL_PENDING), any()))
+                .willReturn(List.of(target));
+        given(withdrawalConfirmer.confirm(2L))
+                .willThrow(new DataIntegrityViolationException("unique"));  // 항상 충돌
+
+        withdrawalService.confirmExpiredWithdrawals();
+
+        then(withdrawalConfirmer).should(times(3)).confirm(2L);   // MAX_ANON_RETRY 만큼만 시도
+        then(refreshTokenStore).should(never()).delete(2L);
     }
 }

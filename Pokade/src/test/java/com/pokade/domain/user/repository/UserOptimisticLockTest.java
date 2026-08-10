@@ -70,7 +70,7 @@ class UserOptimisticLockTest extends AbstractIntegrationTest {
             });
 
             // 3) 배치가 낡은 스냅샷(version=0)으로 확정(DELETED+익명화)을 시도 → version 불일치로 거부된다
-            staleBatchView.confirmWithdrawal(LocalDateTime.now());
+            staleBatchView.confirmWithdrawal(LocalDateTime.now(), "anontoken12");
             assertThatThrownBy(() ->
                     requiresNew.executeWithoutResult(status -> userRepository.saveAndFlush(staleBatchView))
             ).isInstanceOf(ObjectOptimisticLockingFailureException.class);
@@ -106,7 +106,7 @@ class UserOptimisticLockTest extends AbstractIntegrationTest {
             // 확정을 dirty-checking으로 커밋 (배치와 동일한 경로)
             requiresNew.executeWithoutResult(status -> {
                 User loaded = entityManager.find(User.class, userId);
-                loaded.confirmWithdrawal(LocalDateTime.now());
+                loaded.confirmWithdrawal(LocalDateTime.now(), "anontoken12");
                 entityManager.flush();
             });
 

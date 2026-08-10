@@ -6,6 +6,7 @@ import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.domain.user.support.AnonymizationTokenGenerator;
 import com.pokade.global.security.TokenBlacklistStore;
 import com.pokade.support.AbstractIntegrationTest;
 import jakarta.persistence.EntityManager;
@@ -30,7 +31,7 @@ import static org.mockito.Mockito.never;
  * Redis 스토어(RefreshTokenStore·TokenBlacklistStore)만 목으로 두고 호출 여부만 본다.
  */
 @DataJpaTest
-@Import({WithdrawalService.class, WithdrawalConfirmer.class})
+@Import({WithdrawalService.class, WithdrawalConfirmer.class, AnonymizationTokenGenerator.class})
 class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
@@ -59,8 +60,8 @@ class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
         em.clear();
         User after = userRepository.findById(id).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(UserStatus.DELETED);
-        assertThat(after.getEmail()).isEqualTo("deleted_" + id + "@pokade.invalid");
-        assertThat(after.getNickname()).isEqualTo("deleted_" + id);
+        assertThat(after.getEmail()).matches("deleted_[0-9a-f]{12}@pokade\\.invalid");
+        assertThat(after.getNickname()).matches("deleted_[0-9a-f]{12}");
         assertThat(after.getPassword()).isNull();
         assertThat(after.getVersion()).isEqualTo(1L); // 실제 DB 컬럼으로 낙관적 락 버전 증가
         then(refreshTokenStore).should().delete(id);

@@ -5,6 +5,7 @@ import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.domain.user.support.AnonymizationTokenGenerator;
 import com.pokade.global.event.UserWithdrawnEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class WithdrawalConfirmerTest {
 
     @Mock UserRepository userRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock AnonymizationTokenGenerator anonTokenGenerator;
     @InjectMocks WithdrawalConfirmer withdrawalConfirmer;
 
     private User userWithStatus(long id, UserStatus status) {
@@ -43,13 +45,14 @@ class WithdrawalConfirmerTest {
     void confirm_pending_confirmsAndReturnsTrue() {
         User user = userWithStatus(2L, UserStatus.WITHDRAWAL_PENDING);
         given(userRepository.findById(2L)).willReturn(Optional.of(user));
+        given(anonTokenGenerator.generate()).willReturn("a1b2c3d4e5f6"); // 12자리 hex 스텁
 
         boolean result = withdrawalConfirmer.confirm(2L);
 
         assertThat(result).isTrue();
         assertThat(user.getStatus()).isEqualTo(UserStatus.DELETED);
-        assertThat(user.getEmail()).isEqualTo("deleted_2@pokade.invalid");
-        assertThat(user.getNickname()).isEqualTo("deleted_2");
+        assertThat(user.getEmail()).matches("deleted_[0-9a-f]{12}@pokade\\.invalid");
+        assertThat(user.getNickname()).matches("deleted_[0-9a-f]{12}");
         assertThat(user.getPassword()).isNull();
         ArgumentCaptor<UserWithdrawnEvent> captor = ArgumentCaptor.forClass(UserWithdrawnEvent.class);
         then(eventPublisher).should().publishEvent(captor.capture());
