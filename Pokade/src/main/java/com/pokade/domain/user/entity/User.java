@@ -96,6 +96,19 @@ public class User {
                 .build();
     }
 
+    public static User createSocialUser(String email, String nickname, Provider provider) {
+        return User.builder()
+                .email(email)
+                .nickname(nickname)
+                .provider(provider)
+                .role(Role.USER)
+                .status(UserStatus.ACTIVE)
+                .termsAgreedAt(LocalDateTime.now())
+                .marketingOptIn(false)
+                .pointBalance(0)
+                .build();
+    }
+
     public void verifyEmail() {
         this.status = UserStatus.ACTIVE;
     }
