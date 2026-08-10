@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -28,7 +29,8 @@ public class WithdrawalConfirmer {
         if (user.getStatus() != UserStatus.WITHDRAWAL_PENDING) {
             return false; // 멱등 skip - 그새 철회(ACTIVE)됐거나 이미 확정 (DELETED)
         }
-        user.confirmWithdrawal(LocalDateTime.now());
+        String anonToken = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        user.confirmWithdrawal(LocalDateTime.now(), anonToken);
         eventPublisher.publishEvent(new UserWithdrawnEvent(userId));
         return true;
     }

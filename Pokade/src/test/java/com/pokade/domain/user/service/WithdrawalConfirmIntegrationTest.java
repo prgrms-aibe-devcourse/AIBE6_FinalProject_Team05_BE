@@ -59,8 +59,8 @@ class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
         em.clear();
         User after = userRepository.findById(id).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(UserStatus.DELETED);
-        assertThat(after.getEmail()).isEqualTo("deleted_" + id + "@pokade.invalid");
-        assertThat(after.getNickname()).isEqualTo("deleted_" + id);
+        assertThat(after.getEmail()).matches("deleted_[0-9a-f]{12}@pokade\\.invalid");
+        assertThat(after.getNickname()).matches("deleted_[0-9a-f]{12}");
         assertThat(after.getPassword()).isNull();
         assertThat(after.getVersion()).isEqualTo(1L); // 실제 DB 컬럼으로 낙관적 락 버전 증가
         then(refreshTokenStore).should().delete(id);

@@ -136,11 +136,11 @@ public class User {
     }
 
     // 탈퇴 확정 — soft-delete + 회원정보 익명화(email·nickname은 UNIQUE라 재가입 재사용 위해 비충돌 값 치환)
-    public void confirmWithdrawal(LocalDateTime now) {
+    public void confirmWithdrawal(LocalDateTime now, String anonToken) {
         this.status = UserStatus.DELETED;
         this.deleted_At = now;
-        this.email = "deleted_" + id + "@pokade.invalid";
-        this.nickname = "deleted_" + id;
+        this.email = "deleted_" + anonToken + "@pokade.invalid";
+        this.nickname = "deleted_" + anonToken;
         this.password = null;
         this.phoneNumber = null;
         this.birthDate = null;

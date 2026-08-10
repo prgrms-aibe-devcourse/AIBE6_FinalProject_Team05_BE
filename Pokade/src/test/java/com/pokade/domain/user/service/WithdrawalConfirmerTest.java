@@ -48,8 +48,8 @@ class WithdrawalConfirmerTest {
 
         assertThat(result).isTrue();
         assertThat(user.getStatus()).isEqualTo(UserStatus.DELETED);
-        assertThat(user.getEmail()).isEqualTo("deleted_2@pokade.invalid");
-        assertThat(user.getNickname()).isEqualTo("deleted_2");
+        assertThat(user.getEmail()).matches("deleted_[0-9a-f]{12}@pokade\\.invalid");
+        assertThat(user.getNickname()).matches("deleted_[0-9a-f]{12}");
         assertThat(user.getPassword()).isNull();
         ArgumentCaptor<UserWithdrawnEvent> captor = ArgumentCaptor.forClass(UserWithdrawnEvent.class);
         then(eventPublisher).should().publishEvent(captor.capture());
