@@ -6,6 +6,7 @@ import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.domain.user.support.AnonymizationTokenGenerator;
 import com.pokade.global.security.TokenBlacklistStore;
 import com.pokade.support.AbstractIntegrationTest;
 import jakarta.persistence.EntityManager;
@@ -30,7 +31,7 @@ import static org.mockito.Mockito.never;
  * Redis 스토어(RefreshTokenStore·TokenBlacklistStore)만 목으로 두고 호출 여부만 본다.
  */
 @DataJpaTest
-@Import({WithdrawalService.class, WithdrawalConfirmer.class})
+@Import({WithdrawalService.class, WithdrawalConfirmer.class, AnonymizationTokenGenerator.class})
 class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired

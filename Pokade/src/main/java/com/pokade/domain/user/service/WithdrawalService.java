@@ -12,6 +12,7 @@ import com.pokade.global.security.TokenBlacklistStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -30,9 +31,11 @@ public class WithdrawalService {
     private final ApplicationEventPublisher eventPublisher;
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklistStore tokenBlacklistStore;
+    private final WithdrawalConfirmer withdrawalConfirmer;
 
     private static final int GRACE_PERIOD_DAYS = 7;
-    private final WithdrawalConfirmer withdrawalConfirmer;
+    private static final int MAX_ANON_RETRY = 3;
+
 
     // 탈퇴 신청한다 (ACTIVE + 비밀번호 확인 후 유예 상태로 전환, 이벤트 발행)
     @Transactional
@@ -76,15 +79,24 @@ public class WithdrawalService {
                 .map(User::getId)
                 .toList();
         for (Long userId : targetIds) {
-            boolean confirmed;
-            try {
-                confirmed = withdrawalConfirmer.confirm(userId); // DB 확정(건별 트랜잭션)
-            } catch (Exception e) {
-                log.error("탈퇴 확정 실패 - 다음 대상 계속 진행 (userId={})", userId, e);
-                continue;
+            boolean confirmed = false;
+            int attempts = 0;
+            while (true) {
+                try {
+                    confirmed = withdrawalConfirmer.confirm(userId); // 매 호출 새 토큰 + 새 트랜잭션
+                    break;
+                } catch (DataIntegrityViolationException e) {         // 익명화 토큰 UNIQUE 충돌 → 새 토큰으로 재시도
+                    if (++attempts >= MAX_ANON_RETRY) {
+                        log.error("탈퇴 확정 실패 - 익명화 토큰 충돌 재시도 초과 (userId={})", userId, e);
+                        break; // confirmed=false 유지, 남으면 다음 배치가 또 재시도(자가치유)
+                    }
+                } catch (Exception e) {
+                    log.error("탈퇴 확정 실패 - 다음 대상 계속 진행 (userId={})", userId, e);
+                    break;
+                }
             }
             if (!confirmed) {
-                continue; // 그새 철회/이미 확정 -> 정리 불필요
+                continue; // 확정 안 됨(그새 철회/이미 확정 or 재시도 초과) → 토큰 정리 불필요
             }
             try {
                 refreshTokenStore.delete(userId); // refresh token 삭제
