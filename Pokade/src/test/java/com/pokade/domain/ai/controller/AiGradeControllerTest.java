@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import com.pokade.domain.ai.service.AiGradeService;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
+import com.pokade.global.security.TokenBlacklistStore;
 
 /**
  * 인증 필터(addFilters=false)를 꺼둔 상태라 @AuthenticationPrincipal은 항상 null로 주입된다.
@@ -34,6 +35,9 @@ class AiGradeControllerTest {
 
     @MockitoBean
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+
+    @MockitoBean
+    private TokenBlacklistStore tokenBlacklistStore;
 
     @Test
     @DisplayName("인증 없이 진단 결과를 조회하면 401을 반환한다")
