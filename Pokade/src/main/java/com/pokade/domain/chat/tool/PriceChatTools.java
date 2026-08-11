@@ -79,7 +79,7 @@ public class PriceChatTools {
     public String getPriceStats(@ToolParam(description = "조회할 카드의 cardId") Long cardId) {
         PRICE_TOOL_INVOKED.set(true);
         try {
-            PriceStatsResponse stats = priceService.getStats(cardId, null);
+            PriceStatsResponse stats = priceService.getStats(cardId, null, null, null);
             return "최근 7일 대비 이전 7일 변동률=%s%%, 변동액=%d원, 최근 7일 거래량=%d건".formatted(
                     stats.changeRate(), stats.changeAmount(), stats.volume());
         } catch (BusinessException e) {
