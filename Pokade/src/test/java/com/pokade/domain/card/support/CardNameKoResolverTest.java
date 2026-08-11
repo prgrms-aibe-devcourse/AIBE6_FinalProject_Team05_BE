@@ -42,12 +42,12 @@ class CardNameKoResolverTest {
     }
 
     @Test
-    @DisplayName("t4 카드 이름에 영문 종명이 포함되어 있지 않으면(예: 일본어 카드) null을 반환한다")
+    @DisplayName("t4 순수 영문 카드 이름인데 nameEn이 포함되어 있지 않으면(종 불일치) null을 반환한다")
     void t4() {
         given(pokedexKoNameCache.getNameEn(6)).willReturn("Charizard");
         given(pokedexKoNameCache.getNameKo(6)).willReturn("리자몽");
 
-        assertThat(cardNameKoResolver.resolve("リザードン", List.of(6))).isNull();
+        assertThat(cardNameKoResolver.resolve("Blastoise", List.of(6))).isNull();
     }
 
     @Test
@@ -75,5 +75,23 @@ class CardNameKoResolverTest {
         given(pokedexKoNameCache.getNameKo(6)).willReturn("리자몽");
 
         assertThat(cardNameKoResolver.resolve("charizard ex", List.of(6))).isNull();
+    }
+
+    @Test
+    @DisplayName("t8 비영문+영문 접미사 조합이면 접미사만 분리하고 앞부분을 nameKo로 치환한다")
+    void t8() {
+        given(pokedexKoNameCache.getNameEn(940)).willReturn("Toedscruel");
+        given(pokedexKoNameCache.getNameKo(940)).willReturn("파이코");
+
+        assertThat(cardNameKoResolver.resolve("クヌギダマex", List.of(940))).isEqualTo("파이코ex");
+    }
+
+    @Test
+    @DisplayName("t9 순수 비영문 카드 이름(접미사 없음)이면 nameKo만 그대로 반환한다")
+    void t9() {
+        given(pokedexKoNameCache.getNameEn(940)).willReturn("Toedscruel");
+        given(pokedexKoNameCache.getNameKo(940)).willReturn("파이코");
+
+        assertThat(cardNameKoResolver.resolve("クヌギダマ", List.of(940))).isEqualTo("파이코");
     }
 }
