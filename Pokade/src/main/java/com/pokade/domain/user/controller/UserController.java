@@ -42,7 +42,7 @@ public class UserController {
     @DeleteMapping("/me")
     public ApiResponse<Void> requestWithdrawal(@AuthenticationPrincipal Long userId,
                                                @Valid @RequestBody WithdrawalRequest request) {
-        withdrawalService.requestWithdrawal(userId, request.password());
+        withdrawalService.requestWithdrawal(userId, request.password(), request.code());
         return ApiResponse.ok("탈퇴 신청이 접수되었습니다.");
     }
 
@@ -50,5 +50,11 @@ public class UserController {
     public ApiResponse<Void> cancelWithdrawal(@AuthenticationPrincipal Long userId) {
         withdrawalService.cancelWithdrawal(userId);
         return ApiResponse.ok("탈퇴 신청이 철회되었습니다.");
+    }
+
+    @PostMapping("/me/withdrawal/send-code")
+    public ApiResponse<Void> sendWithdrawalCode(@AuthenticationPrincipal Long userId) {
+        withdrawalService.sendWithdrawalCode(userId);
+        return ApiResponse.ok("탈퇴 인증 코드가 발송되었습니다.");
     }
 }

@@ -1,9 +1,7 @@
 package com.pokade.domain.user.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
-
 public record WithdrawalRequest(
-        @NotBlank(message = "비밀번호는 필수입니다.")
-        String password
+        String password, // LOCAL 계정용 (소셜은 null)
+        String code       // 소셜 계정용 이메일 인증코드 (LOCAL은 null)
 ) {
 }
