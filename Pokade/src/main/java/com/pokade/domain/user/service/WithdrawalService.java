@@ -47,8 +47,11 @@ public class WithdrawalService {
             throw new BusinessException(ErrorCode.WITHDRAWAL_NOT_ALLOWED);
         }
 
-        if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new BusinessException(ErrorCode.INVALID_CURRENT_PASSWORD);
+        if (user.isLocalUser()) {
+            if (password == null || password.isBlank()
+                    || !passwordEncoder.matches(password, user.getPassword())) {
+                throw new BusinessException(ErrorCode.INVALID_CURRENT_PASSWORD);
+            }
         }
 
         user.requestWithdrawal(LocalDateTime.now());
