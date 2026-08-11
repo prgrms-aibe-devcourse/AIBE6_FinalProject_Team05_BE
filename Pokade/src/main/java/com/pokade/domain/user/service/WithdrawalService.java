@@ -1,5 +1,6 @@
 package com.pokade.domain.user.service;
 
+import com.pokade.domain.auth.service.WithdrawalCodeService;
 import com.pokade.domain.auth.store.RefreshTokenStore;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.UserStatus;
@@ -32,14 +33,20 @@ public class WithdrawalService {
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklistStore tokenBlacklistStore;
     private final WithdrawalConfirmer withdrawalConfirmer;
+    private final WithdrawalCodeService withdrawalCodeService;
 
     private static final int GRACE_PERIOD_DAYS = 7;
     private static final int MAX_ANON_RETRY = 3;
 
+    private static final String REAUTH_PURPOSE = "withdrawal_reauth";
+    private static final String CLAIM_PURPOSE = "purpose";
+    private static final String CLAIM_EMAIL = "email";
+    private static final String CLAIM_PROVIDER = "provider";
 
-    // 탈퇴 신청한다 (ACTIVE + 비밀번호 확인 후 유예 상태로 전환, 이벤트 발행)
+
+    // 탈퇴 신청한다 (ACTIVE + 본인확인 후 유예 상태로 전환, 이벤트 발행)
     @Transactional
-    public void requestWithdrawal(Long userId, String password) {
+    public void requestWithdrawal(Long userId, String password, String code) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
@@ -47,12 +54,28 @@ public class WithdrawalService {
             throw new BusinessException(ErrorCode.WITHDRAWAL_NOT_ALLOWED);
         }
 
-        if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new BusinessException(ErrorCode.INVALID_CURRENT_PASSWORD);
+        if (user.isLocalUser()) {
+            if (password == null || password.isBlank()
+                    || !passwordEncoder.matches(password, user.getPassword())) {
+                throw new BusinessException(ErrorCode.INVALID_CURRENT_PASSWORD);
+            }
+        } else {
+            withdrawalCodeService.verify(user.getEmail(), code);
         }
 
         user.requestWithdrawal(LocalDateTime.now());
         eventPublisher.publishEvent(new UserWithdrawalRequestedEvent(userId));
+    }
+
+    // 소셜 계정 탈퇴용 인증코드를 본인 이메일로 발송한다 (ACTIVE + 소셜만)
+    @Transactional(readOnly = true)
+    public void sendWithdrawalCode(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (user.getStatus() != UserStatus.ACTIVE || user.isLocalUser()) {
+            throw new BusinessException(ErrorCode.WITHDRAWAL_NOT_ALLOWED);
+        }
+        withdrawalCodeService.send(user.getEmail());
     }
 
     // 탈퇴 신청을 철회한다(유예 상태에서만, 활성 복구 + 이벤트 발생)
