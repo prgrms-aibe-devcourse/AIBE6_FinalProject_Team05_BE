@@ -103,6 +103,9 @@ public class CardService {
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
     // 검색어가 자음(초성)으로만 이뤄져 있으면 초성 검색, 아니면 이름 부분일치로 검색한다.
+    // 한글/초성 검색은 도감번호(national_pokedex_numbers) 매핑 기반이라 포켓몬 카드만 지원한다.
+    // 도감번호가 없는 트레이너/에너지 카드는 이 경로로 검색되지 않는다 - 의도된 한계
+    // (PokeAPI 도감번호 매핑 방식의 알려진 제약).
     private Page<Card> searchByPokedexKoName(String keyword, Pageable pageable) {
         List<PokedexKoName> matches = KoreanTextUtil.isChosungOnly(keyword)
                 ? pokedexKoNameRepository.findByNameKoChosungContaining(keyword)
