@@ -178,7 +178,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             WHERE EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers))
             """;
 
-    @Query(value = POKEDEX_SEARCH_BASE + "ORDER BY c.name",
+    @Query(value = POKEDEX_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
             countQuery = POKEDEX_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> findByNationalPokedexNumbersIn(@Param("pokedexNumbers") List<Integer> pokedexNumbers, Pageable pageable);

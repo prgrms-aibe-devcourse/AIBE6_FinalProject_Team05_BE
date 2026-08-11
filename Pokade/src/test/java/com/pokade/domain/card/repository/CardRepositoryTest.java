@@ -614,4 +614,22 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         assertThat(result.getTotalElements()).isEqualTo(2);
         assertThat(result.getTotalPages()).isEqualTo(2);
     }
+
+    @Test
+    @DisplayName("t52 name이 같은 카드가 여러 건이어도 id를 2차 정렬 키로 사용해 페이지를 나눠 조회해도 순서가 항상 동일하다")
+    void t52() {
+        Card dittoFirst = persistCard("Ditto", "Common", null, null, List.of(132), LocalDateTime.now());
+        Card dittoSecond = persistCard("Ditto", "Common", null, null, List.of(132), LocalDateTime.now());
+        entityManager.flush();
+
+        Page<Card> page0 = cardRepository.findByNationalPokedexNumbersIn(List.of(132), PageRequest.of(0, 1));
+        Page<Card> page1 = cardRepository.findByNationalPokedexNumbersIn(List.of(132), PageRequest.of(1, 1));
+
+        assertThat(page0.getContent()).extracting(Card::getId).containsExactly(dittoFirst.getId());
+        assertThat(page1.getContent()).extracting(Card::getId).containsExactly(dittoSecond.getId());
+
+        // 같은 조회를 반복해도(캐시/실행계획 등에 따라 흔들리지 않고) 매번 동일한 순서가 나와야 안정 정렬이다.
+        Page<Card> page0Retry = cardRepository.findByNationalPokedexNumbersIn(List.of(132), PageRequest.of(0, 1));
+        assertThat(page0Retry.getContent()).extracting(Card::getId).containsExactly(dittoFirst.getId());
+    }
 }
