@@ -9,12 +9,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import org.springframework.stereotype.Component;
 
 import java.io.*;
 import java.time.Duration;
 import java.util.Base64;
 
 // authorization request를 Redis에 저장(대용량 4KB 문제 회피) 쿠키엔 CSRF 바인딩용 state만
+@Component
 public class RedisAuthorizationRequestRepository implements AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
 
     private static final String COOKIE_NAME = "oauth2_auth_state";
