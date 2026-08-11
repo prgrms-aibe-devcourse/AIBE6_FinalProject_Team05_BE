@@ -23,7 +23,6 @@ public class PasswordResetService {
     private final VerificationMailSender verificationMailSender;
     private final PasswordEncoder passwordEncoder;
 
-    private static final int MAX_RESET_ATTEMPTS = 5;
 
     // 재설정 코드 발송: ACTIVE + LOCAL 계정만
     public void send(String email) {
@@ -51,19 +50,11 @@ public class PasswordResetService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        if (codeStore.getAttemptCount(email) >= MAX_RESET_ATTEMPTS) {
-            throw new BusinessException(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
+        switch (codeStore.verifyAndConsume(email, code)) {
+            case EXCEEDED -> throw new BusinessException(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
+            case EXPIRED -> throw new BusinessException(ErrorCode.EMAIL_CODE_EXPIRED);
+            case MISMATCH -> throw new BusinessException(ErrorCode.EMAIL_CODE_MISMATCH);
+            case OK -> user.changePassword(passwordEncoder.encode(newPassword));
         }
-
-        String storeCode = codeStore.find(email)
-                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_CODE_EXPIRED));
-
-        if (!storeCode.equals(code)) {
-            codeStore.incrementAttempt(email);
-            throw new BusinessException(ErrorCode.EMAIL_CODE_MISMATCH);
-        }
-
-        user.changePassword(passwordEncoder.encode(newPassword));
-        codeStore.delete(email);
     }
 }

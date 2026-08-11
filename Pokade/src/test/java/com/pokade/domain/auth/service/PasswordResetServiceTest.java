@@ -1,6 +1,7 @@
 package com.pokade.domain.auth.service;
 
 import com.pokade.domain.auth.store.PasswordResetCodeStore;
+import com.pokade.domain.auth.store.VerificationResult;
 import com.pokade.domain.auth.support.VerificationCodeGenerator;
 import com.pokade.domain.auth.support.VerificationMailSender;
 import com.pokade.domain.user.entity.User;
@@ -148,23 +149,22 @@ public class PasswordResetServiceTest {
     // ===== confirm =====
 
     @Test
-    @DisplayName("코드가 일치하면 새 비밀번호로 변경하고 저장된 코드를 삭제한다")
-    void confirm_changesPasswordAndDeletesCode() {
+    @DisplayName("코드가 일치(OK)하면 새 비밀번호로 변경한다")
+    void confirm_changesPasswordOnOk() {
         String email = "user@pokade.com";
         User user = activeLocalUser(email);
         given(userRepository.findByEmail(email)).willReturn(Optional.of(user));
-        given(codeStore.getAttemptCount(email)).willReturn(0L);
-        given(codeStore.find(email)).willReturn(Optional.of("123456"));
+        given(codeStore.verifyAndConsume(email, "123456")).willReturn(VerificationResult.OK);
         given(passwordEncoder.encode("newPass123")).willReturn("ENCODED_NEW");
 
         passwordResetService.confirm(email, "123456", "newPass123");
 
         assertThat(user.getPassword()).isEqualTo("ENCODED_NEW");
-        then(codeStore).should().delete(email);
+        then(codeStore).should().verifyAndConsume(email, "123456");
     }
 
     @Test
-    @DisplayName("가입되지 않은 이메일이면 USER_NOT_FOUND 예외를 던지고 코드를 삭제하지 않는다")
+    @DisplayName("가입되지 않은 이메일이면 USER_NOT_FOUND 예외를 던지고 코드 검증을 하지 않는다")
     void confirm_rejectsWhenUserNotFound() {
         String email = "unknown@pokade.com";
         given(userRepository.findByEmail(email)).willReturn(Optional.empty());
@@ -173,55 +173,45 @@ public class PasswordResetServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.USER_NOT_FOUND);
 
-        then(codeStore).should(never()).delete(any());
+        then(codeStore).should(never()).verifyAndConsume(any(), any());
     }
 
     @Test
-    @DisplayName("실패 횟수가 최대치 이상이면 EMAIL_VERIFY_ATTEMPT_EXCEEDED 예외를 던지고 코드 조회조차 하지 않는다")
+    @DisplayName("시도 초과(EXCEEDED)면 EMAIL_VERIFY_ATTEMPT_EXCEEDED 예외를 던진다")
     void confirm_rejectsWhenAttemptExceeded() {
         String email = "user@pokade.com";
         given(userRepository.findByEmail(email)).willReturn(Optional.of(activeLocalUser(email)));
-        given(codeStore.getAttemptCount(email)).willReturn(5L);
+        given(codeStore.verifyAndConsume(email, "123456")).willReturn(VerificationResult.EXCEEDED);
 
         assertThatThrownBy(() -> passwordResetService.confirm(email, "123456", "newPass123"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
-
-        then(codeStore).should(never()).find(any());
-        then(codeStore).should(never()).incrementAttempt(any());
-        then(codeStore).should(never()).delete(any());
     }
 
     @Test
-    @DisplayName("저장된 코드가 없으면(만료·미발송) EMAIL_CODE_EXPIRED 예외를 던지고 코드를 삭제하지 않는다")
+    @DisplayName("코드 저장이 없으면(EXPIRED) EMAIL_CODE_EXPIRED 예외를 던진다")
     void confirm_rejectsWhenCodeExpired() {
         String email = "user@pokade.com";
         given(userRepository.findByEmail(email)).willReturn(Optional.of(activeLocalUser(email)));
-        given(codeStore.getAttemptCount(email)).willReturn(0L);
-        given(codeStore.find(email)).willReturn(Optional.empty());
+        given(codeStore.verifyAndConsume(email, "123456")).willReturn(VerificationResult.EXPIRED);
 
         assertThatThrownBy(() -> passwordResetService.confirm(email, "123456", "newPass123"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_CODE_EXPIRED);
-
-        then(codeStore).should(never()).delete(any());
     }
 
     @Test
-    @DisplayName("저장된 코드와 다르면 EMAIL_CODE_MISMATCH 예외를 던지고 실패 횟수만 올린 뒤 비번 변경·삭제를 하지 않는다")
+    @DisplayName("코드가 다르면(MISMATCH) EMAIL_CODE_MISMATCH 예외를 던지고 비번을 바꾸지 않는다")
     void confirm_rejectsWhenCodeMismatch() {
         String email = "user@pokade.com";
         User user = activeLocalUser(email);
         given(userRepository.findByEmail(email)).willReturn(Optional.of(user));
-        given(codeStore.getAttemptCount(email)).willReturn(0L);
-        given(codeStore.find(email)).willReturn(Optional.of("999999"));
+        given(codeStore.verifyAndConsume(email, "123456")).willReturn(VerificationResult.MISMATCH);
 
         assertThatThrownBy(() -> passwordResetService.confirm(email, "123456", "newPass123"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_CODE_MISMATCH);
 
         assertThat(user.getPassword()).isEqualTo("ENCODED_PW"); // 그대로
-        then(codeStore).should().incrementAttempt(email);
-        then(codeStore).should(never()).delete(any());
     }
 }
