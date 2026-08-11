@@ -36,13 +36,14 @@ public class PokedexKoNameInitializer implements ApplicationRunner {
             return;
         }
 
-        List<PokedexKoName> pokedexKoNames = readCsv();
-        pokedexKoNameRepository.saveAll(pokedexKoNames);
-        log.info("도감 한글명 {}건 적재 완료", pokedexKoNames.size());
+        ParseResult result = readCsv();
+        pokedexKoNameRepository.saveAll(result.pokedexKoNames());
+        log.info("도감 한글명 적재 완료 - 정상 {}건, 스킵 {}건", result.pokedexKoNames().size(), result.skippedCount());
     }
 
-    private List<PokedexKoName> readCsv() throws IOException {
+    private ParseResult readCsv() throws IOException {
         List<PokedexKoName> pokedexKoNames = new ArrayList<>();
+        int skippedCount = 0;
         ClassPathResource resource = new ClassPathResource(CSV_PATH);
 
         try (InputStream inputStream = resource.getInputStream();
@@ -54,7 +55,20 @@ public class PokedexKoNameInitializer implements ApplicationRunner {
                     continue;
                 }
                 String[] columns = line.split(",", 2);
-                Integer pokedexNumber = Integer.valueOf(columns[0].trim());
+                if (columns.length < 2) {
+                    log.warn("도감 한글명 CSV 파싱 스킵 - 콤마가 없는 잘못된 형식의 줄: \"{}\"", line);
+                    skippedCount++;
+                    continue;
+                }
+
+                Integer pokedexNumber;
+                try {
+                    pokedexNumber = Integer.valueOf(columns[0].trim());
+                } catch (NumberFormatException e) {
+                    log.warn("도감 한글명 CSV 파싱 스킵 - 도감번호가 숫자가 아님: \"{}\"", line);
+                    skippedCount++;
+                    continue;
+                }
                 String nameKo = columns[1].trim();
 
                 pokedexKoNames.add(PokedexKoName.builder()
@@ -65,6 +79,9 @@ public class PokedexKoNameInitializer implements ApplicationRunner {
             }
         }
 
-        return pokedexKoNames;
+        return new ParseResult(pokedexKoNames, skippedCount);
+    }
+
+    private record ParseResult(List<PokedexKoName> pokedexKoNames, int skippedCount) {
     }
 }
