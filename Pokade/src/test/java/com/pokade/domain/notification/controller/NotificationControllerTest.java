@@ -10,10 +10,10 @@ import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
 import com.pokade.global.security.TokenBlacklistStore;
-import com.pokade.global.security.oauth.CookieAuthorizationRequestRepository;
 import com.pokade.global.security.oauth.CustomOAuth2UserService;
 import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
 import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
+import com.pokade.global.security.oauth.RedisAuthorizationRequestRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -64,7 +64,7 @@ class NotificationControllerTest {
     private OAuth2LoginService oAuth2LoginService;
 
     @MockitoBean
-    private CookieAuthorizationRequestRepository cookieAuthorizationRequestRepository;
+    private RedisAuthorizationRequestRepository redisAuthorizationRequestRepository;
 
     @MockitoBean
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;

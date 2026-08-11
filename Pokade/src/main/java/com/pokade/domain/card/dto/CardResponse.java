@@ -8,6 +8,7 @@ public record CardResponse(
         Long id,
         String externalId,
         String name,
+        String nameKo,
         String setName,
         String rarity,
         String supertype,
@@ -18,11 +19,12 @@ public record CardResponse(
         List<String> grades
 ) {
 
-    public static CardResponse from(Card card, List<String> grades) {
+    public static CardResponse from(Card card, List<String> grades, String nameKo) {
         return new CardResponse(
                 card.getId(),
                 card.getExternalId(),
                 card.getName(),
+                nameKo,
                 card.getSetName(),
                 card.getRarity(),
                 card.getSupertype(),

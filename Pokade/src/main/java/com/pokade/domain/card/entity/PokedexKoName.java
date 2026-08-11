@@ -22,6 +22,9 @@ public class PokedexKoName {
     @Column(name = "pokedex_number")
     private Integer pokedexNumber;
 
+    @Column(name = "name_en", nullable = false, length = 50)
+    private String nameEn;
+
     @Column(name = "name_ko", nullable = false, length = 50)
     private String nameKo;
 
