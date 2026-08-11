@@ -53,7 +53,8 @@ public class PriceChatTools {
                     .map(c -> "cardId=%d, name=%s, set=%s, rarity=%s".formatted(c.id(), c.name(), c.setName(), c.rarity()))
                     .collect(Collectors.joining("\n"));
         } catch (BusinessException e) {
-            log.warn("챗봇 카드 검색 실패: keyword={}", keyword, e);
+            // 검색어(keyword)는 사용자 입력 원문이라 로그에 남기지 않는다.
+            log.warn("챗봇 카드 검색 실패", e);
             return "카드 검색 중 오류가 발생했습니다.";
         }
     }
