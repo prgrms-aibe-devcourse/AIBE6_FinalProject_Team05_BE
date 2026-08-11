@@ -1,6 +1,8 @@
 package com.pokade.domain.price.service;
 
 import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.entity.CardPrice;
+import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.entity.ListingGrade;
@@ -9,6 +11,7 @@ import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.price.ChartPeriod;
 import com.pokade.domain.price.RankingType;
 import com.pokade.domain.price.StatsPeriod;
+import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
@@ -29,9 +32,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -53,6 +58,7 @@ public class PriceService {
     private final TradeRepository tradeRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final PriceCardStatsRepository priceCardStatsRepository;
+    private final CardPriceRepository cardPriceRepository;
 
     public PriceSummaryResponse getSummary(Long cardId, Long variantId) {
         if (!cardRepository.existsById(cardId)) {
@@ -232,6 +238,59 @@ public class PriceService {
     }
 
     private record GradeKey(String grade, String company) {
+    }
+
+    // card_prices에는 시점별 체결 이력이 없고 "현재가(market) + 등락률(change_*_pct)"만 있다. 실제 체결 이력이 아니라,
+    // market을 각 등락률만큼 거슬러 올라간 추정가 포인트를 만들어 반환한다 - PSA10/PSA9처럼 trades에 데이터가 거의
+    // 없는 등급도 대략적인 추세선을 그릴 수 있게 하기 위한 용도(getPriceChart의 실거래 기반 차트와는 다른 성격).
+    private static final List<PeriodDays> GRADE_CHART_PERIODS = List.of(
+            new PeriodDays(180, CardPrice::getChange180dPct),
+            new PeriodDays(90, CardPrice::getChange90dPct),
+            new PeriodDays(30, CardPrice::getChange30dPct),
+            new PeriodDays(14, CardPrice::getChange14dPct),
+            new PeriodDays(7, CardPrice::getChange7dPct),
+            new PeriodDays(1, CardPrice::getChange1dPct)
+    );
+
+    public List<CardPricePointResponse> getGradeChart(Long cardId, Long variantId, ListingGrade grade) {
+        if (!cardRepository.existsById(cardId)) {
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+        }
+        Long resolvedVariantId = variantId != null
+                ? variantId
+                : cardVariantRepository.findPrimaryVariantId(cardId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
+
+        GradeKey gradeKey = toGradeKey(grade);
+        CardPrice cardPrice = cardPriceRepository
+                .findByVariantIdAndPriceTypeAndGradeAndCompany(resolvedVariantId, "graded", gradeKey.grade(), gradeKey.company())
+                .orElse(null);
+
+        if (cardPrice == null || cardPrice.getMarket() == null) {
+            return List.of();
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<CardPricePointResponse> points = new ArrayList<>();
+
+        for (PeriodDays periodDays : GRADE_CHART_PERIODS) {
+            BigDecimal changePct = periodDays.changePct().apply(cardPrice);
+            BigDecimal divisor = changePct == null
+                    ? null
+                    : BigDecimal.ONE.add(changePct.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
+            if (divisor == null || divisor.signum() == 0) {
+                continue;
+            }
+            BigDecimal pastPrice = cardPrice.getMarket().divide(divisor, 2, RoundingMode.HALF_UP);
+            points.add(new CardPricePointResponse(now.minusDays(periodDays.days()), pastPrice, cardPrice.getCurrency()));
+        }
+
+        points.add(new CardPricePointResponse(now, cardPrice.getMarket(), cardPrice.getCurrency()));
+
+        return points;
+    }
+
+    private record PeriodDays(int days, Function<CardPrice, BigDecimal> changePct) {
     }
 
     // FR-PRICE-06: getStats()와 같은 방식(자체 AI등급 S, COMPLETED 거래, 최근 7일 vs 이전 7일 블록 평균 비교)을

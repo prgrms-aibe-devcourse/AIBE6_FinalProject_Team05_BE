@@ -1,6 +1,7 @@
 package com.pokade.domain.price.controller;
 
 import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
@@ -268,6 +269,47 @@ class PriceControllerTest {
         mockMvc.perform(get("/api/prices/1/stats").param("grade", "S").param("period", "3d"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PERIOD"));
+    }
+
+    @Test
+    void 등급별_시세_차트를_조회하면_200과_오래된순_포인트_목록을_반환한다() throws Exception {
+        List<CardPricePointResponse> points = List.of(
+                new CardPricePointResponse(LocalDateTime.now().minusDays(7), new BigDecimal("800.00"), "USD"),
+                new CardPricePointResponse(LocalDateTime.now(), new BigDecimal("1000.00"), "USD")
+        );
+        given(priceService.getGradeChart(1L, null, ListingGrade.PSA10)).willReturn(points);
+
+        mockMvc.perform(get("/api/prices/1/grade-chart").param("grade", "PSA10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].price").value(800.00))
+                .andExpect(jsonPath("$.data[1].price").value(1000.00));
+    }
+
+    @Test
+    void 등급별_시세_차트_조회시_grade_파라미터가_없으면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/prices/1/grade-chart"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 등급별_시세_차트_조회시_존재하지_않는_카드면_404를_반환한다() throws Exception {
+        given(priceService.getGradeChart(999L, null, ListingGrade.S))
+                .willThrow(new BusinessException(ErrorCode.CARD_NOT_FOUND));
+
+        mockMvc.perform(get("/api/prices/999/grade-chart").param("grade", "S"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CARD_NOT_FOUND"));
+    }
+
+    @Test
+    void 등급별_시세_차트_조회시_card_prices에_데이터가_없으면_200과_빈_목록을_반환한다() throws Exception {
+        given(priceService.getGradeChart(1L, null, ListingGrade.A)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/prices/1/grade-chart").param("grade", "A"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 
     @Test

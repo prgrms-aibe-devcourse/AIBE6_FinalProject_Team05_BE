@@ -1,6 +1,7 @@
 package com.pokade.domain.price.controller;
 
 import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
@@ -62,6 +63,15 @@ public class PriceController {
             @RequestParam(required = false) String period
     ) {
         return ApiResponse.ok(priceService.getStats(cardId, variantId, grade, period));
+    }
+
+    @GetMapping("/{cardId}/grade-chart")
+    public ApiResponse<List<CardPricePointResponse>> getGradeChart(
+            @PathVariable Long cardId,
+            @RequestParam(required = false) Long variantId,
+            @RequestParam ListingGrade grade
+    ) {
+        return ApiResponse.ok(priceService.getGradeChart(cardId, variantId, grade));
     }
 
     @GetMapping("/ranking")
