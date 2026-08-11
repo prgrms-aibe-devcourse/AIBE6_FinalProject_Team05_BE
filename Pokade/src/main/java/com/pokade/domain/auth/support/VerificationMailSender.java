@@ -22,4 +22,9 @@ public class VerificationMailSender {
     public void sendResetCode(String email, String code) {
         mailSender.send(email, "[Pokade] 비밀번호 재설정 코드", "재설정 코드: " + code + "\n5분 이내 입력");
     }
+
+    // 탈퇴 인증 코드 메일을 보낸다
+    public void sendWithdrawalCode(String email, String code) {
+        mailSender.send(email, "[Pokade] 회원 탈퇴 인증 코드", "탈퇴 인증 코드: " + code + "\n5분 이내 입력");
+    }
 }
