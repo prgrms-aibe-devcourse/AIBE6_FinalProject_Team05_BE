@@ -8,6 +8,7 @@ import com.pokade.global.event.UserWithdrawalCancelledEvent;
 import com.pokade.global.event.UserWithdrawalRequestedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.security.JwtTokenProvider;
 import com.pokade.global.security.TokenBlacklistStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,14 +33,20 @@ public class WithdrawalService {
     private final RefreshTokenStore refreshTokenStore;
     private final TokenBlacklistStore tokenBlacklistStore;
     private final WithdrawalConfirmer withdrawalConfirmer;
+    private final JwtTokenProvider jwtTokenProvider;
 
     private static final int GRACE_PERIOD_DAYS = 7;
     private static final int MAX_ANON_RETRY = 3;
 
+    private static final String REAUTH_PURPOSE = "withdrawal_reauth";
+    private static final String CLAIM_PURPOSE = "purpose";
+    private static final String CLAIM_EMAIL = "email";
+    private static final String CLAIM_PROVIDER = "provider";
 
-    // 탈퇴 신청한다 (ACTIVE + 비밀번호 확인 후 유예 상태로 전환, 이벤트 발행)
+
+    // 탈퇴 신청한다 (ACTIVE + 본인확인 후 유예 상태로 전환, 이벤트 발행)
     @Transactional
-    public void requestWithdrawal(Long userId, String password) {
+    public void requestWithdrawal(Long userId, String password, String reauthToken) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
@@ -52,10 +59,28 @@ public class WithdrawalService {
                     || !passwordEncoder.matches(password, user.getPassword())) {
                 throw new BusinessException(ErrorCode.INVALID_CURRENT_PASSWORD);
             }
+        } else {
+            verifyReauthTicket(reauthToken, user);
         }
 
         user.requestWithdrawal(LocalDateTime.now());
         eventPublisher.publishEvent(new UserWithdrawalRequestedEvent(userId));
+    }
+
+    // 소셜 계정: OAuth 재인증 proof 티켓 검증(목적·만료·본인 대조). 로그인 상태가 아니라 방금 재인증이 근거.
+    private void verifyReauthTicket(String reauthToken, User user) {
+        if (reauthToken == null || reauthToken.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REAUTH_TICKET);
+        }
+        String purpose = jwtTokenProvider.parseSignedTicket(reauthToken, CLAIM_PURPOSE);
+        String email = jwtTokenProvider.parseSignedTicket(reauthToken, CLAIM_EMAIL);
+        String provider = jwtTokenProvider.parseSignedTicket(reauthToken, CLAIM_PROVIDER);
+        if (!REAUTH_PURPOSE.equals(purpose) || email == null || provider == null) {
+            throw new BusinessException(ErrorCode.INVALID_REAUTH_TICKET);
+        }
+        if (!email.equals(user.getEmail()) || !provider.equals(user.getProvider().name())) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
     }
 
     // 탈퇴 신청을 철회한다(유예 상태에서만, 활성 복구 + 이벤트 발생)

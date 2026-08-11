@@ -42,7 +42,7 @@ public class UserController {
     @DeleteMapping("/me")
     public ApiResponse<Void> requestWithdrawal(@AuthenticationPrincipal Long userId,
                                                @Valid @RequestBody WithdrawalRequest request) {
-        withdrawalService.requestWithdrawal(userId, request.password());
+        withdrawalService.requestWithdrawal(userId, request.password(), request.reauthToken());
         return ApiResponse.ok("탈퇴 신청이 접수되었습니다.");
     }
 
