@@ -1,9 +1,10 @@
 package com.pokade.domain.sync.client.dto;
 
+import java.util.List;
+
 public record CardVariantDto(
-        String variantId,
-        String cardExternalId,
-        String variantName,
-        boolean primary
+        String name,
+        List<ImageDto> images,
+        List<CardPriceDto> prices
 ) {
 }

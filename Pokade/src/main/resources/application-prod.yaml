@@ -60,6 +60,14 @@ app:
   oauth2:
     redirect-base: ${APP_OAUTH2_REDIRECT_BASE:https://www.pokade.store}
 
+# dev와 동일하게 :빈 기본값 유지 - 키가 없다고 앱 부팅 자체가 fail-fast하면 안 됨(배치가 아직
+# 스케줄러/트리거로 연결되지 않아 부팅 시점에는 이 값이 쓰이지 않으므로).
+scrydex:
+  api-key: ${SCRYDEX_API_KEY:}
+  team-id: ${SCRYDEX_TEAM_ID:}
+  base-url: https://api.scrydex.com
+  page-size: 100
+
 pokade:
   ai:
     grade:

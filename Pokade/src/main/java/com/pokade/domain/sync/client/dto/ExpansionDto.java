@@ -1,6 +1,6 @@
 package com.pokade.domain.sync.client.dto;
 
-import java.time.LocalDate;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record ExpansionDto(
         String id,
@@ -8,7 +8,12 @@ public record ExpansionDto(
         String series,
         String code,
         Integer total,
-        String languageCode,
-        LocalDate releaseDate
+        @JsonProperty("printed_total") Integer printedTotal,
+        @JsonProperty("language_code") String languageCode,
+        @JsonProperty("release_date") String releaseDate,
+        @JsonProperty("is_online_only") Boolean isOnlineOnly,
+        String logo,
+        String symbol,
+        TranslationDto translation
 ) {
 }
