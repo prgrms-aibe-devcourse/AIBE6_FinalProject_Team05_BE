@@ -8,8 +8,8 @@ import java.util.List;
 // FAQ 버튼용 프리셋 질문 - 프론트가 그대로 버튼 라벨/질문으로 사용
 public enum QuickQuestion {
 
-    TOP_GAINERS("top-gainers", "오늘 급등한 카드", "최근 7일 기준 가장 많이 오른 카드 알려줘"),
-    TOP_LOSERS("top-losers", "오늘 급락한 카드", "최근 7일 기준 가장 많이 내린 카드 알려줘"),
+    TOP_GAINERS("top-gainers", "최근 7일 급등한 카드", "최근 7일 기준 가장 많이 오른 카드 알려줘"),
+    TOP_LOSERS("top-losers", "최근 7일 급락한 카드", "최근 7일 기준 가장 많이 내린 카드 알려줘"),
     HOW_TO_USE("how-to-use", "챗봇 사용법", "이 챗봇으로 어떤 걸 물어볼 수 있어?");
 
     private final String id;
