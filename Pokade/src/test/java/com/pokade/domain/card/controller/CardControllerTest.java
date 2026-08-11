@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verify;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -345,5 +346,55 @@ class CardControllerTest {
                 .hasStatus(HttpStatus.BAD_REQUEST)
                 .bodyJson()
                 .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
+
+    @Test
+    @DisplayName("t24 한글 검색어로 요청하면 서비스에 그대로 위임하고 200과 페이지 결과를 반환한다")
+    void t24() {
+        CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", "151", "Common", "Pokémon",
+                List.of("Lightning"), null, null, "sv3pt5", List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardService.searchByKeyword(eq("피카츄"), any(Pageable.class))).willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards/search?q=피카츄")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content[0].name").isEqualTo("피카츄");
+        verify(cardService).searchByKeyword(eq("피카츄"), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("t25 초성 검색어도 판별 없이 서비스에 그대로 위임한다")
+    void t25() {
+        CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", "151", "Common", "Pokémon",
+                List.of("Lightning"), null, null, "sv3pt5", List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardService.searchByKeyword(eq("ㅍㅋㅊ"), any(Pageable.class))).willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards/search?q=ㅍㅋㅊ")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content[0].name").isEqualTo("피카츄");
+        verify(cardService).searchByKeyword(eq("ㅍㅋㅊ"), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("t26 매칭되는 카드가 없으면 200과 빈 목록을 반환한다")
+    void t26() {
+        Pageable pageable = PageRequest.of(0, 20);
+        given(cardService.searchByKeyword(eq("존재안하는이름"), any(Pageable.class))).willReturn(Page.empty(pageable));
+
+        mockMvcTester.get()
+                .uri("/api/cards/search?q=존재안하는이름")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content").isEmpty();
     }
 }
