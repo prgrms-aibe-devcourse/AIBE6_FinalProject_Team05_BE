@@ -92,10 +92,12 @@ CREATE TABLE IF NOT EXISTS card_prices (
 
 CREATE TABLE IF NOT EXISTS pokedex_ko_names (
     pokedex_number  INT PRIMARY KEY,
+    name_en         VARCHAR(50) NOT NULL,
     name_ko         VARCHAR(50) NOT NULL,
     name_ko_chosung VARCHAR(30)
 );
 -- 한글 카드 검색용 도감번호-한글명 매핑 (PokeAPI 원본 데이터, 정적 고정값)
+-- name_en: 카드 이름에서 종 이름 부분을 찾아 한글로 치환할 때 기준이 되는 영문 종명
 -- name_ko_chosung: 초성 검색용, 서버 기동 시 KoreanTextUtil.extractChosung()으로 계산해서 채움
 
 CREATE TABLE IF NOT EXISTS price_snapshots (

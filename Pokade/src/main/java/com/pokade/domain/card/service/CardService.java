@@ -13,6 +13,7 @@ import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.repository.PokedexKoNameRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.card.support.KoreanTextUtil;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
@@ -50,6 +51,7 @@ public class CardService {
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
     private final PokedexKoNameRepository pokedexKoNameRepository;
+    private final CardNameKoResolver cardNameKoResolver;
 
     @Transactional(readOnly = true)
     public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
@@ -59,7 +61,7 @@ public class CardService {
         validatePriceRange(minPrice, maxPrice);
         Page<Card> cards = cardRepository.search(types, rarities, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card)));
     }
 
     @Transactional
@@ -70,7 +72,7 @@ public class CardService {
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
         Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id, GRADE_WHITELIST_LIST),
                 CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade);
-        return CardDetailResponse.of(card, variants, gradesByVariantId);
+        return CardDetailResponse.of(card, variants, gradesByVariantId, cardNameKoResolver.resolve(card));
     }
 
     private <T, K> Map<K, List<String>> groupByKey(List<T> views, Function<T, K> keyFn, Function<T, String> gradeFn) {
@@ -98,7 +100,7 @@ public class CardService {
                 ? searchByPokedexKoName(keyword, pageable)
                 : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card)));
     }
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
@@ -131,7 +133,7 @@ public class CardService {
         }
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of())))
+                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of()), cardNameKoResolver.resolve(c)))
                 .toList();
     }
 
