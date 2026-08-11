@@ -40,6 +40,9 @@ spring:
           auth: true
           starttls:
             enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
   # 운영: Google OAuth credential은 기본값 없이 주입 강제 (미설정 시 부팅 실패 = fail-fast)
   security:

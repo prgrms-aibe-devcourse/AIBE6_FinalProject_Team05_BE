@@ -1,5 +1,6 @@
 package com.pokade.domain.user.service;
 
+import com.pokade.domain.auth.service.WithdrawalCodeService;
 import com.pokade.domain.auth.store.RefreshTokenStore;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.Provider;
@@ -37,13 +38,23 @@ import static org.mockito.Mockito.times;
 @ExtendWith(MockitoExtension.class)
 class WithdrawalServiceTest {
 
-    @Mock UserRepository userRepository;
-    @Mock PasswordEncoder passwordEncoder;
-    @Mock ApplicationEventPublisher eventPublisher;
-    @Mock RefreshTokenStore refreshTokenStore;
-    @Mock TokenBlacklistStore tokenBlacklistStore;
-    @Mock WithdrawalConfirmer withdrawalConfirmer;
-    @InjectMocks WithdrawalService withdrawalService;
+    @Mock
+    UserRepository userRepository;
+    @Mock
+    PasswordEncoder passwordEncoder;
+    @Mock
+    ApplicationEventPublisher eventPublisher;
+    @Mock
+    RefreshTokenStore refreshTokenStore;
+    @Mock
+    TokenBlacklistStore tokenBlacklistStore;
+    @Mock
+    WithdrawalConfirmer withdrawalConfirmer;
+    @Mock
+    WithdrawalCodeService withdrawalCodeService;
+    @InjectMocks
+    WithdrawalService withdrawalService;
+
 
     private User activeUser() {
         return User.builder()
@@ -71,7 +82,7 @@ class WithdrawalServiceTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(passwordEncoder.matches("rawpw", "ENCODED_PW")).willReturn(true);
 
-        withdrawalService.requestWithdrawal(1L, "rawpw");
+        withdrawalService.requestWithdrawal(1L, "rawpw", null);
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.WITHDRAWAL_PENDING);
         assertThat(user.getWithdrawalRequestedAt()).isNotNull();
@@ -84,7 +95,7 @@ class WithdrawalServiceTest {
         User user = pendingUser();
         given(userRepository.findById(2L)).willReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(2L, "rawpw"))
+        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(2L, "rawpw", null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.WITHDRAWAL_NOT_ALLOWED);
         then(eventPublisher).should(never()).publishEvent(any());
@@ -97,7 +108,7 @@ class WithdrawalServiceTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(passwordEncoder.matches("wrong", "ENCODED_PW")).willReturn(false);
 
-        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(1L, "wrong"))
+        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(1L, "wrong", null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_CURRENT_PASSWORD);
     }
@@ -230,5 +241,80 @@ class WithdrawalServiceTest {
 
         then(withdrawalConfirmer).should(times(3)).confirm(2L);   // MAX_ANON_RETRY 만큼만 시도
         then(refreshTokenStore).should(never()).delete(2L);
+    }
+
+    private User socialUser() {
+        return User.builder()
+                .id(3L).email("social@pokade.com").password(null)
+                .nickname("소셜").role(Role.USER).provider(Provider.GOOGLE)
+                .status(UserStatus.ACTIVE).pointBalance(0)
+                .build();
+    }
+
+    // ===== 소셜 신청 (이메일코드) =====
+    @Test
+    @DisplayName("신청: 소셜 - 코드 검증 통과하면 유예 전환(비번 검증 스킵)")
+    void requestWithdrawal_social_success() {
+        User social = socialUser();
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+
+        withdrawalService.requestWithdrawal(3L, null, "123456");
+
+        assertThat(social.getStatus()).isEqualTo(UserStatus.WITHDRAWAL_PENDING);
+        then(withdrawalCodeService).should().verify("social@pokade.com", "123456");
+        then(eventPublisher).should().publishEvent(any(UserWithdrawalRequestedEvent.class));
+        then(passwordEncoder).should(never()).matches(any(), any());
+    }
+
+    @Test
+    @DisplayName("신청: 소셜 - 코드 검증 실패면 그대로 전파(유예 전환·이벤트 없음)")
+    void requestWithdrawal_social_codeInvalid() {
+        User social = socialUser();
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+        org.mockito.BDDMockito.willThrow(new BusinessException(ErrorCode.EMAIL_CODE_MISMATCH))
+                .given(withdrawalCodeService).verify("social@pokade.com", "999999");
+
+        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(3L, null, "999999"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_CODE_MISMATCH);
+        assertThat(social.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    // ===== 코드 발송 (sendWithdrawalCode) =====
+    @Test
+    @DisplayName("발송: 소셜 + ACTIVE면 코드 발송 위임")
+    void sendWithdrawalCode_social() {
+        User social = socialUser();
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+
+        withdrawalService.sendWithdrawalCode(3L);
+
+        then(withdrawalCodeService).should().send("social@pokade.com");
+    }
+
+    @Test
+    @DisplayName("발송: LOCAL이면 WITHDRAWAL_NOT_ALLOWED(발송 안 함)")
+    void sendWithdrawalCode_localRejected() {
+        User local = activeUser(); // LOCAL, id=1
+        given(userRepository.findById(1L)).willReturn(Optional.of(local));
+
+        assertThatThrownBy(() -> withdrawalService.sendWithdrawalCode(1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.WITHDRAWAL_NOT_ALLOWED);
+        then(withdrawalCodeService).should(never()).send(any());
+    }
+
+    @Test
+    @DisplayName("발송: 비-ACTIVE(유예중)면 WITHDRAWAL_NOT_ALLOWED")
+    void sendWithdrawalCode_notActive() {
+        User social = socialUser();
+        social.requestWithdrawal(LocalDateTime.now()); // ACTIVE -> WITHDRAWAL_PENDING
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+
+        assertThatThrownBy(() -> withdrawalService.sendWithdrawalCode(3L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.WITHDRAWAL_NOT_ALLOWED);
+        then(withdrawalCodeService).should(never()).send(any());
     }
 }

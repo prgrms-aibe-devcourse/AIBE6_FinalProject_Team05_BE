@@ -2,10 +2,7 @@ package com.pokade.global.config;
 
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtAuthenticationFilter;
-import com.pokade.global.security.oauth.CookieAuthorizationRequestRepository;
-import com.pokade.global.security.oauth.CustomOAuth2UserService;
-import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
-import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
+import com.pokade.global.security.oauth.*;
 import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -30,7 +27,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-    private final CookieAuthorizationRequestRepository cookieAuthorizationRequestRepository;
+    private final RedisAuthorizationRequestRepository authorizationRequestRepository;
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     private final OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
     private final CustomOAuth2UserService customOAuth2UserService;
@@ -61,7 +58,7 @@ public class SecurityConfig {
                 .oauth2Login(oauth2 -> oauth2
                         .authorizationEndpoint(authorization -> authorization
                                 .baseUri("/api/oauth2/authorization")
-                                .authorizationRequestRepository(cookieAuthorizationRequestRepository))
+                                .authorizationRequestRepository(authorizationRequestRepository))
                         .redirectionEndpoint(redirection -> redirection
                                 .baseUri("/api/oauth2/callback/*"))
                         .successHandler(oAuth2LoginSuccessHandler)

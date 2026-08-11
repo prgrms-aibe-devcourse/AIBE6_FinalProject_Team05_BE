@@ -10,13 +10,13 @@ import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
-public class RedisVerificationCodeStore implements VerificationCodeStore {
+public class RedisWithdrawalCodeStore implements WithdrawalCodeStore {
 
     private static final Duration CODE_TTL = Duration.ofMinutes(5);
     private static final Duration COOLDOWN_TTL = Duration.ofSeconds(60);
-    private static final String CODE_KEY_PREFIX = "auth:verify:code:";
-    private static final String COOLDOWN_KEY_PREFIX = "auth:verify:cooldown:";
-    private static final String ATTEMPT_KEY_PREFIX = "auth:verify:attempt:";
+    private static final String CODE_KEY_PREFIX = "auth:withdrawal:code:";
+    private static final String COOLDOWN_KEY_PREFIX = "auth:withdrawal:cooldown:";
+    private static final String ATTEMPT_KEY_PREFIX = "auth:withdrawal:attempt:";
     private static final int MAX_ATTEMPTS = 5;
     private static final RedisScript<String> VERIFY_AND_CONSUME = RedisScript.of(
             "local attempts = tonumber(redis.call('GET', KEYS[1]) or '0') " +
@@ -58,4 +58,6 @@ public class RedisVerificationCodeStore implements VerificationCodeStore {
                 String.valueOf(CODE_TTL.getSeconds()));
         return VerificationResult.valueOf(result);
     }
+
+
 }
