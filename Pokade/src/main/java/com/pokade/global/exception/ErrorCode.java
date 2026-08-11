@@ -38,7 +38,6 @@ public enum ErrorCode {
     LOGIN_ATTEMPTS_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 리프레시 토큰입니다."),
     INVALID_OAUTH2_TICKET(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 가입 요청입니다."),
-    INVALID_REAUTH_TICKET(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 재인증입니다."),
     TOKEN_STOLEN(HttpStatus.UNAUTHORIZED, "비정상적인 접근이 감지되어 로그아웃되었습니다."),
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 완료되지 않았습니다."),
     EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "이미 인증이 완료된 계정입니다."),
