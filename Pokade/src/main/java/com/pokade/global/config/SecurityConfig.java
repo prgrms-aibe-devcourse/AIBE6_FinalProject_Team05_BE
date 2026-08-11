@@ -75,6 +75,7 @@ public class SecurityConfig {
                                 "/api/prices/*/trades")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/listings").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/chat/query").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/chat/quick-questions").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
