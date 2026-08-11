@@ -11,6 +11,10 @@ import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
 import com.pokade.global.security.TokenBlacklistStore;
+import com.pokade.global.security.oauth.CookieAuthorizationRequestRepository;
+import com.pokade.global.security.oauth.CustomOAuth2UserService;
+import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
+import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -58,6 +62,18 @@ class TradeControllerTest {
 
     @MockitoBean
     private TokenBlacklistStore tokenBlacklistStore;
+
+    @MockitoBean
+    private CookieAuthorizationRequestRepository cookieAuthorizationRequestRepository;
+
+    @MockitoBean
+    private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+
+    @MockitoBean
+    private OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
+
+    @MockitoBean
+    private CustomOAuth2UserService customOAuth2UserService;
 
     private RequestPostProcessor userId(Long userId) {
         Authentication auth = new UsernamePasswordAuthenticationToken(
