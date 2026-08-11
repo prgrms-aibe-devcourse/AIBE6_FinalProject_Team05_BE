@@ -94,20 +94,24 @@ public class CardService {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
         }
-        Page<Card> cards = KoreanTextUtil.isKorean(keyword)
+        Page<Card> cards = (KoreanTextUtil.isKorean(keyword) || KoreanTextUtil.isChosungOnly(keyword))
                 ? searchByPokedexKoName(keyword, pageable)
                 : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
         return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
     }
 
-    // 한글 검색어를 도감번호로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
+    // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
+    // 검색어가 자음(초성)으로만 이뤄져 있으면 초성 검색, 아니면 이름 부분일치로 검색한다.
     private Page<Card> searchByPokedexKoName(String keyword, Pageable pageable) {
-        Optional<PokedexKoName> pokedexKoName = pokedexKoNameRepository.findByNameKo(keyword);
-        if (pokedexKoName.isEmpty()) {
+        List<PokedexKoName> matches = KoreanTextUtil.isChosungOnly(keyword)
+                ? pokedexKoNameRepository.findByNameKoChosungContaining(keyword)
+                : pokedexKoNameRepository.findByNameKoContaining(keyword);
+        if (matches.isEmpty()) {
             return Page.empty(pageable);
         }
-        return cardRepository.findByNationalPokedexNumbersContaining(pokedexKoName.get().getPokedexNumber(), pageable);
+        List<Integer> pokedexNumbers = matches.stream().map(PokedexKoName::getPokedexNumber).toList();
+        return cardRepository.findByNationalPokedexNumbersIn(pokedexNumbers, pageable);
     }
 
     @Transactional(readOnly = true)

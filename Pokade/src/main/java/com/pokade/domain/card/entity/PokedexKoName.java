@@ -24,4 +24,7 @@ public class PokedexKoName {
 
     @Column(name = "name_ko", nullable = false, length = 50)
     private String nameKo;
+
+    @Column(name = "name_ko_chosung", length = 30)
+    private String nameKoChosung;
 }

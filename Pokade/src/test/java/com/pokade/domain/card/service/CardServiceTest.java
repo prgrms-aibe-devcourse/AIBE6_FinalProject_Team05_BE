@@ -29,6 +29,7 @@ import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
 import com.pokade.domain.card.entity.Expansion;
+import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.repository.PokedexKoNameRepository;
@@ -431,6 +432,61 @@ class CardServiceTest {
 
         assertThat(result.getContent()).isEmpty();
         verify(cardRepository, never()).findGradesByCardIds(any(), any());
+    }
+
+    @Test
+    @DisplayName("t43 한글 부분일치 검색어는 도감번호 매핑 후 findByNationalPokedexNumbersIn으로 카드를 조회한다")
+    void t43() {
+        Pageable pageable = PageRequest.of(0, 20);
+        PokedexKoName pikachu = PokedexKoName.builder()
+                .pokedexNumber(25)
+                .nameKo("피카츄")
+                .nameKoChosung("ㅍㅋㅊ")
+                .build();
+        Card card = Card.builder().id(1L).name("Pikachu").nationalPokedexNumbers(List.of(25)).build();
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(pokedexKoNameRepository.findByNameKoContaining("피카")).willReturn(List.of(pikachu));
+        given(cardRepository.findByNationalPokedexNumbersIn(List.of(25), pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.searchByKeyword("피카", pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).name()).isEqualTo("Pikachu");
+        verify(cardRepository).findByNationalPokedexNumbersIn(List.of(25), pageable);
+    }
+
+    @Test
+    @DisplayName("t44 검색어가 자음(초성)으로만 이뤄지면 findByNameKoChosungContaining으로 조회한다")
+    void t44() {
+        Pageable pageable = PageRequest.of(0, 20);
+        PokedexKoName pikachu = PokedexKoName.builder()
+                .pokedexNumber(25)
+                .nameKo("피카츄")
+                .nameKoChosung("ㅍㅋㅊ")
+                .build();
+        Card card = Card.builder().id(1L).name("Pikachu").nationalPokedexNumbers(List.of(25)).build();
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(pokedexKoNameRepository.findByNameKoChosungContaining("ㅍㅋㅊ")).willReturn(List.of(pikachu));
+        given(cardRepository.findByNationalPokedexNumbersIn(List.of(25), pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.searchByKeyword("ㅍㅋㅊ", pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        verify(pokedexKoNameRepository).findByNameKoChosungContaining("ㅍㅋㅊ");
+        verify(pokedexKoNameRepository, never()).findByNameKoContaining(any());
+    }
+
+    @Test
+    @DisplayName("t45 매핑되는 도감명이 없으면 빈 페이지를 반환하고 카드 리포지토리는 호출하지 않는다")
+    void t45() {
+        Pageable pageable = PageRequest.of(0, 20);
+        given(pokedexKoNameRepository.findByNameKoContaining("존재안하는한글이름")).willReturn(List.of());
+
+        Page<CardResponse> result = cardService.searchByKeyword("존재안하는한글이름", pageable);
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isEqualTo(0);
+        verify(cardRepository, never()).findByNationalPokedexNumbersIn(any(), any());
     }
 
     @Test

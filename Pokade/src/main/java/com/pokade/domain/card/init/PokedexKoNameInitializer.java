@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.PokedexKoNameRepository;
+import com.pokade.domain.card.support.KoreanTextUtil;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,7 @@ public class PokedexKoNameInitializer implements ApplicationRunner {
                 pokedexKoNames.add(PokedexKoName.builder()
                         .pokedexNumber(pokedexNumber)
                         .nameKo(nameKo)
+                        .nameKoChosung(KoreanTextUtil.extractChosung(nameKo))
                         .build());
             }
         }
