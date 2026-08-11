@@ -12,6 +12,13 @@ public final class KoreanTextUtil {
             'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
     };
 
+    /** 한글 완성형 음절 시작 코드포인트, '가'. */
+    private static final int HANGUL_SYLLABLE_START = 0xAC00;
+    /** 한글 완성형 음절 끝 코드포인트, '힣'. */
+    private static final int HANGUL_SYLLABLE_END = 0xD7A3;
+    /** 중성 21개 × 종성 28개 조합 수 - 초성 하나당 이 개수만큼의 음절이 대응됨. */
+    private static final int JUNGSUNG_JONGSUNG_COUNT = 21 * 28;
+
     private KoreanTextUtil() {
     }
 
@@ -26,8 +33,8 @@ public final class KoreanTextUtil {
         }
         StringBuilder result = new StringBuilder(text.length());
         for (char c : text.toCharArray()) {
-            if (c >= 0xAC00 && c <= 0xD7A3) {
-                int chosungIndex = (c - 0xAC00) / (21 * 28);
+            if (c >= HANGUL_SYLLABLE_START && c <= HANGUL_SYLLABLE_END) {
+                int chosungIndex = (c - HANGUL_SYLLABLE_START) / JUNGSUNG_JONGSUNG_COUNT;
                 result.append(CHOSUNG[chosungIndex]);
             } else {
                 result.append(c);
