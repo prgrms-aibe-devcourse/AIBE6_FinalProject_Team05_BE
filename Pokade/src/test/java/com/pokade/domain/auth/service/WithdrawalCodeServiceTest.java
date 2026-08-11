@@ -1,5 +1,6 @@
 package com.pokade.domain.auth.service;
 
+import com.pokade.domain.auth.store.VerificationResult;
 import com.pokade.domain.auth.store.WithdrawalCodeStore;
 import com.pokade.domain.auth.support.VerificationCodeGenerator;
 import com.pokade.domain.auth.support.VerificationMailSender;
@@ -11,8 +12,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
@@ -53,34 +52,29 @@ class WithdrawalCodeServiceTest {
     }
 
     @Test
-    @DisplayName("verify: 유효 코드면 통과 + 코드 삭제")
+    @DisplayName("verify: OK면 통과(원자 검증·소모 위임)")
     void verify_success() {
-        given(codeStore.getAttemptCount(EMAIL)).willReturn(0L);
-        given(codeStore.find(EMAIL)).willReturn(Optional.of("123456"));
+        given(codeStore.verifyAndConsume(EMAIL, "123456")).willReturn(VerificationResult.OK);
 
         withdrawalCodeService.verify(EMAIL, "123456");
 
-        then(codeStore).should().delete(EMAIL);
+        then(codeStore).should().verifyAndConsume(EMAIL, "123456");
     }
 
     @Test
-    @DisplayName("verify: 불일치면 EMAIL_CODE_MISMATCH + 시도 증가")
+    @DisplayName("verify: MISMATCH면 EMAIL_CODE_MISMATCH")
     void verify_mismatch() {
-        given(codeStore.getAttemptCount(EMAIL)).willReturn(0L);
-        given(codeStore.find(EMAIL)).willReturn(Optional.of("123456"));
+        given(codeStore.verifyAndConsume(EMAIL, "999999")).willReturn(VerificationResult.MISMATCH);
 
         assertThatThrownBy(() -> withdrawalCodeService.verify(EMAIL, "999999"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_CODE_MISMATCH);
-        then(codeStore).should().incrementAttempt(EMAIL);
-        then(codeStore).should(never()).delete(EMAIL);
     }
 
     @Test
-    @DisplayName("verify: 코드 없음/만료면 EMAIL_CODE_EXPIRED")
+    @DisplayName("verify: EXPIRED면 EMAIL_CODE_EXPIRED")
     void verify_expired() {
-        given(codeStore.getAttemptCount(EMAIL)).willReturn(0L);
-        given(codeStore.find(EMAIL)).willReturn(Optional.empty());
+        given(codeStore.verifyAndConsume(EMAIL, "123456")).willReturn(VerificationResult.EXPIRED);
 
         assertThatThrownBy(() -> withdrawalCodeService.verify(EMAIL, "123456"))
                 .isInstanceOf(BusinessException.class)
@@ -88,13 +82,12 @@ class WithdrawalCodeServiceTest {
     }
 
     @Test
-    @DisplayName("verify: 시도 5회 이상이면 EMAIL_VERIFY_ATTEMPT_EXCEEDED(코드 조회 안 함)")
+    @DisplayName("verify: EXCEEDED면 EMAIL_VERIFY_ATTEMPT_EXCEEDED")
     void verify_attemptExceeded() {
-        given(codeStore.getAttemptCount(EMAIL)).willReturn(5L);
+        given(codeStore.verifyAndConsume(EMAIL, "123456")).willReturn(VerificationResult.EXCEEDED);
 
         assertThatThrownBy(() -> withdrawalCodeService.verify(EMAIL, "123456"))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
-        then(codeStore).should(never()).find(EMAIL);
     }
 }

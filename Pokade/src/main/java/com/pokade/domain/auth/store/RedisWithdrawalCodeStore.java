@@ -7,7 +7,6 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -18,10 +17,19 @@ public class RedisWithdrawalCodeStore implements WithdrawalCodeStore {
     private static final String CODE_KEY_PREFIX = "auth:withdrawal:code:";
     private static final String COOLDOWN_KEY_PREFIX = "auth:withdrawal:cooldown:";
     private static final String ATTEMPT_KEY_PREFIX = "auth:withdrawal:attempt:";
-    private static final RedisScript<Long> INCR_WITH_TTL = RedisScript.of(
-            "local c = redis.call('INCR', KEYS[1]) " +
-                    "if c == 1 or redis.call('TTL', KEYS[1]) == -1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end " +
-                    "return c", Long.class);
+    private static final int MAX_ATTEMPTS = 5;
+    private static final RedisScript<String> VERIFY_AND_CONSUME = RedisScript.of(
+            "local attempts = tonumber(redis.call('GET', KEYS[1]) or '0') " +
+                    "if attempts >= tonumber(ARGV[2]) then return 'EXCEEDED' end " +
+                    "local stored = redis.call('GET', KEYS[2]) " +
+                    "if not stored then return 'EXPIRED' end " +
+                    "if stored == ARGV[1] then " +
+                    "  redis.call('DEL', KEYS[1], KEYS[2], KEYS[3]) " +
+                    "  return 'OK' " +
+                    "end " +
+                    "local c = redis.call('INCR', KEYS[1]) " +
+                    "if c == 1 or redis.call('TTL', KEYS[1]) == -1 then redis.call('EXPIRE', KEYS[1], ARGV[3]) end " +
+                    "return 'MISMATCH'", String.class);
     private static final RedisScript<Long> SAVE_WITH_COOLDOWN = RedisScript.of(
             "if redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[2]) then " +
                     "  redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[3]) " +
@@ -42,27 +50,14 @@ public class RedisWithdrawalCodeStore implements WithdrawalCodeStore {
     }
 
     @Override
-    public Optional<String> find(String email) {
-        return Optional.ofNullable(redisTemplate.opsForValue().get(CODE_KEY_PREFIX + email));
-    }
-
-    @Override
-    public long getAttemptCount(String email) {
-        String value = redisTemplate.opsForValue().get(ATTEMPT_KEY_PREFIX + email);
-        return value != null ? Long.parseLong(value) : 0;
-    }
-
-    @Override
-    public void incrementAttempt(String email) {
-        redisTemplate.execute(INCR_WITH_TTL,
-                List.of(ATTEMPT_KEY_PREFIX + email),
+    public VerificationResult verifyAndConsume(String email, String code) {
+        String result = redisTemplate.execute(VERIFY_AND_CONSUME,
+                List.of(ATTEMPT_KEY_PREFIX + email, CODE_KEY_PREFIX + email, COOLDOWN_KEY_PREFIX + email),
+                code,
+                String.valueOf(MAX_ATTEMPTS),
                 String.valueOf(CODE_TTL.getSeconds()));
+        return VerificationResult.valueOf(result);
     }
 
-    @Override
-    public void delete(String email) {
-        redisTemplate.delete(CODE_KEY_PREFIX + email);
-        redisTemplate.delete(COOLDOWN_KEY_PREFIX + email);
-        redisTemplate.delete(ATTEMPT_KEY_PREFIX + email);
-    }
+
 }

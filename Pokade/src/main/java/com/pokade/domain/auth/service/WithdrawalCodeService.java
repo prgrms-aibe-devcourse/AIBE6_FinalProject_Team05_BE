@@ -27,17 +27,13 @@ public class WithdrawalCodeService {
         verificationMailSender.sendWithdrawalCode(email, code);
     }
 
-    // 탈퇴 인증코드를 검증한다(시도 횟수, 만료, 불일치 -> 성공 시 소모)
+    // 탈퇴 인증코드를 원자적으로 검증한다(시도 횟수, 만료, 불일치 -> 성공 시 소모)
     public void verify(String email, String code) {
-        if (codeStore.getAttemptCount(email) >= MAX_VERIFY_ATTEMPTS) {
-            throw new BusinessException(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
+        switch (codeStore.verifyAndConsume(email, code)) {
+            case EXCEEDED -> throw new BusinessException(ErrorCode.EMAIL_VERIFY_ATTEMPT_EXCEEDED);
+            case EXPIRED -> throw new BusinessException(ErrorCode.EMAIL_CODE_EXPIRED);
+            case MISMATCH -> throw new BusinessException(ErrorCode.EMAIL_CODE_MISMATCH);
+            case OK -> {}
         }
-        String storedCode = codeStore.find(email)
-                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_CODE_EXPIRED));
-        if (!storedCode.equals(code)) {
-            codeStore.incrementAttempt(email);
-            throw new BusinessException(ErrorCode.EMAIL_CODE_MISMATCH);
-        }
-        codeStore.delete(email); // 성공 시 소모
     }
 }
