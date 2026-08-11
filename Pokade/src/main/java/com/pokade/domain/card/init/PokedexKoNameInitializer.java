@@ -52,14 +52,14 @@ public class PokedexKoNameInitializer implements ApplicationRunner {
 
         try (InputStream inputStream = resource.getInputStream();
              BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-            String line = reader.readLine(); // 헤더(pokedex_number,name_ko) 스킵
+            String line = reader.readLine(); // 헤더(pokedex_number,name_en,name_ko) 스킵
 
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) {
                     continue;
                 }
-                String[] columns = line.split(",", 2);
-                if (columns.length < 2) {
+                String[] columns = line.split(",", 3);
+                if (columns.length < 3) {
                     log.warn("도감 한글명 CSV 파싱 스킵 - 콤마가 없는 잘못된 형식의 줄: \"{}\"", line);
                     skippedCount++;
                     continue;
@@ -73,10 +73,12 @@ public class PokedexKoNameInitializer implements ApplicationRunner {
                     skippedCount++;
                     continue;
                 }
-                String nameKo = columns[1].trim();
+                String nameEn = columns[1].trim();
+                String nameKo = columns[2].trim();
 
                 pokedexKoNames.add(PokedexKoName.builder()
                         .pokedexNumber(pokedexNumber)
+                        .nameEn(nameEn)
                         .nameKo(nameKo)
                         .nameKoChosung(KoreanTextUtil.extractChosung(nameKo))
                         .build());

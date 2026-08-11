@@ -21,20 +21,21 @@ public class PokedexKoNameJdbcRepository {
     private final JdbcTemplate jdbcTemplate;
 
     /**
-     * ⚠️ INSERT 컬럼 목록(pokedex_number, name_ko, name_ko_chosung)이 PokedexKoName 엔티티와
+     * ⚠️ INSERT 컬럼 목록(pokedex_number, name_en, name_ko, name_ko_chosung)이 PokedexKoName 엔티티와
      * 별개로 SQL 문자열에 하드코딩되어 있다. 엔티티에 컬럼을 추가/변경하면 이 클래스도 반드시
      * 함께 수정해야 한다 - 안 그러면 컴파일 에러 없이 새 컬럼이 조용히 누락된다.
      */
     public void batchUpsert(List<PokedexKoName> pokedexKoNames) {
         jdbcTemplate.batchUpdate(
-                "INSERT INTO pokedex_ko_names (pokedex_number, name_ko, name_ko_chosung) "
-                        + "VALUES (?, ?, ?) ON CONFLICT (pokedex_number) DO NOTHING",
+                "INSERT INTO pokedex_ko_names (pokedex_number, name_en, name_ko, name_ko_chosung) "
+                        + "VALUES (?, ?, ?, ?) ON CONFLICT (pokedex_number) DO NOTHING",
                 pokedexKoNames,
                 pokedexKoNames.size(),
                 (ps, item) -> {
                     ps.setInt(1, item.getPokedexNumber());
-                    ps.setString(2, item.getNameKo());
-                    ps.setString(3, item.getNameKoChosung());
+                    ps.setString(2, item.getNameEn());
+                    ps.setString(3, item.getNameKo());
+                    ps.setString(4, item.getNameKoChosung());
                 });
     }
 }
