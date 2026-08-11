@@ -12,6 +12,7 @@ import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.repository.BuyOfferRepository;
+import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
@@ -58,6 +59,9 @@ class PriceServiceTest {
 
     @Mock
     private PriceTradeStatsRepository priceTradeStatsRepository;
+
+    @Mock
+    private PriceCardStatsRepository priceCardStatsRepository;
 
     @InjectMocks
     private PriceService priceService;
@@ -162,7 +166,7 @@ class PriceServiceTest {
     void t8() {
         given(cardRepository.existsById(999L)).willReturn(false);
 
-        assertThatThrownBy(() -> priceService.getStats(999L, null))
+        assertThatThrownBy(() -> priceService.getStats(999L, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CARD_NOT_FOUND);
@@ -175,7 +179,7 @@ class PriceServiceTest {
         given(cardRepository.existsById(1L)).willReturn(true);
         given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(java.util.Optional.empty());
 
-        assertThatThrownBy(() -> priceService.getStats(1L, null))
+        assertThatThrownBy(() -> priceService.getStats(1L, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PRIMARY_VARIANT_NOT_FOUND);
@@ -192,7 +196,7 @@ class PriceServiceTest {
         given(priceTradeStatsRepository.findAveragePriceByGradeBetween(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .willReturn(null);
 
-        PriceStatsResponse result = priceService.getStats(1L, 10L);
+        PriceStatsResponse result = priceService.getStats(1L, 10L, null, null);
 
         assertThat(result.changeRate()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(result.changeAmount()).isZero();
@@ -210,7 +214,7 @@ class PriceServiceTest {
         given(priceTradeStatsRepository.findAveragePriceByGradeBetween(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .willReturn(null);
 
-        PriceStatsResponse result = priceService.getStats(1L, 10L);
+        PriceStatsResponse result = priceService.getStats(1L, 10L, null, null);
 
         assertThat(result.changeRate()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(result.changeAmount()).isZero();
@@ -228,7 +232,7 @@ class PriceServiceTest {
         given(priceTradeStatsRepository.findAveragePriceByGradeBetween(eq(1L), eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .willReturn(2830000.0);
 
-        PriceStatsResponse result = priceService.getStats(1L, 10L);
+        PriceStatsResponse result = priceService.getStats(1L, 10L, null, null);
 
         // (3,000,000 - 2,830,000) / 2,830,000 * 100 ≈ 6.01
         assertThat(result.changeRate()).isEqualByComparingTo(new BigDecimal("6.01"));
@@ -428,5 +432,88 @@ class PriceServiceTest {
 
         assertThat(result).isEmpty();
         verify(cardRepository, never()).findAllById(any());
+    }
+
+    @Test
+    @DisplayName("t21 grade와 period를 지정하면 card_prices에서 해당 조합의 등락률을 조회해 반환한다")
+    void t21() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(priceCardStatsRepository.findChangeByVariantGradeCompanyAndPeriod(10L, "10", "PSA", "30d"))
+                .willReturn(java.util.Optional.of(cardPriceChangeView(new BigDecimal("5.50"), new BigDecimal("12000"))));
+
+        PriceStatsResponse result = priceService.getStats(1L, 10L, ListingGrade.PSA10, "30d");
+
+        assertThat(result.changeRate()).isEqualByComparingTo("5.50");
+        // change_7d_amount 컬럼은 7일치만 있어 30일 조회에서는 금액을 알 수 없다 - null이어야 한다.
+        assertThat(result.changeAmount()).isNull();
+        assertThat(result.volume()).isZero();
+    }
+
+    @Test
+    @DisplayName("t22 grade만 지정하고 period를 지정하지 않으면 기본값 7d로 조회하고, change_7d_amount를 그대로 반환한다")
+    void t22() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(priceCardStatsRepository.findChangeByVariantGradeCompanyAndPeriod(10L, "S", "", "7d"))
+                .willReturn(java.util.Optional.of(cardPriceChangeView(new BigDecimal("-2.71"), new BigDecimal("-4.86"))));
+
+        PriceStatsResponse result = priceService.getStats(1L, 10L, ListingGrade.S, null);
+
+        assertThat(result.changeRate()).isEqualByComparingTo("-2.71");
+        assertThat(result.changeAmount()).isEqualTo(-5L);
+        assertThat(result.volume()).isZero();
+    }
+
+    @Test
+    @DisplayName("t23 card_prices에 해당 variant/grade 조합 데이터가 없으면 등락률 0, 금액 null을 반환한다")
+    void t23() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(priceCardStatsRepository.findChangeByVariantGradeCompanyAndPeriod(10L, "B", "", "7d"))
+                .willReturn(java.util.Optional.empty());
+
+        PriceStatsResponse result = priceService.getStats(1L, 10L, ListingGrade.B, "7d");
+
+        assertThat(result.changeRate()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(result.changeAmount()).isNull();
+        assertThat(result.volume()).isZero();
+    }
+
+    @Test
+    @DisplayName("t24 period 값이 잘못되면 INVALID_PERIOD 예외가 발생하고 card_prices를 조회하지 않는다")
+    void t24() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(java.util.Optional.of(10L));
+
+        assertThatThrownBy(() -> priceService.getStats(1L, null, ListingGrade.S, "3d"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_PERIOD);
+        verify(priceCardStatsRepository, never()).findChangeByVariantGradeCompanyAndPeriod(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("t25 period만 지정하고 grade를 지정하지 않으면 기본 등급 S로 조회한다")
+    void t25() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(priceCardStatsRepository.findChangeByVariantGradeCompanyAndPeriod(10L, "S", "", "14d"))
+                .willReturn(java.util.Optional.of(cardPriceChangeView(new BigDecimal("1.20"), null)));
+
+        PriceStatsResponse result = priceService.getStats(1L, 10L, null, "14d");
+
+        assertThat(result.changeRate()).isEqualByComparingTo("1.20");
+        assertThat(result.changeAmount()).isNull();
+    }
+
+    private PriceCardStatsRepository.CardPriceChangeView cardPriceChangeView(BigDecimal changePct, BigDecimal change7dAmount) {
+        return new PriceCardStatsRepository.CardPriceChangeView() {
+            @Override
+            public BigDecimal getChangePct() {
+                return changePct;
+            }
+
+            @Override
+            public BigDecimal getChange7dAmount() {
+                return change7dAmount;
+            }
+        };
     }
 }

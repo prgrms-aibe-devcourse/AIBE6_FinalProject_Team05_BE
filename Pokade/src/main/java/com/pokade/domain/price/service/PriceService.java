@@ -8,12 +8,14 @@ import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.price.ChartPeriod;
 import com.pokade.domain.price.RankingType;
+import com.pokade.domain.price.StatsPeriod;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.repository.BuyOfferRepository;
+import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.domain.trade.entity.TradeStatus;
@@ -50,6 +52,7 @@ public class PriceService {
     private final BuyOfferRepository buyOfferRepository;
     private final TradeRepository tradeRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
+    private final PriceCardStatsRepository priceCardStatsRepository;
 
     public PriceSummaryResponse getSummary(Long cardId, Long variantId) {
         if (!cardRepository.existsById(cardId)) {
@@ -151,17 +154,28 @@ public class PriceService {
                 .toList();
     }
 
-    // FR-PRICE-04: 카드 상세용 시세 등락률/거래량. card_prices(Scrydex 동기화 데이터)가 아니라
-    // 자체 AI등급(S) COMPLETED 거래 이력으로 계산한다 — 프론트가 대표 시세로 S등급을 쓰는 것과 일관되게 맞춘 설계.
-    public PriceStatsResponse getStats(Long cardId, Long variantId) {
+    // FR-PRICE-04: 카드 상세용 시세 등락률/거래량.
+    // grade/period를 지정하지 않으면 기존과 동일하게 자체 AI등급(S) COMPLETED 거래 이력의 7일 블록 비교로 계산한다
+    // (프론트가 대표 시세로 S등급을 쓰는 것과 일관되게 맞춘 원래 설계, 하위 호환 유지).
+    // grade/period를 지정하면 card_prices(Scrydex 동기화 + PSA10/PSA9 외 S/A/B 목업)의 change_*_pct 컬럼을 직접 조회한다.
+    public PriceStatsResponse getStats(Long cardId, Long variantId, ListingGrade grade, String period) {
         if (!cardRepository.existsById(cardId)) {
             throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
         }
-        if (variantId == null) {
-            cardVariantRepository.findPrimaryVariantId(cardId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
+        Long resolvedVariantId = variantId != null
+                ? variantId
+                : cardVariantRepository.findPrimaryVariantId(cardId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
+
+        if (grade == null && period == null) {
+            return getStatsFromTrades(cardId);
         }
 
+        StatsPeriod statsPeriod = StatsPeriod.from(period != null ? period : StatsPeriod.DAYS_7.getCode());
+        return getStatsFromCardPrices(resolvedVariantId, grade != null ? grade : STATS_GRADE, statsPeriod);
+    }
+
+    private PriceStatsResponse getStatsFromTrades(Long cardId) {
         LocalDateTime recentFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS);
         LocalDateTime previousFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS * 2L);
 
@@ -187,6 +201,37 @@ public class PriceService {
         long changeAmount = diff.setScale(0, RoundingMode.HALF_UP).longValue();
 
         return new PriceStatsResponse(changeRate, changeAmount, volume);
+    }
+
+    // PSA10/PSA9/PSA8은 공인 등급이라 company='PSA', 자체 AI등급(S/A/B)은 company=''.
+    private PriceStatsResponse getStatsFromCardPrices(Long variantId, ListingGrade grade, StatsPeriod period) {
+        GradeKey gradeKey = toGradeKey(grade);
+
+        return priceCardStatsRepository
+                .findChangeByVariantGradeCompanyAndPeriod(variantId, gradeKey.grade(), gradeKey.company(), period.getCode())
+                .map(view -> {
+                    BigDecimal changeRate = view.getChangePct() != null ? view.getChangePct() : BigDecimal.ZERO;
+                    // change_7d_amount 컬럼만 존재해서 7일 외 기간은 금액을 못 구한다 - null로 남긴다(0으로 채우면 "변동 없음"처럼 보여 오해를 줌).
+                    Long changeAmount = period == StatsPeriod.DAYS_7 && view.getChange7dAmount() != null
+                            ? view.getChange7dAmount().setScale(0, RoundingMode.HALF_UP).longValue()
+                            : null;
+                    return new PriceStatsResponse(changeRate, changeAmount, 0L);
+                })
+                .orElseGet(() -> new PriceStatsResponse(BigDecimal.ZERO, null, 0L));
+    }
+
+    private GradeKey toGradeKey(ListingGrade grade) {
+        return switch (grade) {
+            case PSA10 -> new GradeKey("10", "PSA");
+            case PSA9 -> new GradeKey("9", "PSA");
+            case PSA8 -> new GradeKey("8", "PSA");
+            case S -> new GradeKey("S", "");
+            case A -> new GradeKey("A", "");
+            case B -> new GradeKey("B", "");
+        };
+    }
+
+    private record GradeKey(String grade, String company) {
     }
 
     // FR-PRICE-06: getStats()와 같은 방식(자체 AI등급 S, COMPLETED 거래, 최근 7일 vs 이전 7일 블록 평균 비교)을

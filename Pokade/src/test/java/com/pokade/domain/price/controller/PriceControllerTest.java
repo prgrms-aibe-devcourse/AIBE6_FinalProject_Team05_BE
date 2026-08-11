@@ -218,7 +218,7 @@ class PriceControllerTest {
 
     @Test
     void 시세_등락률과_거래량을_조회하면_200과_값을_반환한다() throws Exception {
-        given(priceService.getStats(1L, null))
+        given(priceService.getStats(1L, null, null, null))
                 .willReturn(new PriceStatsResponse(new BigDecimal("6.01"), 170000L, 1L));
 
         mockMvc.perform(get("/api/prices/1/stats"))
@@ -230,7 +230,7 @@ class PriceControllerTest {
 
     @Test
     void 시세_통계_조회시_존재하지_않는_카드면_404를_반환한다() throws Exception {
-        given(priceService.getStats(999L, null))
+        given(priceService.getStats(999L, null, null, null))
                 .willThrow(new BusinessException(ErrorCode.CARD_NOT_FOUND));
 
         mockMvc.perform(get("/api/prices/999/stats"))
@@ -240,12 +240,34 @@ class PriceControllerTest {
 
     @Test
     void 시세_통계_조회시_대표_변형이_없으면_404를_반환한다() throws Exception {
-        given(priceService.getStats(1L, null))
+        given(priceService.getStats(1L, null, null, null))
                 .willThrow(new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
 
         mockMvc.perform(get("/api/prices/1/stats"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PRIMARY_VARIANT_NOT_FOUND"));
+    }
+
+    @Test
+    void 시세_통계_조회시_grade와_period를_지정하면_그대로_서비스에_전달한다() throws Exception {
+        given(priceService.getStats(1L, null, ListingGrade.PSA10, "30d"))
+                .willReturn(new PriceStatsResponse(new BigDecimal("5.50"), null, 0L));
+
+        mockMvc.perform(get("/api/prices/1/stats").param("grade", "PSA10").param("period", "30d"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.changeRate").value(5.50))
+                .andExpect(jsonPath("$.data.changeAmount").value(nullValue()))
+                .andExpect(jsonPath("$.data.volume").value(0));
+    }
+
+    @Test
+    void 시세_통계_조회시_잘못된_period_값이면_400을_반환한다() throws Exception {
+        given(priceService.getStats(1L, null, ListingGrade.S, "3d"))
+                .willThrow(new BusinessException(ErrorCode.INVALID_PERIOD));
+
+        mockMvc.perform(get("/api/prices/1/stats").param("grade", "S").param("period", "3d"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PERIOD"));
     }
 
     @Test

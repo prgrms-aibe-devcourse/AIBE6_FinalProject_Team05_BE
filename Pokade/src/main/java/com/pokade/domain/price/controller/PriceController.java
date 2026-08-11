@@ -57,9 +57,11 @@ public class PriceController {
     @GetMapping("/{cardId}/stats")
     public ApiResponse<PriceStatsResponse> getStats(
             @PathVariable Long cardId,
-            @RequestParam(required = false) Long variantId
+            @RequestParam(required = false) Long variantId,
+            @RequestParam(required = false) ListingGrade grade,
+            @RequestParam(required = false) String period
     ) {
-        return ApiResponse.ok(priceService.getStats(cardId, variantId));
+        return ApiResponse.ok(priceService.getStats(cardId, variantId, grade, period));
     }
 
     @GetMapping("/ranking")
