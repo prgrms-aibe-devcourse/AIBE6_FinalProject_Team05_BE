@@ -112,10 +112,10 @@ class PriceControllerTest {
 
     @Test
     void 차트_조회시_존재하지_않는_카드면_404를_반환한다() throws Exception {
-        given(priceService.getPriceChart(999L, "1y"))
+        given(priceService.getPriceChart(999L, "180d"))
                 .willThrow(new BusinessException(ErrorCode.CARD_NOT_FOUND));
 
-        mockMvc.perform(get("/api/prices/999/chart").param("period", "1y"))
+        mockMvc.perform(get("/api/prices/999/chart").param("period", "180d"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("CARD_NOT_FOUND"));
     }

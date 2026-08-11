@@ -105,7 +105,7 @@ class PriceServiceTest {
     void t3() {
         given(cardRepository.existsById(999L)).willReturn(false);
 
-        assertThatThrownBy(() -> priceService.getPriceChart(999L, "1y"))
+        assertThatThrownBy(() -> priceService.getPriceChart(999L, "180d"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CARD_NOT_FOUND);
@@ -117,7 +117,7 @@ class PriceServiceTest {
     void t4() {
         given(cardRepository.existsById(1L)).willReturn(true);
 
-        assertThatThrownBy(() -> priceService.getPriceChart(1L, "7d"))
+        assertThatThrownBy(() -> priceService.getPriceChart(1L, "1y"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_PERIOD);

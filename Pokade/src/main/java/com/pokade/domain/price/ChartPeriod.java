@@ -4,9 +4,10 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 
 public enum ChartPeriod {
+    DAYS_7("7d", 7),
     DAYS_30("30d", 30),
     DAYS_90("90d", 90),
-    YEAR_1("1y", 365);
+    DAYS_180("180d", 180);
 
     private final String code;
     private final int days;
