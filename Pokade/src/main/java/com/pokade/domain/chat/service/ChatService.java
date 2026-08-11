@@ -94,6 +94,16 @@ public class ChatService {
             "시세|가격|얼마|올랐|내렸|급등|급락|변동률|거래(가|내역)?|매물|판매가|구매가",
             Pattern.CASE_INSENSITIVE);
 
+    // 배송/검수 관련 문의는 챗봇(시세 안내 전용)이 아니라 사람이 직접 확인해야 하는 사안이라, LLM 호출 없이
+    // 바로 고객센터 연락처로 안내한다.
+    private static final Pattern SUPPORT_ESCALATION_PATTERN = Pattern.compile(
+            "택배|상태|불량",
+            Pattern.CASE_INSENSITIVE);
+
+    private static final String SUPPORT_ESCALATION_MESSAGE =
+            "택배 상태나 카드 불량 관련 문의는 챗봇이 바로 확인해드리기 어려워요. "
+            + "010-2222-2222로 문자 주시면 담당자가 확인 후 도와드릴게요.";
+
     private static final String INJECTION_BLOCKED_MESSAGE =
             "죄송합니다, 저는 카드 시세 조회/설명만 답변할 수 있어요. 궁금한 카드명이나 시세를 물어봐주세요.";
 
@@ -140,6 +150,13 @@ public class ChatService {
         if (INJECTION_PATTERN.matcher(message).find()) {
             log.info("챗봇 프롬프트 인젝션 패턴 탐지 - LLM 호출 생략, 이력 미저장: sessionId={}", sessionId);
             return new ChatQueryResponse(sessionId, INJECTION_BLOCKED_MESSAGE, null);
+        }
+
+        if (SUPPORT_ESCALATION_PATTERN.matcher(message).find()) {
+            log.info("챗봇 고객센터 이관 키워드 탐지 - LLM 호출 생략: sessionId={}", sessionId);
+            saveMessage(sessionId, principalUserId, ChatRole.USER, message);
+            saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, SUPPORT_ESCALATION_MESSAGE);
+            return new ChatQueryResponse(sessionId, SUPPORT_ESCALATION_MESSAGE, null);
         }
 
         boolean isInvestmentQuestion = INVESTMENT_PATTERN.matcher(message).find();
