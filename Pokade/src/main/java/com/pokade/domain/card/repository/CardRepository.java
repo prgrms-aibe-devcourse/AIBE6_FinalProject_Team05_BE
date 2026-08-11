@@ -163,6 +163,23 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
 
+    /** 한글 검색어를 도감번호로 변환한 뒤(PokedexKoNameRepository) 조회하는 용도 - 배열 컬럼이라 ANY(...)로 매칭한다. */
+    String POKEDEX_SEARCH_BASE = """
+            SELECT c.* FROM cards c
+            WHERE :pokedexNumber = ANY(c.national_pokedex_numbers)
+            """;
+
+    /** findByNationalPokedexNumbersContaining과 짝을 이루는 countQuery. ORDER BY가 없어 조건절이 동일하다. */
+    String POKEDEX_SEARCH_COUNT = """
+            SELECT COUNT(*) FROM cards c
+            WHERE :pokedexNumber = ANY(c.national_pokedex_numbers)
+            """;
+
+    @Query(value = POKEDEX_SEARCH_BASE + "ORDER BY c.name",
+            countQuery = POKEDEX_SEARCH_COUNT,
+            nativeQuery = true)
+    Page<Card> findByNationalPokedexNumbersContaining(@Param("pokedexNumber") Integer pokedexNumber, Pageable pageable);
+
     Optional<Card> findByExternalId(String externalId);
 
     @Query(value = """

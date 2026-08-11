@@ -9,8 +9,11 @@ import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
+import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.repository.PokedexKoNameRepository;
+import com.pokade.domain.card.support.KoreanTextUtil;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.web.PageableValidator;
@@ -46,6 +49,7 @@ public class CardService {
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
+    private final PokedexKoNameRepository pokedexKoNameRepository;
 
     @Transactional(readOnly = true)
     public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
@@ -90,9 +94,20 @@ public class CardService {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
         }
-        Page<Card> cards = cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
+        Page<Card> cards = KoreanTextUtil.isKorean(keyword)
+                ? searchByPokedexKoName(keyword, pageable)
+                : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
         return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
+    }
+
+    // 한글 검색어를 도감번호로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
+    private Page<Card> searchByPokedexKoName(String keyword, Pageable pageable) {
+        Optional<PokedexKoName> pokedexKoName = pokedexKoNameRepository.findByNameKo(keyword);
+        if (pokedexKoName.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        return cardRepository.findByNationalPokedexNumbersContaining(pokedexKoName.get().getPokedexNumber(), pageable);
     }
 
     @Transactional(readOnly = true)

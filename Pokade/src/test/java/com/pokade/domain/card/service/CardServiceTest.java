@@ -31,6 +31,7 @@ import com.pokade.domain.card.entity.CardVariant;
 import com.pokade.domain.card.entity.Expansion;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.repository.PokedexKoNameRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 
@@ -42,6 +43,9 @@ class CardServiceTest {
 
     @Mock
     private CardVariantRepository cardVariantRepository;
+
+    @Mock
+    private PokedexKoNameRepository pokedexKoNameRepository;
 
     @InjectMocks
     private CardService cardService;
