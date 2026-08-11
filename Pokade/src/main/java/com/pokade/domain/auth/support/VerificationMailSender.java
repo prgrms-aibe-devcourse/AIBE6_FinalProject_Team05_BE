@@ -24,6 +24,7 @@ public class VerificationMailSender {
     }
 
     // 탈퇴 인증 코드 메일을 보낸다
+    @Async
     public void sendWithdrawalCode(String email, String code) {
         mailSender.send(email, "[Pokade] 회원 탈퇴 인증 코드", "탈퇴 인증 코드: " + code + "\n5분 이내 입력");
     }
