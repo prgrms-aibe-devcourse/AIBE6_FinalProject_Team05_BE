@@ -163,6 +163,26 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
 
+    /**
+     * 한글 검색어를 도감번호 목록으로 변환한 뒤(PokedexKoNameRepository, 부분일치/초성 검색이라 여러 건일 수 있음)
+     * 조회하는 용도 - 배열 컬럼이라 unnest+IN으로 매칭한다(CARD_SEARCH_BASE의 types 필터와 동일한 패턴).
+     */
+    String POKEDEX_SEARCH_BASE = """
+            SELECT c.* FROM cards c
+            WHERE EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers))
+            """;
+
+    /** findByNationalPokedexNumbersIn과 짝을 이루는 countQuery. ORDER BY가 없어 조건절이 동일하다. */
+    String POKEDEX_SEARCH_COUNT = """
+            SELECT COUNT(*) FROM cards c
+            WHERE EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers))
+            """;
+
+    @Query(value = POKEDEX_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = POKEDEX_SEARCH_COUNT,
+            nativeQuery = true)
+    Page<Card> findByNationalPokedexNumbersIn(@Param("pokedexNumbers") List<Integer> pokedexNumbers, Pageable pageable);
+
     Optional<Card> findByExternalId(String externalId);
 
     @Query(value = """

@@ -565,4 +565,71 @@ class CardRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(result).isEmpty();
     }
+
+    @Test
+    @DisplayName("t47 도감번호 하나로 조회하면 해당 도감번호를 가진 카드만 반환한다")
+    void t47() {
+        Page<Card> result = cardRepository.findByNationalPokedexNumbersIn(List.of(25), PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Pikachu");
+    }
+
+    @Test
+    @DisplayName("t48 도감번호를 여러 개 지정하면 하나라도 일치하는 카드를 모두 조회한다(OR)")
+    void t48() {
+        Page<Card> result = cardRepository.findByNationalPokedexNumbersIn(List.of(6, 9), PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactlyInAnyOrder("Charizard", "Charizard ex", "Blastoise");
+    }
+
+    @Test
+    @DisplayName("t49 일치하는 도감번호가 없으면 예외 없이 빈 페이지를 반환한다")
+    void t49() {
+        Page<Card> result = cardRepository.findByNationalPokedexNumbersIn(List.of(999), PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
+    }
+
+    @Test
+    @DisplayName("t50 결과는 이름(name) 오름차순으로 정렬된다")
+    void t50() {
+        Page<Card> result = cardRepository.findByNationalPokedexNumbersIn(List.of(6), PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Charizard", "Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t51 countQuery가 조건절과 일치해 페이지 크기보다 결과가 많아도 전체 개수를 정확히 센다")
+    void t51() {
+        Page<Card> result = cardRepository.findByNationalPokedexNumbersIn(List.of(6), PageRequest.of(0, 1));
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("t52 name이 같은 카드가 여러 건이어도 id를 2차 정렬 키로 사용해 페이지를 나눠 조회해도 순서가 항상 동일하다")
+    void t52() {
+        Card dittoFirst = persistCard("Ditto", "Common", null, null, List.of(132), LocalDateTime.now());
+        Card dittoSecond = persistCard("Ditto", "Common", null, null, List.of(132), LocalDateTime.now());
+        entityManager.flush();
+
+        Page<Card> page0 = cardRepository.findByNationalPokedexNumbersIn(List.of(132), PageRequest.of(0, 1));
+        Page<Card> page1 = cardRepository.findByNationalPokedexNumbersIn(List.of(132), PageRequest.of(1, 1));
+
+        assertThat(page0.getContent()).extracting(Card::getId).containsExactly(dittoFirst.getId());
+        assertThat(page1.getContent()).extracting(Card::getId).containsExactly(dittoSecond.getId());
+
+        // 같은 조회를 반복해도(캐시/실행계획 등에 따라 흔들리지 않고) 매번 동일한 순서가 나와야 안정 정렬이다.
+        Page<Card> page0Retry = cardRepository.findByNationalPokedexNumbersIn(List.of(132), PageRequest.of(0, 1));
+        assertThat(page0Retry.getContent()).extracting(Card::getId).containsExactly(dittoFirst.getId());
+    }
 }
