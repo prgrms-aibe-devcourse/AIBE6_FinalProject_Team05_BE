@@ -1,19 +1,12 @@
 package com.pokade.domain.sync.client;
 
-import java.util.List;
-
-import com.pokade.domain.sync.client.dto.CardDto;
-import com.pokade.domain.sync.client.dto.CardPriceDto;
-import com.pokade.domain.sync.client.dto.CardVariantDto;
-import com.pokade.domain.sync.client.dto.ExpansionDto;
+import com.pokade.domain.sync.client.dto.ScrydexCardPageResponse;
 
 public interface ScrydexClient {
 
-    List<ExpansionDto> fetchExpansions();
-
-    List<CardDto> fetchCards(String expansionId);
-
-    List<CardVariantDto> fetchCardVariants(String cardId);
-
-    List<CardPriceDto> fetchCardPrices(String variantId);
+    /**
+     * GET /pokemon/v1/cards?q=expansion.is_online_only:false&include=prices&page={page}&pageSize={pageSize}
+     * 실물 카드(is_online_only:false)만 요청 단계에서 필터링된 한 페이지를 반환한다.
+     */
+    ScrydexCardPageResponse fetchCardsPage(int page, int pageSize);
 }

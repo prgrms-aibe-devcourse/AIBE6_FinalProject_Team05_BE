@@ -63,6 +63,10 @@ public enum ErrorCode {
     // ===== AI 등급 진단 =====
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다."),
 
+    // ===== 시세 챗봇 =====
+    CHAT_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "챗봇 서비스에 일시적인 오류가 발생했습니다."),
+    CHAT_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "같은 질문을 너무 많이 반복했어요. 1분 후 다시 시도해주세요."),
+
     // ===== 인프라 (AOP 자동 변환) =====
     FILE_IO_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 처리 중 오류가 발생했습니다."),
     DATABASE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "데이터베이스 처리 중 오류가 발생했습니다."),
@@ -74,7 +78,10 @@ public enum ErrorCode {
     DUPLICATE_WATCHLIST(HttpStatus.CONFLICT, "이미 등록된 카드입니다."),
     TARGET_PRICE_REQUIRED(HttpStatus.BAD_REQUEST, "목표 구매가 또는 판매가 중 하나는 입력해야 합니다."),
     WATCHLIST_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "워치리스트는 최대 20개까지 등록할 수 있습니다."),
-    NOTIFICATION_ALREADY_READ(HttpStatus.BAD_REQUEST, "이미 읽음 처리된 알림입니다.");
+    NOTIFICATION_ALREADY_READ(HttpStatus.BAD_REQUEST, "이미 읽음 처리된 알림입니다."),
+
+    // ===== Scrydex 동기화 배치 (관리자 트리거) =====
+    SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "이미 동기화가 진행 중입니다.");
 
     private final HttpStatus status;
     private final String message;

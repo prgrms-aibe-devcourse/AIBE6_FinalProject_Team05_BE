@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS cards (
     types                     TEXT[],                          -- 예: {'Fire'} - 기존 type 대체
     evolves_from              TEXT[],                          -- 이 카드가 어떤 포켓몬에서 진화했는지
     printed_number            VARCHAR(50),                     -- 카드에 실제 인쇄된 번호(예: 4/102)
-    rarity_code               VARCHAR(20),                     -- 레어도 코드(예: ★H)
+    rarity_code               VARCHAR(50),                     -- 레어도 코드(예: ★H) - Trainer/Galarian Gallery류 특수판은 20자를 넘는 값도 있어 50으로 확장
+    hp                        VARCHAR(10),                     -- ★Scrydex연동 - 공식 API 필드 목록 외 추가 컬럼
     artist                    VARCHAR(200),
     national_pokedex_numbers  INTEGER[],
     image_small               VARCHAR(255),
@@ -44,6 +45,14 @@ CREATE TABLE IF NOT EXISTS cards (
     view_count                INTEGER NOT NULL DEFAULT 0,     -- 인기순(조회수) 정렬용
     synced_at                 TIMESTAMP
 );
+
+-- cards.hp: 이미 cards 테이블이 존재하는 로컬 DB는 CREATE TABLE IF NOT EXISTS가 스킵되어
+-- 위 CREATE TABLE 본문의 컬럼 추가가 반영되지 않으므로, 기존 DB에도 적용되도록 별도 ALTER 필요.
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS hp VARCHAR(10);
+
+-- cards.rarity_code: 기존 VARCHAR(20)에는 Trainer/Galarian Gallery류 특수판의 긴 코드값이 안 들어가
+-- 전체 동기화 중 80건이 실패했음 - 이미 컬럼이 존재하는 DB에도 반영되도록 별도 ALTER 필요.
+ALTER TABLE cards ALTER COLUMN rarity_code TYPE VARCHAR(50);
 
 CREATE TABLE IF NOT EXISTS card_variants (
     id            BIGSERIAL PRIMARY KEY,
