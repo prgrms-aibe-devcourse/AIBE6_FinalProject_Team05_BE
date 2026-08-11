@@ -90,6 +90,12 @@ CREATE TABLE IF NOT EXISTS card_prices (
     UNIQUE (variant_id, price_type, grade, company)
 );
 
+CREATE TABLE IF NOT EXISTS pokedex_ko_names (
+    pokedex_number  INT PRIMARY KEY,
+    name_ko         VARCHAR(50) NOT NULL
+);
+-- 한글 카드 검색용 도감번호-한글명 매핑 (PokeAPI 원본 데이터, 정적 고정값)
+
 CREATE TABLE IF NOT EXISTS price_snapshots (
     id             BIGSERIAL PRIMARY KEY,
     variant_id     BIGINT NOT NULL REFERENCES card_variants(id),
