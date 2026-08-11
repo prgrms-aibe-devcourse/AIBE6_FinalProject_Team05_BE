@@ -14,6 +14,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 import com.pokade.domain.card.entity.PokedexKoName;
+import com.pokade.domain.card.repository.PokedexKoNameJdbcRepository;
 import com.pokade.domain.card.repository.PokedexKoNameRepository;
 import com.pokade.domain.card.support.KoreanTextUtil;
 
@@ -29,15 +30,18 @@ public class PokedexKoNameInitializer implements ApplicationRunner {
     private static final String CSV_PATH = "pokedex/pokedex_ko_names.csv";
 
     private final PokedexKoNameRepository pokedexKoNameRepository;
+    private final PokedexKoNameJdbcRepository pokedexKoNameJdbcRepository;
 
     @Override
     public void run(ApplicationArguments args) throws IOException {
-        if (pokedexKoNameRepository.count() > 0) {
+        ParseResult result = readCsv();
+        // count() > 0만 보면 이전 실행이 CSV 중간까지만 적재하고 죽었을 때도 "완료"로 오판해
+        // 나머지가 영영 채워지지 않는다. CSV의 실제 정상 건수와 비교해야 부분 적재 상태를 구분할 수 있다.
+        if (pokedexKoNameRepository.count() >= result.pokedexKoNames().size()) {
             return;
         }
 
-        ParseResult result = readCsv();
-        pokedexKoNameRepository.saveAll(result.pokedexKoNames());
+        pokedexKoNameJdbcRepository.batchUpsert(result.pokedexKoNames());
         log.info("도감 한글명 적재 완료 - 정상 {}건, 스킵 {}건", result.pokedexKoNames().size(), result.skippedCount());
     }
 
