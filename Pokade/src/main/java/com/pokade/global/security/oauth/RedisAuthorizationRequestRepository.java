@@ -65,6 +65,10 @@ public class RedisAuthorizationRequestRepository implements AuthorizationRequest
         if (state == null) {
             return null;
         }
+        // Spring은 state 검증 전에 remove를 호출 -> callback state가 쿠키 state와 일치할 때만 소모(위조 callback이 진행중 인가요청을 못 지우게)
+        if (!state.equals(request.getParameter("state"))) {
+            return null;
+        }
         OAuth2AuthorizationRequest authorizationRequest = loadAuthorizationRequest(request);
         redisTemplate.delete(REDIS_KEY_PREFIX + state);
         writeCookie(response, "", Duration.ZERO);

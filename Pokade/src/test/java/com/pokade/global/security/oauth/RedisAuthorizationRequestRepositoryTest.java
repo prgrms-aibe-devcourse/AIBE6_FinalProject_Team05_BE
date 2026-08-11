@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class RedisAuthorizationRequestRepositoryTest {
@@ -94,6 +95,7 @@ class RedisAuthorizationRequestRepositoryTest {
 
         MockHttpServletRequest req = new MockHttpServletRequest();
         req.setCookies(new Cookie("oauth2_auth_state", "STATE123"));
+        req.setParameter("state", "STATE123"); // callback state == 쿠키 state (정상 흐름)
         MockHttpServletResponse res = new MockHttpServletResponse();
 
         OAuth2AuthorizationRequest removed = repo.removeAuthorizationRequest(req, res);
@@ -101,5 +103,34 @@ class RedisAuthorizationRequestRepositoryTest {
         assertThat(removed).isNotNull();
         then(redisTemplate).should().delete("oauth2:authreq:STATE123");
         assertThat(res.getHeader("Set-Cookie")).contains("oauth2_auth_state=;").contains("Max-Age=0");
+    }
+
+    @Test
+    @DisplayName("remove: callback state가 쿠키 state와 불일치하면 삭제·쿠키만료 안 함(위조 callback 방어)")
+    void remove_stateMismatch_noop() {
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.setCookies(new Cookie("oauth2_auth_state", "STATE123"));
+        req.setParameter("state", "ATTACKER"); // 위조/불일치 callback
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        OAuth2AuthorizationRequest removed = repo.removeAuthorizationRequest(req, res);
+
+        assertThat(removed).isNull();
+        then(redisTemplate).should(never()).delete(anyString());
+        assertThat(res.getHeader("Set-Cookie")).isNull();
+    }
+
+    @Test
+    @DisplayName("remove: callback에 state 파라미터가 없으면 삭제·쿠키만료 안 함")
+    void remove_noStateParam_noop() {
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.setCookies(new Cookie("oauth2_auth_state", "STATE123"));
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        OAuth2AuthorizationRequest removed = repo.removeAuthorizationRequest(req, res);
+
+        assertThat(removed).isNull();
+        then(redisTemplate).should(never()).delete(anyString());
+        assertThat(res.getHeader("Set-Cookie")).isNull();
     }
 }
