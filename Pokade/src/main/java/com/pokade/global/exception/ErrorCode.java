@@ -63,6 +63,9 @@ public enum ErrorCode {
     // ===== AI 등급 진단 =====
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다."),
 
+    // ===== 시세 챗봇 =====
+    CHAT_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "챗봇 서비스에 일시적인 오류가 발생했습니다."),
+
     // ===== 인프라 (AOP 자동 변환) =====
     FILE_IO_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 처리 중 오류가 발생했습니다."),
     DATABASE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "데이터베이스 처리 중 오류가 발생했습니다."),

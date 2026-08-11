@@ -1,6 +1,7 @@
 package com.pokade.global.exception;
 
 import com.pokade.domain.ai.service.AiGradeService;
+import com.pokade.domain.chat.service.ChatService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -79,5 +80,13 @@ public class GlobalExceptionHandler {
         log.error("AI 서비스 일시 불가", e);
         return ResponseEntity.status(ErrorCode.AI_SERVICE_UNAVAILABLE.getStatus())
                 .body(ErrorResponse.of(ErrorCode.AI_SERVICE_UNAVAILABLE, e.getMessage()));
+    }
+
+    // 챗봇 서비스 오류 (503)
+    @ExceptionHandler(ChatService.ChatServiceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleChatUnavailable(ChatService.ChatServiceUnavailableException e) {
+        log.error("챗봇 서비스 일시 불가", e);
+        return ResponseEntity.status(ErrorCode.CHAT_SERVICE_UNAVAILABLE.getStatus())
+                .body(ErrorResponse.of(ErrorCode.CHAT_SERVICE_UNAVAILABLE, e.getMessage()));
     }
 }
