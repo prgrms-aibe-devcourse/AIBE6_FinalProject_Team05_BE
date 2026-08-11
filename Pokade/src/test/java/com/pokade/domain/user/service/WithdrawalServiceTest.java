@@ -231,4 +231,21 @@ class WithdrawalServiceTest {
         then(withdrawalConfirmer).should(times(3)).confirm(2L);   // MAX_ANON_RETRY 만큼만 시도
         then(refreshTokenStore).should(never()).delete(2L);
     }
+
+    @Test
+    @DisplayName("신청: 소셜 계정은 비번 없이도 유예 전환(비번 검증 스킵)")
+    void requestWithdrawal_social_success() {
+        User social = User.builder()
+                .id(3L).email("social@pokade.com").password(null)
+                .nickname("소셜").role(Role.USER).provider(Provider.GOOGLE)
+                .status(UserStatus.ACTIVE).pointBalance(0)
+                .build();
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+
+        withdrawalService.requestWithdrawal(3L, null);
+
+        assertThat(social.getStatus()).isEqualTo(UserStatus.WITHDRAWAL_PENDING);
+        then(eventPublisher).should().publishEvent(any(UserWithdrawalRequestedEvent.class));
+        then(passwordEncoder).should(never()).matches(any(), any());
+    }
 }
