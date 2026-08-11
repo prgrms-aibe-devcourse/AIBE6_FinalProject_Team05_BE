@@ -63,8 +63,11 @@ public class Card {
     @Column(name = "printed_number", length = 50)
     private String printedNumber;
 
-    @Column(name = "rarity_code", length = 20)
+    @Column(name = "rarity_code", length = 50)
     private String rarityCode;
+
+    @Column(length = 10)
+    private String hp;
 
     @Column(length = 200)
     private String artist;
@@ -98,4 +101,30 @@ public class Card {
 
     @Column(name = "synced_at")
     private LocalDateTime syncedAt;
+
+    /**
+     * Scrydex 동기화 배치에서 이미 존재하는 카드(external_id 매칭)를 갱신할 때 사용한다.
+     * id·externalId·viewCount는 애플리케이션이 별도로 관리하는 값이라 여기서 건드리지 않는다.
+     */
+    public void applySync(CardSyncFields fields) {
+        this.name = fields.name();
+        this.setName = fields.setName();
+        this.rarity = fields.rarity();
+        this.supertype = fields.supertype();
+        this.subtypes = fields.subtypes();
+        this.types = fields.types();
+        this.evolvesFrom = fields.evolvesFrom();
+        this.printedNumber = fields.printedNumber();
+        this.rarityCode = fields.rarityCode();
+        this.hp = fields.hp();
+        this.artist = fields.artist();
+        this.nationalPokedexNumbers = fields.nationalPokedexNumbers();
+        this.imageSmall = fields.imageSmall();
+        this.imageMedium = fields.imageMedium();
+        this.imageLarge = fields.imageLarge();
+        this.expansion = fields.expansion();
+        this.expansionSortOrder = fields.expansionSortOrder();
+        this.languageCode = fields.languageCode();
+        this.syncedAt = fields.syncedAt();
+    }
 }
