@@ -10,6 +10,7 @@ import com.pokade.global.event.UserWithdrawalCancelledEvent;
 import com.pokade.global.event.UserWithdrawalRequestedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.security.JwtTokenProvider;
 import com.pokade.global.security.TokenBlacklistStore;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,13 +38,23 @@ import static org.mockito.Mockito.times;
 @ExtendWith(MockitoExtension.class)
 class WithdrawalServiceTest {
 
-    @Mock UserRepository userRepository;
-    @Mock PasswordEncoder passwordEncoder;
-    @Mock ApplicationEventPublisher eventPublisher;
-    @Mock RefreshTokenStore refreshTokenStore;
-    @Mock TokenBlacklistStore tokenBlacklistStore;
-    @Mock WithdrawalConfirmer withdrawalConfirmer;
-    @InjectMocks WithdrawalService withdrawalService;
+    @Mock
+    UserRepository userRepository;
+    @Mock
+    PasswordEncoder passwordEncoder;
+    @Mock
+    ApplicationEventPublisher eventPublisher;
+    @Mock
+    RefreshTokenStore refreshTokenStore;
+    @Mock
+    TokenBlacklistStore tokenBlacklistStore;
+    @Mock
+    WithdrawalConfirmer withdrawalConfirmer;
+    @Mock
+    JwtTokenProvider jwtTokenProvider;
+    @InjectMocks
+    WithdrawalService withdrawalService;
+
 
     private User activeUser() {
         return User.builder()
@@ -71,7 +82,7 @@ class WithdrawalServiceTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(passwordEncoder.matches("rawpw", "ENCODED_PW")).willReturn(true);
 
-        withdrawalService.requestWithdrawal(1L, "rawpw");
+        withdrawalService.requestWithdrawal(1L, "rawpw", null);
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.WITHDRAWAL_PENDING);
         assertThat(user.getWithdrawalRequestedAt()).isNotNull();
@@ -84,7 +95,7 @@ class WithdrawalServiceTest {
         User user = pendingUser();
         given(userRepository.findById(2L)).willReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(2L, "rawpw"))
+        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(2L, "rawpw", null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.WITHDRAWAL_NOT_ALLOWED);
         then(eventPublisher).should(never()).publishEvent(any());
@@ -97,7 +108,7 @@ class WithdrawalServiceTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(passwordEncoder.matches("wrong", "ENCODED_PW")).willReturn(false);
 
-        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(1L, "wrong"))
+        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(1L, "wrong", null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_CURRENT_PASSWORD);
     }
@@ -232,20 +243,70 @@ class WithdrawalServiceTest {
         then(refreshTokenStore).should(never()).delete(2L);
     }
 
-    @Test
-    @DisplayName("신청: 소셜 계정은 비번 없이도 유예 전환(비번 검증 스킵)")
-    void requestWithdrawal_social_success() {
-        User social = User.builder()
+    private static final String REAUTH_TOKEN = "reauth.jwt.token";
+
+    private User socialUser() {
+        return User.builder()
                 .id(3L).email("social@pokade.com").password(null)
                 .nickname("소셜").role(Role.USER).provider(Provider.GOOGLE)
                 .status(UserStatus.ACTIVE).pointBalance(0)
                 .build();
-        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+    }
 
-        withdrawalService.requestWithdrawal(3L, null);
+    @Test
+    @DisplayName("신청: 소셜 - 유효한 재인증 티켓이면 유예 전환(비번 검증 스킵)")
+    void requestWithdrawal_social_success() {
+        User social = socialUser();
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "purpose")).willReturn("withdrawal_reauth");
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "email")).willReturn("social@pokade.com");
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "provider")).willReturn("GOOGLE");
+
+        withdrawalService.requestWithdrawal(3L, null, REAUTH_TOKEN);
 
         assertThat(social.getStatus()).isEqualTo(UserStatus.WITHDRAWAL_PENDING);
         then(eventPublisher).should().publishEvent(any(UserWithdrawalRequestedEvent.class));
         then(passwordEncoder).should(never()).matches(any(), any());
+    }
+
+    @Test
+    @DisplayName("신청: 소셜 - 티켓 없음/위조/만료면 INVALID_REAUTH_TICKET")
+    void requestWithdrawal_social_invalidTicket() {
+        User social = socialUser();
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "purpose")).willReturn(null);
+
+        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(3L, null, REAUTH_TOKEN))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REAUTH_TICKET);
+        then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("신청: 소셜 - 티켓 이메일이 유저와 다르면 ACCESS_DENIED")
+    void requestWithdrawal_social_emailMismatch() {
+        User social = socialUser();
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "purpose")).willReturn("withdrawal_reauth");
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "email")).willReturn("attacker@pokade.com");
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "provider")).willReturn("GOOGLE");
+
+        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(3L, null, REAUTH_TOKEN))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("신청: 소셜 - 티켓 provider가 유저와 다르면 ACCESS_DENIED")
+    void requestWithdrawal_social_providerMismatch() {
+        User social = socialUser();
+        given(userRepository.findById(3L)).willReturn(Optional.of(social));
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "purpose")).willReturn("withdrawal_reauth");
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "email")).willReturn("social@pokade.com");
+        given(jwtTokenProvider.parseSignedTicket(REAUTH_TOKEN, "provider")).willReturn("KAKAO");
+
+        assertThatThrownBy(() -> withdrawalService.requestWithdrawal(3L, null, REAUTH_TOKEN))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.ACCESS_DENIED);
     }
 }
