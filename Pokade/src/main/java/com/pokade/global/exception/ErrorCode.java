@@ -65,6 +65,7 @@ public enum ErrorCode {
 
     // ===== 시세 챗봇 =====
     CHAT_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "챗봇 서비스에 일시적인 오류가 발생했습니다."),
+    CHAT_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "같은 질문을 너무 많이 반복했어요. 1분 후 다시 시도해주세요."),
 
     // ===== 인프라 (AOP 자동 변환) =====
     FILE_IO_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 처리 중 오류가 발생했습니다."),

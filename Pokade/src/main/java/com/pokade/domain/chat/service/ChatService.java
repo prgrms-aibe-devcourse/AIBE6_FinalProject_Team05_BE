@@ -6,6 +6,7 @@ import com.pokade.domain.chat.dto.ChatQueryResponse;
 import com.pokade.domain.chat.entity.ChatMessage;
 import com.pokade.domain.chat.entity.ChatRole;
 import com.pokade.domain.chat.repository.ChatMessageRepository;
+import com.pokade.domain.chat.store.ChatRateLimitStore;
 import com.pokade.domain.chat.support.QuickQuestion;
 import com.pokade.domain.chat.tool.PriceChatTools;
 import com.pokade.global.exception.BusinessException;
@@ -102,11 +103,22 @@ public class ChatService {
     private static final String INVESTMENT_DISCLAIMER =
             "본 정보는 투자 조언이 아닌 참고용입니다.";
 
+    // 같은 세션에서 동일한 메시지가 이 횟수 이상 연속되면 60초간 잠금(RedisChatRateLimitStore 참고)
+    private static final int REPEAT_LOCK_THRESHOLD = 3;
+
     private final ChatClient chatClient;
     private final PriceChatTools priceChatTools;
     private final ChatMessageRepository chatMessageRepository;
+    private final ChatRateLimitStore chatRateLimitStore;
 
-    @Transactional
+    // 클래스/메서드 레벨 @Transactional을 걸지 않는다 - LLM 호출(수 초 이상 걸릴 수 있는 외부 I/O)이 이 메서드
+    // 안에 있는데, 트랜잭션으로 감싸면 그 시간 내내 DB 커넥션을 점유해 동시 요청이 몰릴 때 커넥션 풀이
+    // 고갈될 수 있다. saveMessage()의 저장은 각각 JpaRepository.save() 호출 자체가 트랜잭션이라 별도
+    // 트랜잭션 관리 없이도 원자적으로 처리된다.
+    //
+    // USER/ASSISTANT 메시지는 정상적으로 답변이 만들어진 경우에만 마지막에 함께 저장한다 - 인젝션으로
+    // 차단됐거나 LLM 호출 자체가 실패한 시도는 DB에 흔적을 남기지 않는다(악의적/실패한 호출까지 이력에
+    // 쌓이는 걸 방지).
     public ChatQueryResponse queryChat(ChatQueryRequest request, Long principalUserId) {
         String sessionId = request.sessionId();
         String message = request.message();
@@ -116,11 +128,17 @@ public class ChatService {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
 
-        saveMessage(sessionId, principalUserId, ChatRole.USER, message);
+        if (chatRateLimitStore.isLocked(sessionId)) {
+            throw new BusinessException(ErrorCode.CHAT_RATE_LIMIT_EXCEEDED);
+        }
+        if (chatRateLimitStore.recordAndCount(sessionId, message) >= REPEAT_LOCK_THRESHOLD) {
+            chatRateLimitStore.lock(sessionId);
+            log.info("챗봇 동일 메시지 반복 탐지 - 세션 60초 잠금: sessionId={}", sessionId);
+            throw new BusinessException(ErrorCode.CHAT_RATE_LIMIT_EXCEEDED);
+        }
 
         if (INJECTION_PATTERN.matcher(message).find()) {
-            log.info("챗봇 프롬프트 인젝션 패턴 탐지 - LLM 호출 생략: sessionId={}", sessionId);
-            saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, INJECTION_BLOCKED_MESSAGE);
+            log.info("챗봇 프롬프트 인젝션 패턴 탐지 - LLM 호출 생략, 이력 미저장: sessionId={}", sessionId);
             return new ChatQueryResponse(sessionId, INJECTION_BLOCKED_MESSAGE, null);
         }
 
@@ -137,7 +155,7 @@ public class ChatService {
                     .call()
                     .content();
         } catch (Exception e) {
-            log.error("챗봇 LLM 호출 실패: sessionId={}", sessionId, e);
+            log.error("챗봇 LLM 호출 실패, 이력 미저장: sessionId={}", sessionId, e);
             throw new ChatServiceUnavailableException("챗봇 응답 생성 중 오류가 발생했습니다.");
         }
 
@@ -147,6 +165,7 @@ public class ChatService {
             answer = UNGROUNDED_FALLBACK_MESSAGE;
         }
 
+        saveMessage(sessionId, principalUserId, ChatRole.USER, message);
         saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, answer);
 
         String disclaimer = isInvestmentQuestion ? INVESTMENT_DISCLAIMER : null;
