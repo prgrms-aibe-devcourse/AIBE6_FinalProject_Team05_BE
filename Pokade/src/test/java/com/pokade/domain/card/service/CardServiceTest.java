@@ -25,6 +25,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import com.pokade.domain.card.dto.CardDetailResponse;
+import com.pokade.domain.card.dto.CardFacetsResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
@@ -32,6 +33,7 @@ import com.pokade.domain.card.entity.Expansion;
 import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.repository.ExpansionRepository;
 import com.pokade.domain.card.repository.PokedexKoNameRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.global.exception.BusinessException;
@@ -48,6 +50,9 @@ class CardServiceTest {
 
     @Mock
     private PokedexKoNameRepository pokedexKoNameRepository;
+
+    @Mock
+    private ExpansionRepository expansionRepository;
 
     @Mock
     private CardNameKoResolver cardNameKoResolver;
@@ -664,5 +669,43 @@ class CardServiceTest {
         Optional<Card> result = cardService.findByExternalId("does-not-exist");
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("t48 매핑에 없는 rarity_code는 원본 rarity 텍스트로 폴백해서 노출된다")
+    void t48() {
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of(rarityView("ZZ", "Special Art Rare")));
+        given(expansionRepository.findAll()).willReturn(List.of());
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.rarities()).containsExactly("Special Art Rare");
+    }
+
+    @Test
+    @DisplayName("t49 rarity_code가 null인 카드도 원본 rarity 텍스트로 Facet에 노출된다")
+    void t49() {
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of(rarityView(null, "プロモ")));
+        given(expansionRepository.findAll()).willReturn(List.of());
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.rarities()).containsExactly("プロモ");
+    }
+
+    private CardRepository.CardRarityView rarityView(String rarityCode, String rarity) {
+        return new CardRepository.CardRarityView() {
+            @Override
+            public String getRarityCode() {
+                return rarityCode;
+            }
+
+            @Override
+            public String getRarity() {
+                return rarity;
+            }
+        };
     }
 }

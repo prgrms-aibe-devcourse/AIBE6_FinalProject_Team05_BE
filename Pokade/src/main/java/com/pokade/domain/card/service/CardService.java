@@ -156,8 +156,8 @@ public class CardService {
     public CardFacetsResponse getFacets() {
         Set<String> types = new TreeSet<>(CardTypeEnResolver.resolve(cardRepository.findDistinctTypes()));
         Set<String> rarities = new TreeSet<>();
-        for (String rarityCode : cardRepository.findDistinctRarityCodes()) {
-            rarities.add(CardRarityResolver.resolve(rarityCode, rarityCode));
+        for (CardRepository.CardRarityView view : cardRepository.findDistinctRarityCodes()) {
+            rarities.add(CardRarityResolver.resolve(view.getRarityCode(), view.getRarity()));
         }
         List<CardFacetsResponse.ExpansionFacet> expansions = expansionRepository.findAll().stream()
                 .map(expansion -> new CardFacetsResponse.ExpansionFacet(expansion.getId(), expansion.getName()))

@@ -189,9 +189,18 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     @Query(value = "SELECT DISTINCT unnest(types) FROM cards ORDER BY 1", nativeQuery = true)
     List<String> findDistinctTypes();
 
-    /** 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 rarity_code 전체를 조회한다. */
-    @Query(value = "SELECT DISTINCT rarity_code FROM cards WHERE rarity_code IS NOT NULL ORDER BY 1", nativeQuery = true)
-    List<String> findDistinctRarityCodes();
+    /**
+     * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 (rarity_code, rarity) 조합 전체를 조회한다.
+     * CardRarityResolver.resolve()가 매핑 실패 시 원본 rarity로 폴백해야 하므로 rarity도 함께 조회하고,
+     * rarity_code가 null인 카드도 원본 rarity로 폴백 노출되어야 하므로 WHERE로 제외하지 않는다.
+     */
+    @Query(value = "SELECT DISTINCT rarity_code AS rarityCode, rarity AS rarity FROM cards ORDER BY 1", nativeQuery = true)
+    List<CardRarityView> findDistinctRarityCodes();
+
+    interface CardRarityView {
+        String getRarityCode();
+        String getRarity();
+    }
 
     @Query(value = """
             SELECT c.* FROM cards c
