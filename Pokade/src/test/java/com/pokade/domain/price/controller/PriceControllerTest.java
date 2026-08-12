@@ -140,8 +140,8 @@ class PriceControllerTest {
     @Test
     void 배치_요약_조회시_cardIds에_해당하는_요약_목록을_반환한다() throws Exception {
         List<CardPriceSummaryResponse> summaries = List.of(
-                new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW"),
-                new CardPriceSummaryResponse(2L, null, 2000000, null, "KRW")
+                new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW", null, null),
+                new CardPriceSummaryResponse(2L, null, 2000000, null, "KRW", null, null)
         );
         given(priceService.getSummaries(List.of(1L, 2L), null, false)).willReturn(summaries);
 
@@ -175,7 +175,7 @@ class PriceControllerTest {
     @Test
     void 배치_요약_조회시_grade를_지정하면_해당_등급의_요약만_반환한다() throws Exception {
         List<CardPriceSummaryResponse> summaries = List.of(
-                new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW")
+                new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW", null, null)
         );
         given(priceService.getSummaries(List.of(1L), ListingGrade.S, false)).willReturn(summaries);
 
@@ -195,7 +195,7 @@ class PriceControllerTest {
     @Test
     void 배치_요약_조회시_includeRecentTradePrice가_true면_최근_체결가를_함께_반환한다() throws Exception {
         List<CardPriceSummaryResponse> summaries = List.of(
-                new CardPriceSummaryResponse(1L, null, null, 2950000, "KRW")
+                new CardPriceSummaryResponse(1L, null, null, 2950000, "KRW", null, null)
         );
         given(priceService.getSummaries(List.of(1L), null, true)).willReturn(summaries);
 
@@ -208,13 +208,28 @@ class PriceControllerTest {
     @Test
     void 배치_요약_조회시_includeRecentTradePrice_미지정이면_최근_체결가없이_조회한다() throws Exception {
         List<CardPriceSummaryResponse> summaries = List.of(
-                new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW")
+                new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW", null, null)
         );
         given(priceService.getSummaries(List.of(1L), null, false)).willReturn(summaries);
 
         mockMvc.perform(get("/api/prices/summaries").param("cardIds", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].recentTradePrice").value(nullValue()));
+    }
+
+    @Test
+    void 배치_요약_조회시_buyPrice와_recentTradePrice가_없으면_marketPrice를_함께_반환한다() throws Exception {
+        List<CardPriceSummaryResponse> summaries = List.of(
+                new CardPriceSummaryResponse(1L, null, null, null, "KRW", new BigDecimal("25.60"), "USD")
+        );
+        given(priceService.getSummaries(List.of(1L), ListingGrade.S, true)).willReturn(summaries);
+
+        mockMvc.perform(get("/api/prices/summaries")
+                        .param("cardIds", "1").param("grade", "S").param("includeRecentTradePrice", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].buyPrice").value(nullValue()))
+                .andExpect(jsonPath("$.data[0].marketPrice").value(25.60))
+                .andExpect(jsonPath("$.data[0].marketPriceCurrency").value("USD"));
     }
 
     @Test
