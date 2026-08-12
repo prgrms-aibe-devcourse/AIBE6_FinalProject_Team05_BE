@@ -198,16 +198,23 @@ class TradeControllerTest {
 
     @Test
     void 구매자가_확정하면_200과_COMPLETED_상태를_반환한다() throws Exception {
+        LocalDateTime shippedAt = LocalDateTime.now().minusDays(3);
+        LocalDateTime inspectedAt = LocalDateTime.now().minusDays(2);
+        LocalDateTime deliveredAt = LocalDateTime.now().minusDays(1);
+        LocalDateTime confirmedAt = LocalDateTime.now();
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.COMPLETED,
-                null, null, null, LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now());
+                shippedAt, inspectedAt, deliveredAt, confirmedAt, confirmedAt, confirmedAt);
 
         given(tradeService.confirmTrade(200L, 1L)).willReturn(response);
 
         mockMvc.perform(patch("/api/trades/{id}/confirm", 1L)
                         .with(userId(200L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.shippedAt").exists())
+                .andExpect(jsonPath("$.data.inspectedAt").exists())
+                .andExpect(jsonPath("$.data.deliveredAt").exists());
     }
 
     @Test
