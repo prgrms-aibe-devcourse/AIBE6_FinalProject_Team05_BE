@@ -185,6 +185,14 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     Optional<Card> findByExternalId(String externalId);
 
+    /** 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 타입 값 전체(원본 텍스트, 다국어 혼재)를 조회한다. */
+    @Query(value = "SELECT DISTINCT unnest(types) FROM cards ORDER BY 1", nativeQuery = true)
+    List<String> findDistinctTypes();
+
+    /** 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 rarity_code 전체를 조회한다. */
+    @Query(value = "SELECT DISTINCT rarity_code FROM cards WHERE rarity_code IS NOT NULL ORDER BY 1", nativeQuery = true)
+    List<String> findDistinctRarityCodes();
+
     @Query(value = """
             SELECT c.* FROM cards c
             JOIN cards src ON src.id = :id

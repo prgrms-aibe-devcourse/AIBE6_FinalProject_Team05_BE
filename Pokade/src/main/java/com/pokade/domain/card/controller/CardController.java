@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.pokade.domain.card.dto.CardDetailResponse;
+import com.pokade.domain.card.dto.CardFacetsResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.service.CardService;
 import com.pokade.global.response.ApiResponse;
@@ -52,5 +53,10 @@ public class CardController {
     @GetMapping("/{id}/related")
     public ApiResponse<List<CardResponse>> related(@PathVariable Long id) {
         return ApiResponse.ok(cardService.getRelated(id));
+    }
+
+    @GetMapping("/facets")
+    public ApiResponse<CardFacetsResponse> facets() {
+        return ApiResponse.ok(cardService.getFacets());
     }
 }
