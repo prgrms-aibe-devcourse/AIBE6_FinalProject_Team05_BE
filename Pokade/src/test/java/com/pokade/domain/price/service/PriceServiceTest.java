@@ -142,9 +142,9 @@ class PriceServiceTest {
         List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L, 2L, 3L), null, false);
 
         assertThat(result).hasSize(3);
-        assertThat(result.get(0)).isEqualTo(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW"));
-        assertThat(result.get(1)).isEqualTo(new CardPriceSummaryResponse(2L, null, 2000000, null, "KRW"));
-        assertThat(result.get(2)).isEqualTo(new CardPriceSummaryResponse(3L, null, null, null, "KRW"));
+        assertThat(result.get(0)).isEqualTo(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW", null, null));
+        assertThat(result.get(1)).isEqualTo(new CardPriceSummaryResponse(2L, null, 2000000, null, "KRW", null, null));
+        assertThat(result.get(2)).isEqualTo(new CardPriceSummaryResponse(3L, null, null, null, "KRW", null, null));
     }
 
     @Test
@@ -258,7 +258,7 @@ class PriceServiceTest {
 
         List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.S, false);
 
-        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW"));
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW", null, null));
     }
 
     @Test
@@ -273,7 +273,7 @@ class PriceServiceTest {
 
         List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.A, false);
 
-        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, null, null, null, "KRW"));
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, null, null, null, "KRW", null, null));
     }
 
     @Test
@@ -290,7 +290,7 @@ class PriceServiceTest {
 
         List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), null, true);
 
-        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, null, null, 2950000, "KRW"));
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, null, null, 2950000, "KRW", null, null));
     }
 
     @Test
@@ -305,8 +305,65 @@ class PriceServiceTest {
 
         List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), null, false);
 
-        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW"));
+        assertThat(result).containsExactly(new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW", null, null));
         verify(priceTradeStatsRepository, never()).findRecentCompletedTradePricesByCardIds(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("t31 buyPrice와 recentTradePrice가 둘 다 없으면 card_prices의 비등급(raw) 시세를 fallback으로 반환한다")
+    void t31() {
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L)))
+                .willReturn(List.of(primaryVariantIdView(1L, 10L)));
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L), ListingStatus.ACTIVE, ListingGrade.S))
+                .willReturn(List.of());
+        given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
+                .willReturn(List.of());
+        given(priceTradeStatsRepository.findRecentCompletedTradePricesByCardIds(List.of(1L), ListingGrade.S, TradeStatus.COMPLETED))
+                .willReturn(List.of());
+        given(cardPriceRepository.findMarketPricesByVariantIds(List.of(10L), "raw", "", ""))
+                .willReturn(List.of(variantMarketPriceView(10L, new BigDecimal("25.60"), "USD")));
+
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.S, true);
+
+        assertThat(result).containsExactly(
+                new CardPriceSummaryResponse(1L, null, null, null, "KRW", new BigDecimal("25.60"), "USD"));
+    }
+
+    @Test
+    @DisplayName("t32 buyPrice가 있으면 card_prices raw 시세를 조회하더라도 marketPrice는 무시되지 않고 함께 채워진다")
+    void t32() {
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L)))
+                .willReturn(List.of(primaryVariantIdView(1L, 10L)));
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L), ListingStatus.ACTIVE, null))
+                .willReturn(List.of(listingPriceView(10L, 3000000)));
+        given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
+                .willReturn(List.of());
+        given(cardPriceRepository.findMarketPricesByVariantIds(List.of(10L), "raw", "", ""))
+                .willReturn(List.of(variantMarketPriceView(10L, new BigDecimal("25.60"), "USD")));
+
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), null, false);
+
+        assertThat(result).containsExactly(
+                new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW", new BigDecimal("25.60"), "USD"));
+    }
+
+    private CardPriceRepository.VariantMarketPriceView variantMarketPriceView(Long variantId, BigDecimal market, String currency) {
+        return new CardPriceRepository.VariantMarketPriceView() {
+            @Override
+            public Long getVariantId() {
+                return variantId;
+            }
+
+            @Override
+            public BigDecimal getMarket() {
+                return market;
+            }
+
+            @Override
+            public String getCurrency() {
+                return currency;
+            }
+        };
     }
 
     private CardVariantRepository.PrimaryVariantIdView primaryVariantIdView(Long cardId, Long variantId) {
