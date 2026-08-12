@@ -26,7 +26,7 @@ public record CardDetailResponse(
         List<VariantSummary> variants
 ) {
 
-    public static CardDetailResponse of(Card card, List<CardVariant> variants, Map<Long, List<String>> gradesByVariantId, String nameKo) {
+    public static CardDetailResponse of(Card card, List<CardVariant> variants, Map<Long, List<String>> gradesByVariantId, String nameKo, List<String> types) {
         return new CardDetailResponse(
                 card.getId(),
                 card.getExternalId(),
@@ -35,7 +35,7 @@ public record CardDetailResponse(
                 card.getSetName(),
                 card.getRarity(),
                 card.getSupertype(),
-                card.getTypes(),
+                types,
                 card.getArtist(),
                 card.getPrintedNumber(),
                 card.getImageSmall(),
