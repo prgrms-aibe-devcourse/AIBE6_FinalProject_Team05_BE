@@ -50,6 +50,10 @@ public class PriceService {
     private static final int STATS_PERIOD_DAYS = 7;
     private static final ListingGrade STATS_GRADE = ListingGrade.S;
     private static final int RANKING_LIMIT = 10;
+    // CardUpsertService가 Scrydex 동기화 시 raw NM 시세를 저장하는 키와 동일해야 한다(card_prices 조회 fallback용).
+    private static final String RAW_PRICE_TYPE = "raw";
+    private static final String RAW_GRADE = "";
+    private static final String RAW_COMPANY = "";
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
@@ -122,13 +126,27 @@ public class PriceService {
                                 PriceTradeStatsRepository.CardPriceView::getCardId,
                                 PriceTradeStatsRepository.CardPriceView::getPrice));
 
+        // buyPrice/recentTradePrice가 둘 다 없는 카드용 fallback - Scrydex 동기화 비등급(raw) 시세.
+        // 우리 플랫폼 거래 이력이 없는 대다수 카드(직접 거래된 적 없는 카드)도 "가격 정보 없음" 대신 참고 시세를 보여주기 위함.
+        Map<Long, CardPriceRepository.VariantMarketPriceView> marketPriceByVariant = variantIds.isEmpty()
+                ? Map.of()
+                : cardPriceRepository
+                        .findMarketPricesByVariantIds(variantIds, RAW_PRICE_TYPE, RAW_GRADE, RAW_COMPANY).stream()
+                        .collect(Collectors.toMap(
+                                CardPriceRepository.VariantMarketPriceView::getVariantId,
+                                view -> view));
+
         return distinctCardIds.stream()
                 .map(cardId -> {
                     Long variantId = primaryVariantByCard.get(cardId);
                     Integer buyPrice = variantId != null ? buyPriceByVariant.get(variantId) : null;
                     Integer sellPrice = variantId != null ? sellPriceByVariant.get(variantId) : null;
                     Integer recentTradePrice = recentTradePriceByCard.get(cardId);
-                    return new CardPriceSummaryResponse(cardId, buyPrice, sellPrice, recentTradePrice, CURRENCY);
+                    CardPriceRepository.VariantMarketPriceView marketPrice =
+                            variantId != null ? marketPriceByVariant.get(variantId) : null;
+                    return new CardPriceSummaryResponse(cardId, buyPrice, sellPrice, recentTradePrice, CURRENCY,
+                            marketPrice != null ? marketPrice.getMarket() : null,
+                            marketPrice != null ? marketPrice.getCurrency() : null);
                 })
                 .toList();
     }

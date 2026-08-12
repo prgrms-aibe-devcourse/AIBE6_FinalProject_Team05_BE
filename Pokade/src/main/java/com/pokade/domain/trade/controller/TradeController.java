@@ -38,6 +38,14 @@ public class TradeController {
         return ApiResponse.ok(tradeService.getTrade(userId, id));
     }
 
+    @PatchMapping("/{id}/ship")
+    public ApiResponse<TradeResponse> shipTrade(
+            @AuthenticationPrincipal Long sellerId,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok("발송 처리되었습니다.", tradeService.shipTrade(sellerId, id));
+    }
+
     @PatchMapping("/{id}/confirm")
     public ApiResponse<TradeResponse> confirmTrade(
             @AuthenticationPrincipal Long buyerId,

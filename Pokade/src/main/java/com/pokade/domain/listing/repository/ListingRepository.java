@@ -14,11 +14,19 @@ import java.util.Optional;
 
 public interface ListingRepository extends JpaRepository<Listing, Long> {
 
-    List<Listing> findByCardIdAndStatusOrderByPriceAsc(Long cardId, ListingStatus status);
+    // 탈퇴/정지 등으로 ACTIVE가 아닌 판매자의 매물은 구매자에게 노출하지 않는다 —
+    // 탈퇴 정리(UserWithdrawalCleanupListener)가 아직 도착하기 전 아주 짧은 순간에도 안전하도록 조회 시점에 방어.
+    @Query("SELECT l FROM Listing l "
+            + "WHERE l.cardId = :cardId AND l.status = :status "
+            + "AND l.sellerId IN (SELECT u.id FROM User u WHERE u.status = com.pokade.domain.user.entity.type.UserStatus.ACTIVE) "
+            + "ORDER BY l.price ASC")
+    List<Listing> findByCardIdAndStatusOrderByPriceAsc(@Param("cardId") Long cardId,
+                                                        @Param("status") ListingStatus status);
 
     @Query("SELECT l FROM Listing l "
             + "WHERE l.cardId = :cardId AND l.variantId = :variantId AND l.status = :status "
             + "AND (:grade IS NULL OR l.grade = :grade) "
+            + "AND l.sellerId IN (SELECT u.id FROM User u WHERE u.status = com.pokade.domain.user.entity.type.UserStatus.ACTIVE) "
             + "ORDER BY l.price ASC")
     List<Listing> findOrderbook(@Param("cardId") Long cardId,
                                  @Param("variantId") Long variantId,

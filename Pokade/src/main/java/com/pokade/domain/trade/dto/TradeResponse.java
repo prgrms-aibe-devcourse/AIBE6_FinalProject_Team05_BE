@@ -15,6 +15,8 @@ public record TradeResponse(
         Integer price,
         TradeStatus status,
         LocalDateTime shippedAt,
+        LocalDateTime inspectedAt,
+        LocalDateTime deliveredAt,
         LocalDateTime confirmedAt,
         LocalDateTime settledAt,
         LocalDateTime createdAt
@@ -31,6 +33,8 @@ public record TradeResponse(
                 trade.getPrice(),
                 trade.getStatus(),
                 trade.getShippedAt(),
+                trade.getInspectedAt(),
+                trade.getDeliveredAt(),
                 trade.getConfirmedAt(),
                 trade.getSettledAt(),
                 trade.getCreatedAt()

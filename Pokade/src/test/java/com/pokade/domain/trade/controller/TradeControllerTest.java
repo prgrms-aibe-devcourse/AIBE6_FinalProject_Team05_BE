@@ -11,6 +11,10 @@ import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
 import com.pokade.global.security.TokenBlacklistStore;
+import com.pokade.global.security.oauth.RedisAuthorizationRequestRepository;
+import com.pokade.global.security.oauth.CustomOAuth2UserService;
+import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
+import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -59,6 +63,18 @@ class TradeControllerTest {
     @MockitoBean
     private TokenBlacklistStore tokenBlacklistStore;
 
+    @MockitoBean
+    private RedisAuthorizationRequestRepository redisAuthorizationRequestRepository;
+
+    @MockitoBean
+    private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+
+    @MockitoBean
+    private OAuth2LoginFailureHandler oAuth2LoginFailureHandler;
+
+    @MockitoBean
+    private CustomOAuth2UserService customOAuth2UserService;
+
     private RequestPostProcessor userId(Long userId) {
         Authentication auth = new UsernamePasswordAuthenticationToken(
                 userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
@@ -70,7 +86,7 @@ class TradeControllerTest {
         TradeCreateRequest request = new TradeCreateRequest(1L);
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
-                null, null, null, LocalDateTime.now());
+                null, null, null, null, null, LocalDateTime.now());
 
         given(tradeService.createTrade(anyLong(), any(TradeCreateRequest.class)))
                 .willReturn(response);
@@ -146,7 +162,7 @@ class TradeControllerTest {
     void 본인_거래를_조회하면_200과_거래정보를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
-                null, null, null, LocalDateTime.now());
+                null, null, null, null, null, LocalDateTime.now());
 
         given(tradeService.getTrade(200L, 1L)).willReturn(response);
 
@@ -182,16 +198,23 @@ class TradeControllerTest {
 
     @Test
     void 구매자가_확정하면_200과_COMPLETED_상태를_반환한다() throws Exception {
+        LocalDateTime shippedAt = LocalDateTime.now().minusDays(3);
+        LocalDateTime inspectedAt = LocalDateTime.now().minusDays(2);
+        LocalDateTime deliveredAt = LocalDateTime.now().minusDays(1);
+        LocalDateTime confirmedAt = LocalDateTime.now();
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.COMPLETED,
-                null, LocalDateTime.now(), LocalDateTime.now(), LocalDateTime.now());
+                shippedAt, inspectedAt, deliveredAt, confirmedAt, confirmedAt, confirmedAt);
 
         given(tradeService.confirmTrade(200L, 1L)).willReturn(response);
 
         mockMvc.perform(patch("/api/trades/{id}/confirm", 1L)
                         .with(userId(200L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.shippedAt").exists())
+                .andExpect(jsonPath("$.data.inspectedAt").exists())
+                .andExpect(jsonPath("$.data.deliveredAt").exists());
     }
 
     @Test
@@ -231,7 +254,7 @@ class TradeControllerTest {
     void 구매자가_취소하면_200과_CANCELLED_상태를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.CANCELLED,
-                null, null, null, LocalDateTime.now());
+                null, null, null, null, null, LocalDateTime.now());
 
         given(tradeService.cancelTrade(200L, 1L)).willReturn(response);
 
@@ -245,7 +268,7 @@ class TradeControllerTest {
     void 판매자가_취소하면_200과_CANCELLED_상태를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.CANCELLED,
-                null, null, null, LocalDateTime.now());
+                null, null, null, null, null, LocalDateTime.now());
 
         given(tradeService.cancelTrade(100L, 1L)).willReturn(response);
 
