@@ -82,12 +82,7 @@ public class AuthService {
 
         loginAttemptStore.reset(email); // 로그인 성공 시 실패 기록 초기화
 
-        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole().name());
-        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId());
-
-        refreshTokenStore.save(user.getId(), refreshToken);
-
-        return new TokenPair(accessToken, refreshToken);
+        return issueToken(user);
     }
 
     public void logout(String accessToken) {
@@ -141,5 +136,12 @@ public class AuthService {
     @PostConstruct
     void initDummyHash() {
         this.dummyHash = passwordEncoder.encode("timing-guard");
+    }
+
+    public TokenPair issueToken(User user) {
+        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole().name());
+        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId());
+        refreshTokenStore.save(user.getId(), refreshToken);
+        return new TokenPair(accessToken, refreshToken);
     }
 }

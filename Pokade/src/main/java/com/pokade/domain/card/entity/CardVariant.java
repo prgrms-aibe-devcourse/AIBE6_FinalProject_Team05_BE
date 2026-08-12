@@ -47,4 +47,16 @@ public class CardVariant {
 
     @Column(name = "synced_at", nullable = false)
     private LocalDateTime syncedAt;
+
+    /**
+     * Scrydex 동기화 배치에서 대표 판본이 바뀌었을 때도 기존 row를 delete+insert하지 않고 이 메서드로
+     * variant_name/이미지만 새 값으로 바꿔치기한다 - 내부 PK(id)가 유지되어야 listings 등 이 id를 참조하는
+     * 다른 테이블의 FK가 깨지지 않는다.
+     */
+    public void applySync(String variantName, String imageSmall, String imageLarge, LocalDateTime syncedAt) {
+        this.variantName = variantName;
+        this.imageSmall = imageSmall;
+        this.imageLarge = imageLarge;
+        this.syncedAt = syncedAt;
+    }
 }

@@ -1,6 +1,7 @@
 package com.pokade.domain.auth.service;
 
 import com.pokade.domain.auth.store.RedisVerificationCodeStore;
+import com.pokade.domain.auth.store.VerificationResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,60 +44,30 @@ public class RedisVerificationCodeStoreTest {
     }
 
     @Test
-    @DisplayName("save한 코드는 find로 조회되고, 저장 전엔 빈 Optional이다")
-    void find_returnsSavedCode() {
-        String email = "find@pokade.com";
-        assertThat(store.find(email)).isEmpty();
-
+    @DisplayName("verifyAndConsume: 일치하면 OK, 재조회는 EXPIRED(코드 소모됨)")
+    void verify_okThenConsumed() {
+        String email = "ok@pokade.com";
         store.save(email, "123456");
 
-        assertThat(store.find(email)).contains("123456");
+        assertThat(store.verifyAndConsume(email, "123456")).isEqualTo(VerificationResult.OK);
+        assertThat(store.verifyAndConsume(email, "123456")).isEqualTo(VerificationResult.EXPIRED);
     }
 
     @Test
-    @DisplayName("delete하면 저장된 코드가 제거되어 find가 빈 Optional을 반환한다")
-    void delete_removesSavedCode() {
-        String email = "delete@pokade.com";
+    @DisplayName("verifyAndConsume: 저장 전이면 EXPIRED")
+    void verify_noCode_expired() {
+        assertThat(store.verifyAndConsume("none@pokade.com", "123456")).isEqualTo(VerificationResult.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("verifyAndConsume: 불일치는 MISMATCH, 5회 채우면 이후는 EXCEEDED")
+    void verify_mismatchThenExceeded() {
+        String email = "limit@pokade.com";
         store.save(email, "123456");
 
-        store.delete(email);
-
-        assertThat(store.find(email)).isEmpty();
-    }
-
-    @Test
-    @DisplayName("incrementAttempt를 호출한 만큼 getAttemptCount가 증가하고, 호출 전엔 0이다")
-    void incrementAttempt_increasesCount() {
-        String email = "attempt@pokade.com";
-        assertThat(store.getAttemptCount(email)).isZero();
-
-        store.incrementAttempt(email);
-        store.incrementAttempt(email);
-
-        assertThat(store.getAttemptCount(email)).isEqualTo(2L);
-    }
-
-    @Test
-    @DisplayName("save(재발송)하면 실패 카운터가 리셋되어 getAttemptCount가 0이 된다")
-    void save_resetsAttemptCount() {
-        String email = "resend@pokade.com";
-        store.incrementAttempt(email);
-        store.incrementAttempt(email);
-        assertThat(store.getAttemptCount(email)).isEqualTo(2L);
-
-        store.save(email, "123456");
-
-        assertThat(store.getAttemptCount(email)).isZero();
-    }
-
-    @Test
-    @DisplayName("delete하면 실패 카운터도 제거되어 getAttemptCount가 0이 된다")
-    void delete_resetsAttemptCount() {
-        String email = "attempt-del@pokade.com";
-        store.incrementAttempt(email);
-
-        store.delete(email);
-
-        assertThat(store.getAttemptCount(email)).isZero();
+        for (int i = 0; i < 5; i++) {
+            assertThat(store.verifyAndConsume(email, "000000")).isEqualTo(VerificationResult.MISMATCH);
+        }
+        assertThat(store.verifyAndConsume(email, "000000")).isEqualTo(VerificationResult.EXCEEDED);
     }
 }

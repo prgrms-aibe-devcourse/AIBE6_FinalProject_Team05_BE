@@ -8,7 +8,32 @@ spring:
       - optional:file:.env[.properties]
       - optional:file:Pokade/.env[.properties]
       - optional:file:BE/Pokade/.env[.properties]
-
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:dummy}
+            client-secret: ${GOOGLE_CLIENT_SECRET:dummy}
+            scope:
+              - email
+              - profile
+            redirect-uri: "{baseUrl}/api/oauth2/callback/{registrationId}"
+          kakao: # ← 추가
+            client-id: ${KAKAO_CLIENT_ID:dummy}
+            client-secret: ${KAKAO_CLIENT_SECRET:dummy}
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/api/oauth2/callback/{registrationId}"
+            client-authentication-method: client_secret_post
+            scope:
+              - account_email
+            client-name: Kakao
+        provider: # ← 추가 (registration과 같은 레벨)
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
   jpa:
     open-in-view: false
     properties:
@@ -28,3 +53,9 @@ jwt:
   secret: ${JWT_SECRET}            # .env(spring.config.import)로 주입 — 미설정 시 부팅 실패(fail-fast)
   access-expiration: 30m
   refresh-expiration: 14d      # 추가 (Spring Duration이 14d = 14일로 파싱)
+
+app:
+  cookie:
+    secure: ${APP_COOKIE_SECURE:false} # 이미 코드가 참조 중인 값을 명시적으로 노출
+  oauth2:
+    redirect-base: ${APP_OAUTH2_REDIRECT_BASE:http://localhost:3000}

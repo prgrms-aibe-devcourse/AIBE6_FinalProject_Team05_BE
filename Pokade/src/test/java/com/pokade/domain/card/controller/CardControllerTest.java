@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verify;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -53,7 +54,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t1 쿼리 파라미터로 카드를 검색하면 200과 페이지 결과를 반환한다")
     void t1() {
-        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
@@ -100,7 +101,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t12 sort 쿼리 파라미터를 서비스에 그대로 위임한다")
     void t12() {
-        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
@@ -151,7 +152,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t20 minPrice/maxPrice 쿼리 파라미터를 서비스에 그대로 위임한다")
     void t20() {
-        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
@@ -203,7 +204,7 @@ class CardControllerTest {
         CardDetailResponse.VariantSummary variant = new CardDetailResponse.VariantSummary(
                 1L, "unlimitedHolofoil", true, null, null, List.of("S", "A"));
         CardDetailResponse detail = new CardDetailResponse(
-                1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+                1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
                 expansion, List.of(variant));
         given(cardService.getDetail(1L)).willReturn(detail);
@@ -224,7 +225,7 @@ class CardControllerTest {
         CardDetailResponse.ExpansionSummary expansion = new CardDetailResponse.ExpansionSummary(
                 "base1", "Base", "Base", "BS", 102, LocalDate.of(1999, 1, 9), null, null);
         CardDetailResponse detail = new CardDetailResponse(
-                1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+                1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
                 expansion, List.of());
         given(cardService.getDetail(1L)).willReturn(detail);
@@ -255,7 +256,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t6 검색어로 카드 이름 키워드 검색을 하면 200과 페이지 결과를 반환한다")
     void t6() {
-        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", "Base", "Rare Holo", "Pokémon",
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
@@ -286,7 +287,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t8 존재하는 카드 id로 유사 카드를 조회하면 200과 목록을 반환한다")
     void t8() {
-        CardResponse related = new CardResponse(2L, "sv3pt5-6", "Charizard ex", "151", "Double Rare", "Pokémon",
+        CardResponse related = new CardResponse(2L, "sv3pt5-6", "Charizard ex", null, "151", "Double Rare", "Pokémon",
                 List.of("Fire"), null, null, "sv3pt5", List.of());
         given(cardService.getRelated(1L)).willReturn(List.of(related));
 
@@ -345,5 +346,55 @@ class CardControllerTest {
                 .hasStatus(HttpStatus.BAD_REQUEST)
                 .bodyJson()
                 .extractingPath("$.code").isEqualTo("INVALID_INPUT");
+    }
+
+    @Test
+    @DisplayName("t24 한글 검색어로 요청하면 서비스에 그대로 위임하고 200과 페이지 결과를 반환한다")
+    void t24() {
+        CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", null, "151", "Common", "Pokémon",
+                List.of("Lightning"), null, null, "sv3pt5", List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardService.searchByKeyword(eq("피카츄"), any(Pageable.class))).willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards/search?q=피카츄")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content[0].name").isEqualTo("피카츄");
+        verify(cardService).searchByKeyword(eq("피카츄"), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("t25 초성 검색어도 판별 없이 서비스에 그대로 위임한다")
+    void t25() {
+        CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", null, "151", "Common", "Pokémon",
+                List.of("Lightning"), null, null, "sv3pt5", List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardService.searchByKeyword(eq("ㅍㅋㅊ"), any(Pageable.class))).willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards/search?q=ㅍㅋㅊ")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content[0].name").isEqualTo("피카츄");
+        verify(cardService).searchByKeyword(eq("ㅍㅋㅊ"), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("t26 매칭되는 카드가 없으면 200과 빈 목록을 반환한다")
+    void t26() {
+        Pageable pageable = PageRequest.of(0, 20);
+        given(cardService.searchByKeyword(eq("존재안하는이름"), any(Pageable.class))).willReturn(Page.empty(pageable));
+
+        mockMvcTester.get()
+                .uri("/api/cards/search?q=존재안하는이름")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content").isEmpty();
     }
 }

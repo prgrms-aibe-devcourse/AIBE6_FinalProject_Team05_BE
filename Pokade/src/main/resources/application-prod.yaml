@@ -40,11 +40,36 @@ spring:
           auth: true
           starttls:
             enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  # 운영: Google OAuth credential은 기본값 없이 주입 강제 (미설정 시 부팅 실패 = fail-fast)
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+          kakao: # ← 추가
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
 
 # 운영: refresh 쿠키 Secure 플래그 on (HTTPS 전송 강제) — dev는 기본값 false 유지
 app:
   cookie:
     secure: true
+  oauth2:
+    redirect-base: ${APP_OAUTH2_REDIRECT_BASE:https://www.pokade.store}
+
+# dev와 동일하게 :빈 기본값 유지 - 키가 없다고 앱 부팅 자체가 fail-fast하면 안 됨(배치가 아직
+# 스케줄러/트리거로 연결되지 않아 부팅 시점에는 이 값이 쓰이지 않으므로).
+scrydex:
+  api-key: ${SCRYDEX_API_KEY:}
+  team-id: ${SCRYDEX_TEAM_ID:}
+  base-url: https://api.scrydex.com
+  page-size: 100
 
 pokade:
   ai:

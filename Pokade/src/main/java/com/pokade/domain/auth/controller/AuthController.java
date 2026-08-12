@@ -2,10 +2,12 @@ package com.pokade.domain.auth.controller;
 
 import com.pokade.domain.auth.dto.TokenPair;
 import com.pokade.domain.auth.dto.request.LoginRequest;
+import com.pokade.domain.auth.dto.request.OAuth2RegisterRequest;
 import com.pokade.domain.auth.dto.request.SignupRequest;
 import com.pokade.domain.auth.dto.response.LoginResponse;
 import com.pokade.domain.auth.dto.response.SignupResponse;
 import com.pokade.domain.auth.service.AuthService;
+import com.pokade.domain.auth.service.OAuth2LoginService;
 import com.pokade.global.response.ApiResponse;
 import com.pokade.global.web.RefreshTokenCookieFactory;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final OAuth2LoginService oauth2LoginService;
     private final RefreshTokenCookieFactory refreshTokenCookieFactory;
 
     @PostMapping("/signup")
@@ -66,4 +69,16 @@ public class AuthController {
                 refreshTokenCookieFactory.expired().toString());
         return ApiResponse.ok("로그아웃 성공");
     }
+
+    @PostMapping("/oauth2/register")
+    public ApiResponse<LoginResponse> oauth2Register(
+            @Valid @RequestBody OAuth2RegisterRequest request,
+            HttpServletResponse response
+    ) {
+        TokenPair tokens = oauth2LoginService.register(request.ticket(), request.nickname());
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                refreshTokenCookieFactory.create(tokens.refreshToken()).toString());
+        return ApiResponse.ok("소셜 회원가입이 완료되었습니다.", LoginResponse.of(tokens.accessToken()));
+    }
+
 }

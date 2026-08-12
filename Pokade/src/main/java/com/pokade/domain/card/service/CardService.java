@@ -9,8 +9,12 @@ import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
+import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.repository.PokedexKoNameRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
+import com.pokade.domain.card.support.KoreanTextUtil;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.web.PageableValidator;
@@ -46,6 +50,8 @@ public class CardService {
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
+    private final PokedexKoNameRepository pokedexKoNameRepository;
+    private final CardNameKoResolver cardNameKoResolver;
 
     @Transactional(readOnly = true)
     public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
@@ -55,7 +61,7 @@ public class CardService {
         validatePriceRange(minPrice, maxPrice);
         Page<Card> cards = cardRepository.search(types, rarities, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card)));
     }
 
     @Transactional
@@ -66,7 +72,7 @@ public class CardService {
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
         Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id, GRADE_WHITELIST_LIST),
                 CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade);
-        return CardDetailResponse.of(card, variants, gradesByVariantId);
+        return CardDetailResponse.of(card, variants, gradesByVariantId, cardNameKoResolver.resolve(card));
     }
 
     private <T, K> Map<K, List<String>> groupByKey(List<T> views, Function<T, K> keyFn, Function<T, String> gradeFn) {
@@ -90,9 +96,27 @@ public class CardService {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
         }
-        Page<Card> cards = cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
+        Page<Card> cards = (KoreanTextUtil.isKorean(keyword) || KoreanTextUtil.isChosungOnly(keyword))
+                ? searchByPokedexKoName(keyword, pageable)
+                : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of())));
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card)));
+    }
+
+    // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
+    // 검색어가 자음(초성)으로만 이뤄져 있으면 초성 검색, 아니면 이름 부분일치로 검색한다.
+    // 한글/초성 검색은 도감번호(national_pokedex_numbers) 매핑 기반이라 포켓몬 카드만 지원한다.
+    // 도감번호가 없는 트레이너/에너지 카드는 이 경로로 검색되지 않는다 - 의도된 한계
+    // (PokeAPI 도감번호 매핑 방식의 알려진 제약).
+    private Page<Card> searchByPokedexKoName(String keyword, Pageable pageable) {
+        List<PokedexKoName> matches = KoreanTextUtil.isChosungOnly(keyword)
+                ? pokedexKoNameRepository.findByNameKoChosungContaining(keyword)
+                : pokedexKoNameRepository.findByNameKoContaining(keyword);
+        if (matches.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        List<Integer> pokedexNumbers = matches.stream().map(PokedexKoName::getPokedexNumber).toList();
+        return cardRepository.findByNationalPokedexNumbersIn(pokedexNumbers, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -109,7 +133,7 @@ public class CardService {
         }
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of())))
+                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of()), cardNameKoResolver.resolve(c)))
                 .toList();
     }
 

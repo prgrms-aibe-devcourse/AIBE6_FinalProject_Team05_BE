@@ -39,9 +39,18 @@ spring:
           auth: true
           starttls:
             enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 sync:
   enabled: false
+
+scrydex:
+  api-key: ${SCRYDEX_API_KEY:}
+  team-id: ${SCRYDEX_TEAM_ID:}
+  base-url: https://api.scrydex.com
+  page-size: 100
 
 pokade:
   ai:
