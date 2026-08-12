@@ -129,4 +129,38 @@ class CardUpsertServiceTest {
         assertThat(capturedSavedCard().getSetName()).isEqualTo(ORIGINAL_EXPANSION_NAME);
         assertThat(expansion.getTranslation()).isEqualTo("Thunder");
     }
+
+    @Test
+    @DisplayName("t4 translation.en.name이 빈 문자열이면 null로 취급되어 원본 세트명으로 폴백하고, 백필도 스킵되어 다음 기회에 백필 가능한 상태로 남는다")
+    void t4() {
+        Expansion expansion = existingExpansion(null);
+        given(expansionRepository.findById(EXPANSION_ID)).willReturn(Optional.of(expansion));
+        given(cardRepository.findByExternalId("sv10_ja-1")).willReturn(Optional.empty());
+        given(cardRepository.save(any(Card.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        CardDto dto = cardDto(new TranslationDto(new TranslationDto.TranslationNameDto("")));
+
+        boolean saved = cardUpsertService.upsertCard(dto);
+
+        assertThat(saved).isTrue();
+        assertThat(capturedSavedCard().getSetName()).isEqualTo(ORIGINAL_EXPANSION_NAME);
+        assertThat(expansion.getTranslation()).isNull();
+    }
+
+    @Test
+    @DisplayName("t5 translation.en.name이 공백뿐이면 null로 취급되어 원본 세트명으로 폴백하고, 백필도 스킵되어 다음 기회에 백필 가능한 상태로 남는다")
+    void t5() {
+        Expansion expansion = existingExpansion(null);
+        given(expansionRepository.findById(EXPANSION_ID)).willReturn(Optional.of(expansion));
+        given(cardRepository.findByExternalId("sv10_ja-1")).willReturn(Optional.empty());
+        given(cardRepository.save(any(Card.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        CardDto dto = cardDto(new TranslationDto(new TranslationDto.TranslationNameDto("   ")));
+
+        boolean saved = cardUpsertService.upsertCard(dto);
+
+        assertThat(saved).isTrue();
+        assertThat(capturedSavedCard().getSetName()).isEqualTo(ORIGINAL_EXPANSION_NAME);
+        assertThat(expansion.getTranslation()).isNull();
+    }
 }

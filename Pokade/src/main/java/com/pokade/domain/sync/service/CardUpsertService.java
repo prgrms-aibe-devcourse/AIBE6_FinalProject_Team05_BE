@@ -261,7 +261,11 @@ public class CardUpsertService {
         if (translation == null || translation.en() == null) {
             return null;
         }
-        return translation.en().name();
+        String name = translation.en().name();
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        return name;
     }
 
     /** translation JSONB 컬럼에는 en.name 문자열 하나만 JSON 문자열 값으로 저장한다({"en":{"name":...}} 구조 그대로 넣지 않음). */
