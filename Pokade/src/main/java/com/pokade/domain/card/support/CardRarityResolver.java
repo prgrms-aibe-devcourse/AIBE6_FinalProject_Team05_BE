@@ -15,6 +15,9 @@ public final class CardRarityResolver {
             Map.entry("GX", "Rare Holo GX")
     );
 
+    // 새 rarity_code를 위 맵에 추가할 때는 아래 LABEL_TO_KNOWN_ORIGINAL_TEXTS에도
+    // 대응하는 원본(다국어) 텍스트가 필요한지 함께 확인할 것 - 두 맵은 키가 달라(코드 vs 라벨)
+    // 자동으로 연동되지 않는다.
     // rarity_code는 원본 rarity 텍스트가 아니라 언어와 무관한 심볼이라 RARITY_CODE_TO_LABEL을
     // 그대로 뒤집을 수 없다(뒤집으면 코드가 나오는데, 필터가 비교하는 컬럼은 코드가 아니라
     // 원본 텍스트인 c.rarity이기 때문). 그래서 표준 라벨 -> 원본 텍스트 목록은 로컬 DB에서
