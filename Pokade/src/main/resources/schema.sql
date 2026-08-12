@@ -187,8 +187,10 @@ CREATE TABLE IF NOT EXISTS trades (
     listing_id     BIGINT NOT NULL REFERENCES listings(id),
     buyer_id       BIGINT NOT NULL REFERENCES users(id),
     price          INTEGER NOT NULL,
-    status         VARCHAR(20) NOT NULL,                        -- PENDING/MATCHED/CONFIRMED/COMPLETED/CANCELLED
+    status         VARCHAR(20) NOT NULL,                        -- PENDING/SHIPPED_TO_PLATFORM/INSPECTED/DELIVERED/COMPLETED/CANCELLED
     shipped_at     TIMESTAMP,
+    inspected_at   TIMESTAMP,
+    delivered_at   TIMESTAMP,
     confirmed_at   TIMESTAMP,
     settled_at     TIMESTAMP,
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
