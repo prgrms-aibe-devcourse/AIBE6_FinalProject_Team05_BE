@@ -29,9 +29,6 @@ import java.util.Set;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Trade {
 
-    private static final Set<TradeStatus> CANCELLABLE_STATUSES =
-            Set.of(TradeStatus.PENDING, TradeStatus.MATCHED);
-
     private static final Set<TradeStatus> FINAL_STATUSES =
             Set.of(TradeStatus.COMPLETED, TradeStatus.CANCELLED);
 
@@ -56,6 +53,12 @@ public class Trade {
     @Column(name = "shipped_at")
     private LocalDateTime shippedAt;
 
+    @Column(name = "inspected_at")
+    private LocalDateTime inspectedAt;
+
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
+
     @Column(name = "confirmed_at")
     private LocalDateTime confirmedAt;
 
@@ -74,9 +77,37 @@ public class Trade {
         this.status = TradeStatus.PENDING;
     }
 
+    // 판매자가 플랫폼으로 발송했음을 기록 (판매자 액션)
+    public void shipToPlatform() {
+        if (this.status != TradeStatus.PENDING) {
+            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "발송 대기 상태의 거래만 발송 처리할 수 있습니다.");
+        }
+        this.status = TradeStatus.SHIPPED_TO_PLATFORM;
+        this.shippedAt = LocalDateTime.now();
+    }
+
+    // 플랫폼 검수 완료 (관리자 액션)
+    public void markInspected() {
+        if (this.status != TradeStatus.SHIPPED_TO_PLATFORM) {
+            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "발송된 거래만 검수 처리할 수 있습니다.");
+        }
+        this.status = TradeStatus.INSPECTED;
+        this.inspectedAt = LocalDateTime.now();
+    }
+
+    // 구매자에게 배송 완료 (관리자 액션)
+    public void markDelivered() {
+        if (this.status != TradeStatus.INSPECTED) {
+            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "검수 완료된 거래만 배송 처리할 수 있습니다.");
+        }
+        this.status = TradeStatus.DELIVERED;
+        this.deliveredAt = LocalDateTime.now();
+    }
+
+    // 배송 완료된 거래만 구매자가 확정할 수 있다 (발송 전 조기 확정 방지)
     public void complete() {
-        if (FINAL_STATUSES.contains(this.status)) {
-            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "이미 확정되었거나 취소된 거래입니다.");
+        if (this.status != TradeStatus.DELIVERED) {
+            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "배송 완료된 거래만 구매를 확정할 수 있습니다.");
         }
         this.status = TradeStatus.COMPLETED;
         this.confirmedAt = LocalDateTime.now();
@@ -84,8 +115,8 @@ public class Trade {
     }
 
     public void cancel() {
-        if (!CANCELLABLE_STATUSES.contains(this.status)) {
-            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "체결 확정 전 단계의 거래만 취소할 수 있습니다.");
+        if (FINAL_STATUSES.contains(this.status)) {
+            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "이미 확정되었거나 취소된 거래입니다.");
         }
         this.status = TradeStatus.CANCELLED;
     }

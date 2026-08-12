@@ -65,6 +65,15 @@ class TradeServiceTest {
                 .build();
     }
 
+    // 구매확정은 DELIVERED 상태에서만 가능해서, 확정/완료 관련 테스트는 발송·검수·배송 단계를 먼저 거친다.
+    private Trade deliveredTradeOf(Long sellerId, Long buyerId) {
+        Trade trade = tradeOf(sellerId, buyerId);
+        trade.shipToPlatform();
+        trade.markInspected();
+        trade.markDelivered();
+        return trade;
+    }
+
     @Test
     void 즉시구매시_구매자_계정이_비활성이면_ACCOUNT_NOT_ACTIVE_예외가_발생한다() {
         willThrow(new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE))
@@ -158,7 +167,7 @@ class TradeServiceTest {
 
     @Test
     void 구매자가_확정하면_거래상태가_COMPLETED로_바뀐다() {
-        Trade trade = tradeOf(100L, 200L);
+        Trade trade = deliveredTradeOf(100L, 200L);
         given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
 
         TradeResponse response = tradeService.confirmTrade(200L, 1L);
@@ -187,7 +196,7 @@ class TradeServiceTest {
 
     @Test
     void 이미_완료된_거래를_다시_확정하면_INVALID_TRADE_STATUS_예외가_발생한다() {
-        Trade trade = tradeOf(100L, 200L);
+        Trade trade = deliveredTradeOf(100L, 200L);
         trade.complete();
         given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
 
@@ -249,12 +258,78 @@ class TradeServiceTest {
 
     @Test
     void 이미_완료된_거래를_취소하면_INVALID_TRADE_STATUS_예외가_발생한다() {
-        Trade trade = tradeOf(100L, 200L);
+        Trade trade = deliveredTradeOf(100L, 200L);
         trade.complete();
         given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
 
         assertThatThrownBy(() -> tradeService.cancelTrade(200L, 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
+    }
+
+    @Test
+    void 판매자가_발송처리하면_거래상태가_SHIPPED_TO_PLATFORM으로_바뀐다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        TradeResponse response = tradeService.shipTrade(100L, 1L);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.SHIPPED_TO_PLATFORM);
+    }
+
+    @Test
+    void 발송시_판매자_본인이_아니면_ACCESS_DENIED_예외가_발생한다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.shipTrade(999L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    void 발송시_판매자_계정이_비활성이면_ACCOUNT_NOT_ACTIVE_예외가_발생한다() {
+        willThrow(new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE))
+                .given(userAccessChecker).assertWritable(100L);
+
+        assertThatThrownBy(() -> tradeService.shipTrade(100L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCOUNT_NOT_ACTIVE);
+
+        verify(tradeRepository, never()).findById(anyLong());
+    }
+
+    @Test
+    void 발송_대기가_아닌_거래를_발송처리하면_INVALID_TRADE_STATUS_예외가_발생한다() {
+        Trade trade = tradeOf(100L, 200L);
+        trade.shipToPlatform();
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.shipTrade(100L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
+    }
+
+    @Test
+    void 관리자가_검수처리하면_거래상태가_INSPECTED로_바뀐다() {
+        Trade trade = tradeOf(100L, 200L);
+        trade.shipToPlatform();
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        TradeResponse response = tradeService.markInspected(1L);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.INSPECTED);
+    }
+
+    @Test
+    void 관리자가_배송처리하면_거래상태가_DELIVERED로_바뀐다() {
+        Trade trade = tradeOf(100L, 200L);
+        trade.shipToPlatform();
+        trade.markInspected();
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        TradeResponse response = tradeService.markDelivered(1L);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.DELIVERED);
     }
 }

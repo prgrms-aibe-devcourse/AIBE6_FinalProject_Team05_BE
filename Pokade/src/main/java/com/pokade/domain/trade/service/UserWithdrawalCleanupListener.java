@@ -22,7 +22,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserWithdrawalCleanupListener {
 
-    private static final List<TradeStatus> UNSETTLED_STATUSES = List.of(TradeStatus.PENDING, TradeStatus.MATCHED);
+    private static final List<TradeStatus> UNSETTLED_STATUSES = List.of(
+            TradeStatus.PENDING, TradeStatus.SHIPPED_TO_PLATFORM, TradeStatus.INSPECTED, TradeStatus.DELIVERED);
 
     private final ListingRepository listingRepository;
     private final TradeRepository tradeRepository;
