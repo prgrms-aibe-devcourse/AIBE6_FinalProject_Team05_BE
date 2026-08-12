@@ -2,6 +2,8 @@ package com.pokade.domain.card.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,5 +41,29 @@ class CardRarityResolverTest {
     @DisplayName("t4 rarity_code와 rarity가 모두 null이어도 예외 없이 null을 반환한다")
     void t4() {
         assertThat(CardRarityResolver.resolve(null, null)).isNull();
+    }
+
+    @Test
+    @DisplayName("t5 표준 레어도명을 역매핑하면 알려진 원본(다국어) 텍스트와 표준명 자신을 함께 반환한다")
+    void t5() {
+        assertThat(CardRarityResolver.resolveOriginalValues(List.of("Common"))).containsExactlyInAnyOrder("Common", "通常");
+    }
+
+    @Test
+    @DisplayName("t6 원본 텍스트가 알려지지 않은 표준 레어도명은 표준명 자신만 포함된다")
+    void t6() {
+        assertThat(CardRarityResolver.resolveOriginalValues(List.of("Rare Holo"))).containsExactly("Rare Holo");
+    }
+
+    @Test
+    @DisplayName("t7 매핑에 없는 임의 값은 원본 값 그대로만 포함된다")
+    void t7() {
+        assertThat(CardRarityResolver.resolveOriginalValues(List.of("Secret Rare"))).containsExactly("Secret Rare");
+    }
+
+    @Test
+    @DisplayName("t8 역매핑 대상이 null이면 null을 반환한다")
+    void t8() {
+        assertThat(CardRarityResolver.resolveOriginalValues(null)).isNull();
     }
 }

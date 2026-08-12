@@ -65,7 +65,7 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(List.of("Fire"), List.of("Rare Holo"), "base1", null, null, "name", pageable)).willReturn(page);
+        given(cardRepository.search(List.of("Fire", "炎"), List.of("Rare Holo"), "base1", null, null, "name", pageable)).willReturn(page);
 
         Page<CardResponse> result = cardService.search(List.of("Fire"), List.of("Rare Holo"), "base1", null, null, "name", pageable);
 
@@ -83,7 +83,7 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, null, null, null, pageable))
+        given(cardRepository.search(List.of("Fire", "炎", "Water", "水"), List.of("Common", "通常", "Rare Holo"), null, null, null, null, pageable))
                 .willReturn(page);
 
         Page<CardResponse> result = cardService.search(

@@ -61,7 +61,9 @@ public class CardService {
         validateFilterSize(types, "types");
         validateFilterSize(rarities, "rarity");
         validatePriceRange(minPrice, maxPrice);
-        Page<Card> cards = cardRepository.search(types, rarities, expansionId, minPrice, maxPrice, sort, pageable);
+        List<String> expandedTypes = CardTypeEnResolver.resolveOriginalValues(types);
+        List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(rarities);
+        Page<Card> cards = cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
         return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
     }
