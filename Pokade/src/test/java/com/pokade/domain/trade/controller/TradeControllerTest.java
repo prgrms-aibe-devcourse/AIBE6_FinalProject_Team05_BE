@@ -11,7 +11,7 @@ import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
 import com.pokade.global.security.TokenBlacklistStore;
-import com.pokade.global.security.oauth.CookieAuthorizationRequestRepository;
+import com.pokade.global.security.oauth.RedisAuthorizationRequestRepository;
 import com.pokade.global.security.oauth.CustomOAuth2UserService;
 import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
 import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
@@ -64,7 +64,7 @@ class TradeControllerTest {
     private TokenBlacklistStore tokenBlacklistStore;
 
     @MockitoBean
-    private CookieAuthorizationRequestRepository cookieAuthorizationRequestRepository;
+    private RedisAuthorizationRequestRepository redisAuthorizationRequestRepository;
 
     @MockitoBean
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
