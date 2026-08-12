@@ -207,6 +207,45 @@ class CardServiceTest {
     }
 
     @Test
+    @DisplayName("t46 레어도 코드가 매핑되어 있으면 표준 명칭으로 변환되고, 타입 매핑도 함께 정상 동작한다")
+    void t46() {
+        Card card = Card.builder()
+                .id(1L)
+                .name("クヌギダマ")
+                .rarity("通常")
+                .rarityCode("●")
+                .types(List.of("草"))
+                .build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardRepository.search(null, null, null, null, null, null, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, null, pageable);
+
+        assertThat(result.getContent().get(0).rarity()).isEqualTo("Common");
+        assertThat(result.getContent().get(0).types()).containsExactly("Grass");
+    }
+
+    @Test
+    @DisplayName("t47 매핑에 없는 레어도 코드는 원본 rarity 값을 그대로 유지한다")
+    void t47() {
+        Card card = Card.builder()
+                .id(1L)
+                .name("Charizard")
+                .rarity("Hyper Rare")
+                .rarityCode("★★★")
+                .types(List.of("Fire"))
+                .build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardRepository.search(null, null, null, null, null, null, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, null, pageable);
+
+        assertThat(result.getContent().get(0).rarity()).isEqualTo("Hyper Rare");
+    }
+
+    @Test
     @DisplayName("t35 검색 결과 카드들의 id를 모아 등급을 배치 조회하고 카드별 등급 배열로 매핑한다")
     void t35() {
         Card charizard = Card.builder().id(1L).name("Charizard").types(List.of("Fire")).build();

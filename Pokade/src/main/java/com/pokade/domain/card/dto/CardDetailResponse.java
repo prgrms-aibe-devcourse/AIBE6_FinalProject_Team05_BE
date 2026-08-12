@@ -26,14 +26,14 @@ public record CardDetailResponse(
         List<VariantSummary> variants
 ) {
 
-    public static CardDetailResponse of(Card card, List<CardVariant> variants, Map<Long, List<String>> gradesByVariantId, String nameKo, List<String> types) {
+    public static CardDetailResponse of(Card card, List<CardVariant> variants, Map<Long, List<String>> gradesByVariantId, String nameKo, List<String> types, String rarity) {
         return new CardDetailResponse(
                 card.getId(),
                 card.getExternalId(),
                 card.getName(),
                 nameKo,
                 card.getSetName(),
-                card.getRarity(),
+                rarity,
                 card.getSupertype(),
                 types,
                 card.getArtist(),
