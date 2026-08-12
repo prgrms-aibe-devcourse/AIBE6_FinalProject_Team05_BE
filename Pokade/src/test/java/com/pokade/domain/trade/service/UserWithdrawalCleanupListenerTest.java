@@ -55,7 +55,7 @@ class UserWithdrawalCleanupListenerTest {
         Listing listing2 = activeListingOf(userId);
         given(listingRepository.findBySellerIdAndStatus(userId, ListingStatus.ACTIVE))
                 .willReturn(List.of(listing1, listing2));
-        given(tradeRepository.findByParticipantIdAndStatusIn(eq(userId), eq(List.of(TradeStatus.PENDING, TradeStatus.MATCHED))))
+        given(tradeRepository.findByParticipantIdAndStatusIn(eq(userId), eq(List.of(TradeStatus.PENDING, TradeStatus.SHIPPED_TO_PLATFORM, TradeStatus.INSPECTED, TradeStatus.DELIVERED))))
                 .willReturn(List.of());
 
         listener.onUserWithdrawn(new UserWithdrawnEvent(userId));
@@ -70,7 +70,7 @@ class UserWithdrawalCleanupListenerTest {
         Trade tradeAsBuyer = pendingTradeOf(100L, userId);
         given(listingRepository.findBySellerIdAndStatus(userId, ListingStatus.ACTIVE))
                 .willReturn(List.of());
-        given(tradeRepository.findByParticipantIdAndStatusIn(eq(userId), eq(List.of(TradeStatus.PENDING, TradeStatus.MATCHED))))
+        given(tradeRepository.findByParticipantIdAndStatusIn(eq(userId), eq(List.of(TradeStatus.PENDING, TradeStatus.SHIPPED_TO_PLATFORM, TradeStatus.INSPECTED, TradeStatus.DELIVERED))))
                 .willReturn(List.of(tradeAsBuyer));
 
         listener.onUserWithdrawn(new UserWithdrawnEvent(userId));

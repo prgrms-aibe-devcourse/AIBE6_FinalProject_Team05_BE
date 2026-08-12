@@ -103,6 +103,45 @@ public class TradeService {
         return toResponse(trade);
     }
 
+    // 판매자가 플랫폼으로 발송 처리 (판매자 본인 액션)
+    @Transactional
+    public TradeResponse shipTrade(Long sellerId, Long tradeId) {
+        userAccessChecker.assertWritable(sellerId);
+
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        if (!trade.getListing().getSellerId().equals(sellerId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        trade.shipToPlatform();
+
+        return toResponse(trade);
+    }
+
+    // 관리자 페이지에서 호출 — 인가(관리자 권한 확인)는 호출하는 쪽(관리자 도메인)의 책임.
+    @Transactional
+    public TradeResponse markInspected(Long tradeId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        trade.markInspected();
+
+        return toResponse(trade);
+    }
+
+    // 관리자 페이지에서 호출 — 인가(관리자 권한 확인)는 호출하는 쪽(관리자 도메인)의 책임.
+    @Transactional
+    public TradeResponse markDelivered(Long tradeId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+
+        trade.markDelivered();
+
+        return toResponse(trade);
+    }
+
     @Transactional
     public TradeResponse cancelTrade(Long userId, Long tradeId) {
         userAccessChecker.assertWritable(userId);
