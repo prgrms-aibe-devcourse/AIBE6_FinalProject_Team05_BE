@@ -19,16 +19,16 @@ public record CardResponse(
         List<String> grades
 ) {
 
-    public static CardResponse from(Card card, List<String> grades, String nameKo) {
+    public static CardResponse from(Card card, List<String> grades, String nameKo, List<String> types, String rarity) {
         return new CardResponse(
                 card.getId(),
                 card.getExternalId(),
                 card.getName(),
                 nameKo,
                 card.getSetName(),
-                card.getRarity(),
+                rarity,
                 card.getSupertype(),
-                card.getTypes(),
+                types,
                 card.getImageSmall(),
                 card.getImageMedium(),
                 card.getExpansion() != null ? card.getExpansion().getId() : null,

@@ -25,6 +25,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.Expansion;
+import com.pokade.domain.card.support.CardRarityResolver;
+import com.pokade.domain.card.support.CardTypeEnResolver;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
@@ -236,6 +238,66 @@ class CardRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isZero();
+    }
+
+    @Test
+    @DisplayName("t53 표준 타입명으로 필터링해도 리졸버가 확장한 원본 언어 후보값 덕분에 JA 카드까지 조회된다")
+    void t53() {
+        Expansion sv10ja = persistExpansion("sv10_ja", "サンダー");
+        persistCard("クヌギダマ", "通常", sv10ja, "草", List.of(204), LocalDateTime.now());
+
+        List<String> expandedTypes = CardTypeEnResolver.resolveOriginalValues(List.of("Grass"));
+        Page<Card> result = cardRepository.search(expandedTypes, null, null, null, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("クヌギダマ");
+    }
+
+    @Test
+    @DisplayName("t54 표준 레어도명으로 필터링하면 원본이 다른 언어인 카드와 EN 카드가 함께 조회되고 count도 일치한다")
+    void t54() {
+        Expansion sv10ja = persistExpansion("sv10_ja", "サンダー");
+        persistCard("クヌギダマ", "通常", sv10ja, "草", List.of(204), LocalDateTime.now());
+
+        List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(List.of("Common"));
+        Page<Card> result = cardRepository.search(null, expandedRarities, null, null, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactlyInAnyOrder("Pikachu", "クヌギダマ");
+        assertThat(result.getTotalElements()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("t55 리졸버 매핑에 없는 임의 값으로 필터링하면 확장 전과 동일하게 빈 페이지를 반환한다(회귀)")
+    void t55() {
+        List<String> expandedTypes = CardTypeEnResolver.resolveOriginalValues(List.of("Rock"));
+        List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(List.of("Secret Rare"));
+
+        Page<Card> typeResult = cardRepository.search(expandedTypes, null, null, null, null, null, PageRequest.of(0, 10));
+        Page<Card> rarityResult = cardRepository.search(null, expandedRarities, null, null, null, null, PageRequest.of(0, 10));
+
+        assertThat(typeResult.getContent()).isEmpty();
+        assertThat(rarityResult.getContent()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("t56 타입·레어도 확장값과 가격 필터를 함께 적용해도 AND 결합이 회귀 없이 동작한다")
+    void t56() {
+        Expansion sv10ja = persistExpansion("sv10_ja", "サンダー");
+        Card jaCard = persistCard("クヌギダマ", "通常", sv10ja, "草", List.of(204), LocalDateTime.now());
+        Long seller = persistSeller("multi-filter-seller@test.com");
+        persistListing(jaCard.getId(), seller, 5000, null, ListingStatus.ACTIVE);
+        entityManager.flush();
+
+        List<String> expandedTypes = CardTypeEnResolver.resolveOriginalValues(List.of("Grass"));
+        List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(List.of("Common"));
+        Page<Card> result = cardRepository.search(expandedTypes, expandedRarities, null, 1000, 10000, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("クヌギダマ");
     }
 
     @Test

@@ -81,6 +81,7 @@ public class CardUpsertService {
 
     private Expansion syncExpansion(ExpansionDto dto, LocalDateTime now) {
         return expansionRepository.findById(dto.id())
+                .map(existing -> backfillTranslation(existing, dto))
                 .orElseGet(() -> expansionRepository.save(Expansion.builder()
                         .id(dto.id())
                         .name(dto.name())
@@ -96,11 +97,27 @@ public class CardUpsertService {
                         .build()));
     }
 
+    /**
+     * translation 없이 먼저 동기화됐던 기존 세트를 위한 백필 - 이미 값이 있으면 덮어쓰지 않고,
+     * dto에도 새 값이 없으면 그대로 둔다. 세트명 외 다른 필드(name/series 등)는 이 메서드에서 건드리지 않는다.
+     */
+    private Expansion backfillTranslation(Expansion existing, ExpansionDto dto) {
+        if (existing.getTranslation() != null) {
+            return existing;
+        }
+        String translation = toJsonString(extractTranslationName(dto.translation()));
+        if (translation == null) {
+            return existing;
+        }
+        existing.applyTranslationBackfill(translation);
+        return existing;
+    }
+
     private Card syncCard(CardDto dto, Expansion expansion, LocalDateTime now) {
         ImageDto image = firstImage(dto.images());
         CardSyncFields fields = new CardSyncFields(
                 dto.name(),
-                expansion != null ? expansion.getName() : null,
+                resolveExpansionName(expansion),
                 dto.rarity(),
                 dto.supertype(),
                 dto.subtypes(),
@@ -219,11 +236,36 @@ public class CardUpsertService {
         return LocalDate.parse(raw, RELEASE_DATE_FORMAT);
     }
 
+    /**
+     * 세트명은 translation(en.name) 영문 표기가 있으면 그것을 우선 사용하고,
+     * 없거나 파싱에 실패하면 기존처럼 expansion.getName()(원본 언어 표기)으로 폴백한다.
+     */
+    private String resolveExpansionName(Expansion expansion) {
+        if (expansion == null) {
+            return null;
+        }
+        String translation = expansion.getTranslation();
+        if (translation == null) {
+            return expansion.getName();
+        }
+        try {
+            return objectMapper.readValue(translation, String.class);
+        } catch (JsonProcessingException e) {
+            log.warn("expansion.translation 파싱 실패 - name으로 폴백. expansionId={}, translation={}",
+                    expansion.getId(), translation, e);
+            return expansion.getName();
+        }
+    }
+
     private String extractTranslationName(TranslationDto translation) {
         if (translation == null || translation.en() == null) {
             return null;
         }
-        return translation.en().name();
+        String name = translation.en().name();
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        return name;
     }
 
     /** translation JSONB 컬럼에는 en.name 문자열 하나만 JSON 문자열 값으로 저장한다({"en":{"name":...}} 구조 그대로 넣지 않음). */
