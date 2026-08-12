@@ -56,4 +56,13 @@ public class Expansion {
 
     @Column(name = "synced_at", nullable = false)
     private LocalDateTime syncedAt;
+
+    /**
+     * 과거에 translation 없이 먼저 동기화된 기존 세트를 위한 백필 전용 메서드.
+     * 호출 시점에 이미 translation이 있는지 여부는 호출부(CardUpsertService)에서 판단하고,
+     * 이 메서드는 값을 그대로 반영만 한다.
+     */
+    public void applyTranslationBackfill(String translation) {
+        this.translation = translation;
+    }
 }

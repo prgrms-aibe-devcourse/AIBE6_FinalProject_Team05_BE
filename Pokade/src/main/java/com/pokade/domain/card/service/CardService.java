@@ -6,25 +6,31 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pokade.domain.card.dto.CardDetailResponse;
+import com.pokade.domain.card.dto.CardFacetsResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
 import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.repository.ExpansionRepository;
 import com.pokade.domain.card.repository.PokedexKoNameRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
+import com.pokade.domain.card.support.CardRarityResolver;
+import com.pokade.domain.card.support.CardTypeEnResolver;
 import com.pokade.domain.card.support.KoreanTextUtil;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.web.PageableValidator;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 
 import lombok.RequiredArgsConstructor;
@@ -51,6 +57,7 @@ public class CardService {
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
     private final PokedexKoNameRepository pokedexKoNameRepository;
+    private final ExpansionRepository expansionRepository;
     private final CardNameKoResolver cardNameKoResolver;
 
     @Transactional(readOnly = true)
@@ -59,9 +66,11 @@ public class CardService {
         validateFilterSize(types, "types");
         validateFilterSize(rarities, "rarity");
         validatePriceRange(minPrice, maxPrice);
-        Page<Card> cards = cardRepository.search(types, rarities, expansionId, minPrice, maxPrice, sort, pageable);
+        List<String> expandedTypes = CardTypeEnResolver.resolveOriginalValues(types);
+        List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(rarities);
+        Page<Card> cards = cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card)));
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
     }
 
     @Transactional
@@ -72,7 +81,7 @@ public class CardService {
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
         Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id, GRADE_WHITELIST_LIST),
                 CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade);
-        return CardDetailResponse.of(card, variants, gradesByVariantId, cardNameKoResolver.resolve(card));
+        return CardDetailResponse.of(card, variants, gradesByVariantId, cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()));
     }
 
     private <T, K> Map<K, List<String>> groupByKey(List<T> views, Function<T, K> keyFn, Function<T, String> gradeFn) {
@@ -100,7 +109,7 @@ public class CardService {
                 ? searchByPokedexKoName(keyword, pageable)
                 : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card)));
+        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
     }
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
@@ -133,8 +142,28 @@ public class CardService {
         }
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of()), cardNameKoResolver.resolve(c)))
+                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of()), cardNameKoResolver.resolve(c), CardTypeEnResolver.resolve(c.getTypes()), CardRarityResolver.resolve(c.getRarityCode(), c.getRarity())))
                 .toList();
+    }
+
+    /**
+     * 카드 필터 옵션(타입/레어도/세트)을 DB에 실제로 존재하는 값 기준으로 조회한다.
+     * types/rarity_code는 원본이 다국어로 혼재돼 있어 리졸버 적용 후 표준명 기준으로 중복 제거한다
+     * (예: 일본어 "草"와 영문 "Grass"가 함께 있으면 리졸버를 거쳐 "Grass" 하나로 합쳐짐).
+     * 세트명은 아직 언어별 표준화가 없어 원본 그대로 반환한다.
+     */
+    @Transactional(readOnly = true)
+    public CardFacetsResponse getFacets() {
+        Set<String> types = new TreeSet<>(CardTypeEnResolver.resolve(cardRepository.findDistinctTypes()));
+        Set<String> rarities = new TreeSet<>();
+        for (CardRepository.CardRarityView view : cardRepository.findDistinctRarityCodes()) {
+            rarities.add(CardRarityResolver.resolve(view.getRarityCode(), view.getRarity()));
+        }
+        List<CardFacetsResponse.ExpansionFacet> expansions = expansionRepository.findAll().stream()
+                .map(expansion -> new CardFacetsResponse.ExpansionFacet(expansion.getId(), expansion.getName()))
+                .sorted(Comparator.comparing(CardFacetsResponse.ExpansionFacet::name))
+                .toList();
+        return CardFacetsResponse.of(List.copyOf(types), List.copyOf(rarities), expansions);
     }
 
     private Map<Long, List<String>> fetchGradesByCardIds(List<Card> cards) {

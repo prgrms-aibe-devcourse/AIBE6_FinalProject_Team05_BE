@@ -25,6 +25,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import com.pokade.domain.card.dto.CardDetailResponse;
+import com.pokade.domain.card.dto.CardFacetsResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
@@ -32,6 +33,7 @@ import com.pokade.domain.card.entity.Expansion;
 import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.repository.ExpansionRepository;
 import com.pokade.domain.card.repository.PokedexKoNameRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.global.exception.BusinessException;
@@ -50,6 +52,9 @@ class CardServiceTest {
     private PokedexKoNameRepository pokedexKoNameRepository;
 
     @Mock
+    private ExpansionRepository expansionRepository;
+
+    @Mock
     private CardNameKoResolver cardNameKoResolver;
 
     @InjectMocks
@@ -65,7 +70,7 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(List.of("Fire"), List.of("Rare Holo"), "base1", null, null, "name", pageable)).willReturn(page);
+        given(cardRepository.search(List.of("Fire", "炎"), List.of("Rare Holo"), "base1", null, null, "name", pageable)).willReturn(page);
 
         Page<CardResponse> result = cardService.search(List.of("Fire"), List.of("Rare Holo"), "base1", null, null, "name", pageable);
 
@@ -83,7 +88,7 @@ class CardServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.search(List.of("Fire", "Water"), List.of("Common", "Rare Holo"), null, null, null, null, pageable))
+        given(cardRepository.search(List.of("Fire", "炎", "Water", "水"), List.of("Common", "通常", "Rare Holo"), null, null, null, null, pageable))
                 .willReturn(page);
 
         Page<CardResponse> result = cardService.search(
@@ -204,6 +209,45 @@ class CardServiceTest {
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
+    }
+
+    @Test
+    @DisplayName("t46 레어도 코드가 매핑되어 있으면 표준 명칭으로 변환되고, 타입 매핑도 함께 정상 동작한다")
+    void t46() {
+        Card card = Card.builder()
+                .id(1L)
+                .name("クヌギダマ")
+                .rarity("通常")
+                .rarityCode("●")
+                .types(List.of("草"))
+                .build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardRepository.search(null, null, null, null, null, null, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, null, pageable);
+
+        assertThat(result.getContent().get(0).rarity()).isEqualTo("Common");
+        assertThat(result.getContent().get(0).types()).containsExactly("Grass");
+    }
+
+    @Test
+    @DisplayName("t47 매핑에 없는 레어도 코드는 원본 rarity 값을 그대로 유지한다")
+    void t47() {
+        Card card = Card.builder()
+                .id(1L)
+                .name("Charizard")
+                .rarity("Hyper Rare")
+                .rarityCode("★★★")
+                .types(List.of("Fire"))
+                .build();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardRepository.search(null, null, null, null, null, null, pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardService.search(null, null, null, null, null, null, pageable);
+
+        assertThat(result.getContent().get(0).rarity()).isEqualTo("Hyper Rare");
     }
 
     @Test
@@ -625,5 +669,43 @@ class CardServiceTest {
         Optional<Card> result = cardService.findByExternalId("does-not-exist");
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("t48 매핑에 없는 rarity_code는 원본 rarity 텍스트로 폴백해서 노출된다")
+    void t48() {
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of(rarityView("ZZ", "Special Art Rare")));
+        given(expansionRepository.findAll()).willReturn(List.of());
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.rarities()).containsExactly("Special Art Rare");
+    }
+
+    @Test
+    @DisplayName("t49 rarity_code가 null인 카드도 원본 rarity 텍스트로 Facet에 노출된다")
+    void t49() {
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of(rarityView(null, "プロモ")));
+        given(expansionRepository.findAll()).willReturn(List.of());
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.rarities()).containsExactly("プロモ");
+    }
+
+    private CardRepository.CardRarityView rarityView(String rarityCode, String rarity) {
+        return new CardRepository.CardRarityView() {
+            @Override
+            public String getRarityCode() {
+                return rarityCode;
+            }
+
+            @Override
+            public String getRarity() {
+                return rarity;
+            }
+        };
     }
 }
