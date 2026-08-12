@@ -5,6 +5,8 @@ import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 
+import java.time.LocalDateTime;
+
 public record UserResponse(
         Long userId,
         String email,
@@ -13,7 +15,8 @@ public record UserResponse(
         UserStatus status,
         String profileImageUrl,
         Integer pointBalance,
-        Provider provider
+        Provider provider,
+        LocalDateTime withdrawalRequestedAt
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(
@@ -24,7 +27,8 @@ public record UserResponse(
                 user.getStatus(),
                 user.getProfileImageUrl(),
                 user.getPointBalance(),
-                user.getProvider()
+                user.getProvider(),
+                user.getWithdrawalRequestedAt()
         );
     }
 }

@@ -12,6 +12,10 @@ import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtTokenProvider;
 import com.pokade.global.security.TokenBlacklistStore;
+import com.pokade.global.security.oauth.CustomOAuth2UserService;
+import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
+import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
+import com.pokade.global.security.oauth.RedisAuthorizationRequestRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +31,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.List;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -51,6 +56,14 @@ class UserControllerTest {
     private TokenBlacklistStore tokenBlacklistStore;                 // JwtAuthenticationFilter가 요구
     @MockitoBean
     private WithdrawalService withdrawalService;                     // UserController가 요구
+    @MockitoBean
+    private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;      // SecurityConfig가 요구
+    @MockitoBean
+    private OAuth2LoginFailureHandler oAuth2LoginFailureHandler;      // SecurityConfig가 요구
+    @MockitoBean
+    private CustomOAuth2UserService customOAuth2UserService;          // SecurityConfig가 요구
+    @MockitoBean
+    private RedisAuthorizationRequestRepository authorizationRequestRepository; // SecurityConfig가 요구
 
     private RequestPostProcessor userId(Long userId) {
         Authentication auth = new UsernamePasswordAuthenticationToken(
@@ -63,7 +76,7 @@ class UserControllerTest {
     void getMyInfo_success() throws Exception {
         UserResponse res = new UserResponse(
                 1L, "user@pokade.com", "트레이너김",
-                Role.USER, UserStatus.ACTIVE, "https://img/x.png", 30, Provider.LOCAL);
+                Role.USER, UserStatus.ACTIVE, "https://img/x.png", 30, Provider.LOCAL, null);
         given(userService.getMyInfo(1L)).willReturn(res);
 
         mockMvc.perform(get("/api/users/me").with(userId(1L)))
@@ -74,7 +87,8 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.role").value("USER"))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.pointBalance").value(30))
-                .andExpect(jsonPath("$.data.provider").value("LOCAL"));
+                .andExpect(jsonPath("$.data.provider").value("LOCAL"))
+                .andExpect(jsonPath("$.data.withdrawalRequestedAt").value(nullValue()));
     }
 
     @Test
