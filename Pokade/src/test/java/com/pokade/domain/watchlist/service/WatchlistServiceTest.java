@@ -1,5 +1,7 @@
 package com.pokade.domain.watchlist.service;
 
+import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.entity.Watchlist;
@@ -19,6 +21,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
@@ -27,6 +32,7 @@ import static org.mockito.Mockito.never;
 class WatchlistServiceTest {
 
     @Mock WatchlistRepository watchlistRepository;
+    @Mock PriceService priceService;
     @InjectMocks WatchlistService watchlistService;
 
     private Watchlist watchlist(Long userId, Long cardId) {
@@ -126,17 +132,51 @@ class WatchlistServiceTest {
         List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
 
         assertThat(result).isEmpty();
+        then(priceService).should(never()).getSummaries(any(), any(), anyBoolean());
     }
 
     @Test
-    @DisplayName("목록 조회: 등록된 워치리스트 개수만큼 반환")
+    @DisplayName("목록 조회: 등록된 워치리스트 개수만큼 반환하고, cardId로 시세를 배치 조회해 매핑한다")
     void getWatchlist_success() {
         given(watchlistRepository.findByUserId(1L))
                 .willReturn(List.of(watchlist(1L, 10L), watchlist(1L, 20L)));
+        given(priceService.getSummaries(eq(List.of(10L, 20L)), isNull(), eq(true)))
+                .willReturn(List.of(
+                        new CardPriceSummaryResponse(10L, 900, 800, null, "KRW", null, null),
+                        new CardPriceSummaryResponse(20L, null, null, null, "KRW", null, null)
+                ));
 
         List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
 
         assertThat(result).hasSize(2);
+        assertThat(result.get(0).currentPrice().buyPrice()).isEqualTo(900);
+        assertThat(result.get(1).currentPrice().buyPrice()).isNull();
+    }
+
+    @Test
+    @DisplayName("목록 조회: 매수 목표가 이하로 현재가가 내려오면 targetReached=true")
+    void getWatchlist_targetBuyPriceReached() {
+        Watchlist watchlist = watchlist(1L, 10L); // targetBuyPrice = 1000
+        given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlist));
+        given(priceService.getSummaries(eq(List.of(10L)), isNull(), eq(true)))
+                .willReturn(List.of(new CardPriceSummaryResponse(10L, 900, null, null, "KRW", null, null)));
+
+        List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
+
+        assertThat(result.get(0).targetReached()).isTrue();
+    }
+
+    @Test
+    @DisplayName("목록 조회: 현재가가 목표가에 도달하지 않으면 targetReached=false")
+    void getWatchlist_targetNotReached() {
+        Watchlist watchlist = watchlist(1L, 10L); // targetBuyPrice = 1000
+        given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlist));
+        given(priceService.getSummaries(eq(List.of(10L)), isNull(), eq(true)))
+                .willReturn(List.of(new CardPriceSummaryResponse(10L, 1100, null, null, "KRW", null, null)));
+
+        List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
+
+        assertThat(result.get(0).targetReached()).isFalse();
     }
 
     // ===== 삭제 =====

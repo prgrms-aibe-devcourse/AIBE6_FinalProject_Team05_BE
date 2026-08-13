@@ -1,5 +1,7 @@
 package com.pokade.domain.watchlist.service;
 
+import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.entity.Watchlist;
@@ -11,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +25,7 @@ public class WatchlistService {
     private static final long WATCHLIST_LIMIT = 20;
 
     private final WatchlistRepository watchlistRepository;
+    private final PriceService priceService;
 
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
@@ -48,9 +54,20 @@ public class WatchlistService {
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
-        return watchlistRepository.findByUserId(userId)
+        List<Watchlist> watchlists = watchlistRepository.findByUserId(userId);
+        if (watchlists.isEmpty()) {
+            return List.of();
+        }
+
+        // 대표 variant 기준 시세만 배치 조회한다 - watchlist에 variantId가 지정된 항목도 지금은
+        // 대표 variant 시세로 표시된다(개별 variant 시세 반영은 추후 필요해지면 확장).
+        List<Long> cardIds = watchlists.stream().map(Watchlist::getCardId).distinct().toList();
+        Map<Long, CardPriceSummaryResponse> priceByCardId = priceService.getSummaries(cardIds, null, true)
                 .stream()
-                .map(WatchlistResponse::of)
+                .collect(Collectors.toMap(CardPriceSummaryResponse::cardId, Function.identity()));
+
+        return watchlists.stream()
+                .map(watchlist -> WatchlistResponse.withPrice(watchlist, priceByCardId.get(watchlist.getCardId())))
                 .toList();
     }
 
