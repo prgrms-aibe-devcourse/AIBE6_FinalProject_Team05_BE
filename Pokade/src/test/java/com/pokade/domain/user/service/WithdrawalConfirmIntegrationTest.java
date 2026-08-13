@@ -64,7 +64,7 @@ class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
         assertThat(after.getNickname()).matches("deleted_[0-9a-f]{12}");
         assertThat(after.getPassword()).isNull();
         assertThat(after.getVersion()).isEqualTo(1L); // 실제 DB 컬럼으로 낙관적 락 버전 증가
-        then(refreshTokenStore).should().delete(id);
+        then(refreshTokenStore).should().deleteAll(id);
         then(tokenBlacklistStore).should().blacklist(id);
     }
 
@@ -82,8 +82,8 @@ class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
                 .isEqualTo(UserStatus.DELETED);
         assertThat(userRepository.findById(freshId).orElseThrow().getStatus())
                 .isEqualTo(UserStatus.WITHDRAWAL_PENDING);
-        then(refreshTokenStore).should().delete(expiredId);
-        then(refreshTokenStore).should(never()).delete(freshId);
+        then(refreshTokenStore).should().deleteAll(expiredId);
+        then(refreshTokenStore).should(never()).deleteAll(freshId);
     }
 
     // ACTIVE로 만든 뒤 도메인 메서드로 유예 전환 (requestedDaysAgo일 전 신청으로 기록)
