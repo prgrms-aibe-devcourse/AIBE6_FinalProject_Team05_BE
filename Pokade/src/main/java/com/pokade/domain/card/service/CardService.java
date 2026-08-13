@@ -188,11 +188,11 @@ public class CardService {
     }
 
     private Map<Long, List<String>> fetchGradesByCardIds(List<Card> cards) {
-        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
-        meterRegistry.counter("card.grade.batch.calls").increment();
         if (cards.isEmpty()) {
             return Map.of();
         }
+        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("card.grade.batch.calls").increment();
         List<Long> cardIds = cards.stream().map(Card::getId).toList();
         return groupByKey(cardRepository.findGradesByCardIds(cardIds, GRADE_WHITELIST_LIST),
                 CardRepository.CardGradeView::getCardId, CardRepository.CardGradeView::getGrade);
