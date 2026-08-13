@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 public final class CardTypeEnResolver {
@@ -43,6 +44,7 @@ public final class CardTypeEnResolver {
             return null;
         }
         return types.stream()
+                .filter(Objects::nonNull)
                 .map(type -> JAPANESE_TO_ENGLISH.getOrDefault(type, type))
                 .toList();
     }
@@ -58,6 +60,7 @@ public final class CardTypeEnResolver {
             return null;
         }
         return standardTypes.stream()
+                .filter(Objects::nonNull)
                 .flatMap(type -> Stream.concat(Stream.of(type), ENGLISH_TO_ORIGINALS.getOrDefault(type, List.of()).stream()))
                 .distinct()
                 .toList();
