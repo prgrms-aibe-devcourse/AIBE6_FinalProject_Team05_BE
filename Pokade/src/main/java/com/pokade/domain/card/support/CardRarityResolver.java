@@ -2,6 +2,7 @@ package com.pokade.domain.card.support;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 public final class CardRarityResolver {
@@ -12,7 +13,10 @@ public final class CardRarityResolver {
             Map.entry("◇◇", "Double Rare"),
             Map.entry("☆1", "Illustration Rare"),
             Map.entry("EX", "Rare Holo EX"),
-            Map.entry("GX", "Rare Holo GX")
+            Map.entry("GX", "Rare Holo GX"),
+            Map.entry("C", "Common"),
+            Map.entry("R", "Rare"),
+            Map.entry("U", "Uncommon")
     );
 
     // 새 rarity_code를 위 맵에 추가할 때는 아래 LABEL_TO_KNOWN_ORIGINAL_TEXTS에도
@@ -25,7 +29,9 @@ public final class CardRarityResolver {
     // JA "通常" 두 텍스트를 가짐을 실측 확인). 나머지 코드는 JA 대응 텍스트가 아직 확인되지 않아
     // 표준명 자기 자신만 후보가 된다(resolveOriginalValues에서 기본 포함).
     private static final Map<String, List<String>> LABEL_TO_KNOWN_ORIGINAL_TEXTS = Map.of(
-            "Common", List.of("通常")
+            "Common", List.of("通常"),
+            "Rare", List.of("希少"),
+            "Uncommon", List.of("非")
     );
 
     private CardRarityResolver() {
@@ -53,6 +59,7 @@ public final class CardRarityResolver {
             return null;
         }
         return standardRarities.stream()
+                .filter(Objects::nonNull)
                 .flatMap(label -> Stream.concat(Stream.of(label), LABEL_TO_KNOWN_ORIGINAL_TEXTS.getOrDefault(label, List.of()).stream()))
                 .distinct()
                 .toList();
