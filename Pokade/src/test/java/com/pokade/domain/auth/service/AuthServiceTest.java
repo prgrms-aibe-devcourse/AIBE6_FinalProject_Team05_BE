@@ -133,7 +133,7 @@ class AuthServiceTest {
         given(userRepository.findByEmail(email)).willReturn(Optional.of(userWithStatus(email, UserStatus.ACTIVE)));
         given(passwordEncoder.matches("pokade1234", "ENCODED_PW")).willReturn(true);
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("access-token");
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("refresh-token");
+        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("refresh-token");
 
         TokenPair result = authService.login(new LoginRequest(email, "pokade1234"));
 
@@ -224,7 +224,7 @@ class AuthServiceTest {
         given(userRepository.findByEmail(email)).willReturn(Optional.of(userWithStatus(email, UserStatus.WITHDRAWAL_PENDING)));
         given(passwordEncoder.matches("pokade1234", "ENCODED_PW")).willReturn(true);
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("access-token");
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("refresh-token");
+        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("refresh-token");
 
         TokenPair result = authService.login(new LoginRequest(email, "pokade1234"));
 
@@ -241,7 +241,7 @@ class AuthServiceTest {
         given(jwtTokenProvider.isValid(oldRefresh)).willReturn(true);
         given(jwtTokenProvider.getUserId(oldRefresh)).willReturn(1L);
         given(refreshTokenStore.exists(1L)).willReturn(true);
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
+        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("new-refresh");
         given(refreshTokenStore.compareAndRotate(1L, oldRefresh, "new-refresh")).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
@@ -283,7 +283,7 @@ class AuthServiceTest {
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
         given(refreshTokenStore.exists(1L)).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("unused-new");
+        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("unused-new");
         given(refreshTokenStore.compareAndRotate(1L, presented, "unused-new")).willReturn(false);
         given(refreshTokenStore.matchesGrace(1L, presented)).willReturn(false);
 
@@ -301,7 +301,7 @@ class AuthServiceTest {
         given(jwtTokenProvider.isValid(presented)).willReturn(true);
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
         given(refreshTokenStore.exists(1L)).willReturn(true);
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("unused-new");
+        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("unused-new");
         given(refreshTokenStore.compareAndRotate(1L, presented, "unused-new")).willReturn(false);
         given(refreshTokenStore.matchesGrace(1L, presented)).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("user@pokade.com", UserStatus.ACTIVE)));
@@ -372,7 +372,7 @@ class AuthServiceTest {
         given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
         given(refreshTokenStore.exists(1L)).willReturn(true);
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithStatus("bye@pokade.com", UserStatus.WITHDRAWAL_PENDING)));
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new-refresh");
+        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("new-refresh");
         given(refreshTokenStore.compareAndRotate(1L, presented, "new-refresh")).willReturn(true);
         given(jwtTokenProvider.createAccessToken(1L, "USER")).willReturn("new-access");
 

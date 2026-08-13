@@ -18,6 +18,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -117,7 +119,8 @@ public class AuthService {
         }
 
         String role = user.getRole().name();
-        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
+        String sid = jwtTokenProvider.getSessionId(refreshToken);
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId, sid);
 
         if (refreshTokenStore.compareAndRotate(userId, refreshToken, newRefreshToken)) {
             String newAccessToken = jwtTokenProvider.createAccessToken(userId, role);
@@ -139,8 +142,9 @@ public class AuthService {
     }
 
     public TokenPair issueToken(User user) {
+        String sid = UUID.randomUUID().toString();
         String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole().name());
-        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId());
+        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), sid);
         refreshTokenStore.save(user.getId(), refreshToken);
         return new TokenPair(accessToken, refreshToken);
     }

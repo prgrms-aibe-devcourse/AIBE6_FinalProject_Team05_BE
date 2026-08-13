@@ -31,10 +31,11 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    // refresh token 발급 (subject=userId만, role 없이 최소 구성)
-    public String createRefreshToken(Long userId) {
+    // refresh token 발급 (subject=userId만, sid = 세션 ID)
+    public String createRefreshToken(Long userId, String sid) {
         return Jwts.builder()
                 .subject(String.valueOf(userId))
+                .claim("sid", sid)
                 .expiration(new Date(System.currentTimeMillis() + jwtProperties.refreshExpiration().toMillis()))
                 .signWith(secretKey)
                 .compact();
@@ -76,6 +77,20 @@ public class JwtTokenProvider {
                     .parseSignedClaims(token)
                     .getPayload()
                     .get("role", String.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // 토큰에서 sid(세션 ID) 클레임을 추출 (없거나 실패시 null)
+    public String getSessionId(String token) {
+        try {
+            return  Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload()
+                    .get("sid", String.class);
         } catch (Exception e) {
             return null;
         }
