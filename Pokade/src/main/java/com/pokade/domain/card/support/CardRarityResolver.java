@@ -2,6 +2,7 @@ package com.pokade.domain.card.support;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 public final class CardRarityResolver {
@@ -53,6 +54,7 @@ public final class CardRarityResolver {
             return null;
         }
         return standardRarities.stream()
+                .filter(Objects::nonNull)
                 .flatMap(label -> Stream.concat(Stream.of(label), LABEL_TO_KNOWN_ORIGINAL_TEXTS.getOrDefault(label, List.of()).stream()))
                 .distinct()
                 .toList();
