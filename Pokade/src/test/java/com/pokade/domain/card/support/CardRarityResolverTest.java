@@ -20,7 +20,10 @@ class CardRarityResolverTest {
             "◇◇, Double Rare",
             "☆1, Illustration Rare",
             "EX, Rare Holo EX",
-            "GX, Rare Holo GX"
+            "GX, Rare Holo GX",
+            "C, Common",
+            "R, Rare",
+            "U, Uncommon"
     })
     void t1(String rarityCode, String expected) {
         assertThat(CardRarityResolver.resolve(rarityCode, "원본값")).isEqualTo(expected);
@@ -48,6 +51,18 @@ class CardRarityResolverTest {
     @DisplayName("t5 표준 레어도명을 역매핑하면 알려진 원본(다국어) 텍스트와 표준명 자신을 함께 반환한다")
     void t5() {
         assertThat(CardRarityResolver.resolveOriginalValues(List.of("Common"))).containsExactlyInAnyOrder("Common", "通常");
+    }
+
+    @Test
+    @DisplayName("t5-1 표준 레어도명 Rare를 역매핑하면 알려진 원본(다국어) 텍스트와 표준명 자신을 함께 반환한다")
+    void t5_1() {
+        assertThat(CardRarityResolver.resolveOriginalValues(List.of("Rare"))).containsExactlyInAnyOrder("Rare", "希少");
+    }
+
+    @Test
+    @DisplayName("t5-2 표준 레어도명 Uncommon을 역매핑하면 알려진 원본(다국어) 텍스트와 표준명 자신을 함께 반환한다")
+    void t5_2() {
+        assertThat(CardRarityResolver.resolveOriginalValues(List.of("Uncommon"))).containsExactlyInAnyOrder("Uncommon", "非");
     }
 
     @Test
