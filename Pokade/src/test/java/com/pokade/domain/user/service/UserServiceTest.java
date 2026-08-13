@@ -1,5 +1,6 @@
 package com.pokade.domain.user.service;
 
+import com.pokade.domain.auth.store.RefreshTokenStore;
 import com.pokade.domain.user.dto.response.UserResponse;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.Provider;
@@ -35,6 +36,8 @@ class UserServiceTest {
     UserRepository userRepository;
     @Mock
     PasswordEncoder passwordEncoder;
+    @Mock
+    RefreshTokenStore refreshTokenStore;
     @InjectMocks
     UserService userService;
 
@@ -188,6 +191,7 @@ class UserServiceTest {
         userService.changePassword(1L, "curPw1234", "newPw1234");
 
         assertThat(user.getPassword()).isEqualTo("ENCODED_NEW");
+        then(refreshTokenStore).should().deleteAll(1L); // 비번 변경 = 전 세션 무효화
     }
 
     @Test
