@@ -49,4 +49,31 @@ class JwtTokenProviderTest {
     void isValid_returnsFalseForMalformedToken() {
         assertThat(provider.isValid("not-a-real-token")).isFalse();
     }
+
+    @Test
+    @DisplayName("refresh 토큰은 sid를 담고, userId·sid를 그대로 복원한다")
+    void refreshToken_carriesSid_andExtractable() {
+        String token = provider.createRefreshToken(1L, "sess-abc");
+
+        assertThat(provider.isValid(token)).isTrue();
+        assertThat(provider.getUserId(token)).isEqualTo(1L);
+        assertThat(provider.getSessionId(token)).isEqualTo("sess-abc");
+    }
+
+    @Test
+    @DisplayName("access 토큰에는 sid가 없어 getSessionId가 null이다")
+    void accessToken_hasNoSid() {
+        String access = provider.createAccessToken(1L, "USER");
+
+        assertThat(provider.getSessionId(access)).isNull();
+    }
+
+    @Test
+    @DisplayName("같은 userId·sid로 연속 발급해도 refresh 토큰은 매번 다르다 (jti로 충돌 방지)")
+    void refreshToken_isUniquePerIssue() {
+        String t1 = provider.createRefreshToken(1L, "A");
+        String t2 = provider.createRefreshToken(1L, "A");
+
+        assertThat(t1).isNotEqualTo(t2);
+    }
 }

@@ -18,6 +18,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -85,51 +87,54 @@ public class AuthService {
         return issueToken(user);
     }
 
-    public void logout(String accessToken) {
-        Long userId = jwtTokenProvider.getUserId(accessToken);
-        if (userId != null) {
-            refreshTokenStore.delete(userId);
+    public void logout(String refreshToken) {
+        Long userId = jwtTokenProvider.getUserId(refreshToken);
+        String sid = jwtTokenProvider.getSessionId(refreshToken);
+        if (userId != null && sid != null) {
+            refreshTokenStore.delete(userId, sid);
         }
     }
 
-    @Transactional
     public TokenPair reissue(String refreshToken) {
         if (!jwtTokenProvider.isValid(refreshToken)) {
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         Long userId = jwtTokenProvider.getUserId(refreshToken);
+        String sid = jwtTokenProvider.getSessionId(refreshToken);
+        if (sid == null) {
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
 
-        if (!refreshTokenStore.exists(userId)) { // 저장 키 자체가 없음 -> 미로그인/로그아웃/만료
+        if (!refreshTokenStore.exists(userId, sid)) { // 그 세션 키 없음 -> 로그아웃/만료
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> {
-                    refreshTokenStore.delete(userId);
+                    refreshTokenStore.deleteAll(userId);
                     return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
                 });
 
-        // 로그인 가능한 상태 (ACTIVE 유예)만 재발급 허용 - SUSPENDED / DELETED / PENDING 은 저장 refresh 폐기 후 거부
         if (user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.WITHDRAWAL_PENDING) {
-            refreshTokenStore.delete(userId);
+            refreshTokenStore.deleteAll(userId); // 정지·삭제 = 계정 전체 세션 차단
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         String role = user.getRole().name();
-        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId, sid); // 같은 sid 유지
 
-        if (refreshTokenStore.compareAndRotate(userId, refreshToken, newRefreshToken)) {
+        if (refreshTokenStore.compareAndRotate(userId, sid, refreshToken, newRefreshToken)) {
             String newAccessToken = jwtTokenProvider.createAccessToken(userId, role);
             return new TokenPair(newAccessToken, newRefreshToken);
         }
 
-        if (refreshTokenStore.matchesGrace(userId, refreshToken)) {
+        if (refreshTokenStore.matchesGrace(userId, sid, refreshToken)) {
             String accessToken = jwtTokenProvider.createAccessToken(userId, role);
-            return new TokenPair(accessToken, null); // Option Y : refresh 세팅 안함
+            return new TokenPair(accessToken, null); // Option Y
         }
 
-        refreshTokenStore.delete(userId);
+        refreshTokenStore.delete(userId, sid); // 그 세션만 (다른 기기 생존)
         throw new BusinessException(ErrorCode.TOKEN_STOLEN);
     }
 
@@ -139,9 +144,10 @@ public class AuthService {
     }
 
     public TokenPair issueToken(User user) {
+        String sid = UUID.randomUUID().toString();
         String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole().name());
-        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId());
-        refreshTokenStore.save(user.getId(), refreshToken);
+        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), sid);
+        refreshTokenStore.save(user.getId(), sid, refreshToken);
         return new TokenPair(accessToken, refreshToken);
     }
 }

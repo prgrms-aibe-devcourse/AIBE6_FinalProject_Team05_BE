@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
@@ -153,8 +154,23 @@ class WithdrawalServiceTest {
         withdrawalService.confirmExpiredWithdrawals();
 
         then(withdrawalConfirmer).should().confirm(2L);
-        then(refreshTokenStore).should().delete(2L);
+        then(refreshTokenStore).should().deleteAll(2L);
         then(tokenBlacklistStore).should().blacklist(2L);
+    }
+
+    @Test
+    @DisplayName("확정: refresh 세션 삭제(deleteAll)가 실패해도 access blacklist는 독립적으로 수행된다")
+    void confirmExpiredWithdrawals_blacklistRunsEvenIfDeleteAllFails() {
+        User user = pendingUser(); // id=2
+        given(userRepository.findAllByStatusAndWithdrawalRequestedAtBefore(any(), any()))
+                .willReturn(List.of(user));
+        given(withdrawalConfirmer.confirm(2L)).willReturn(true);
+        willThrow(new RuntimeException("redis down")).given(refreshTokenStore).deleteAll(2L);
+
+        withdrawalService.confirmExpiredWithdrawals();
+
+        then(refreshTokenStore).should().deleteAll(2L);
+        then(tokenBlacklistStore).should().blacklist(2L); // deleteAll 실패해도 blacklist 수행
     }
 
     @Test
@@ -167,7 +183,7 @@ class WithdrawalServiceTest {
 
         withdrawalService.confirmExpiredWithdrawals();
 
-        then(refreshTokenStore).should(never()).delete(any());
+        then(refreshTokenStore).should(never()).deleteAll(any());
         then(tokenBlacklistStore).should(never()).blacklist(any());
     }
 
@@ -180,7 +196,7 @@ class WithdrawalServiceTest {
         withdrawalService.confirmExpiredWithdrawals();
 
         then(withdrawalConfirmer).should(never()).confirm(any());
-        then(refreshTokenStore).should(never()).delete(any());
+        then(refreshTokenStore).should(never()).deleteAll(any());
     }
 
     @Test
@@ -196,8 +212,8 @@ class WithdrawalServiceTest {
         withdrawalService.confirmExpiredWithdrawals();
 
         then(withdrawalConfirmer).should().confirm(3L);         // 실패 후에도 다음 대상 처리됨
-        then(refreshTokenStore).should(never()).delete(2L);     // 실패 건은 Redis 정리 안 함
-        then(refreshTokenStore).should().delete(3L);
+        then(refreshTokenStore).should(never()).deleteAll(2L);     // 실패 건은 Redis 정리 안 함
+        then(refreshTokenStore).should().deleteAll(3L);
         then(tokenBlacklistStore).should().blacklist(3L);
     }
 
@@ -224,7 +240,7 @@ class WithdrawalServiceTest {
         withdrawalService.confirmExpiredWithdrawals();
 
         then(withdrawalConfirmer).should(times(2)).confirm(2L);   // 재시도 발생
-        then(refreshTokenStore).should().delete(2L);              // 최종 정리 수행
+        then(refreshTokenStore).should().deleteAll(2L);              // 최종 정리 수행
         then(tokenBlacklistStore).should().blacklist(2L);
     }
 
@@ -240,7 +256,7 @@ class WithdrawalServiceTest {
         withdrawalService.confirmExpiredWithdrawals();
 
         then(withdrawalConfirmer).should(times(3)).confirm(2L);   // MAX_ANON_RETRY 만큼만 시도
-        then(refreshTokenStore).should(never()).delete(2L);
+        then(refreshTokenStore).should(never()).deleteAll(2L);
     }
 
     private User socialUser() {

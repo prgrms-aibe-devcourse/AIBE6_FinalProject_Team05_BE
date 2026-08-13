@@ -122,11 +122,14 @@ public class WithdrawalService {
                 continue; // 확정 안 됨(그새 철회/이미 확정 or 재시도 초과) → 토큰 정리 불필요
             }
             try {
-                refreshTokenStore.delete(userId); // refresh token 삭제
-                tokenBlacklistStore.blacklist(userId); // access token blacklist 처리
+                refreshTokenStore.deleteAll(userId); // refresh 세션 삭제
             } catch (Exception e) {
-                // 확정(DB)은 됐으나 토큰 정리 실패 → 운영 보정 대상(기존 access가 만료 전까지 유효)
-                log.error("탈퇴 확정됨(DB) - 토큰 정리 실패, 보정 필요 (userId={})", userId, e);
+                log.error("탈퇴 확정됨(DB) - refresh 세션 삭제 실패, 보정 필요 (userId={})", userId, e);
+            }
+            try {
+                tokenBlacklistStore.blacklist(userId); // access token blacklist
+            } catch (Exception e) {
+                log.error("탈퇴 확정됨(DB) - access blacklist 실패, 보정 필요 (userId={})", userId, e);
             }
         }
     }
