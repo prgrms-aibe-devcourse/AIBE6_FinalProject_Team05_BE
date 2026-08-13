@@ -8,6 +8,7 @@ import javax.crypto.SecretKey;
 import java.time.Duration;
 import java.util.Date;
 import java.util.Map;
+import java.util.UUID;
 
 // JWT access token 발급·검증을 담당하는 컴포넌트
 @Component
@@ -34,6 +35,7 @@ public class JwtTokenProvider {
     // refresh token 발급 (subject=userId만, sid = 세션 ID)
     public String createRefreshToken(Long userId, String sid) {
         return Jwts.builder()
+                .id(UUID.randomUUID().toString()) // JWT ID (중복 방지)
                 .subject(String.valueOf(userId))
                 .claim("sid", sid)
                 .expiration(new Date(System.currentTimeMillis() + jwtProperties.refreshExpiration().toMillis()))

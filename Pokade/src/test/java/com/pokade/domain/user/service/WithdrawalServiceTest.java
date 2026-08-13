@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
@@ -155,6 +156,21 @@ class WithdrawalServiceTest {
         then(withdrawalConfirmer).should().confirm(2L);
         then(refreshTokenStore).should().deleteAll(2L);
         then(tokenBlacklistStore).should().blacklist(2L);
+    }
+
+    @Test
+    @DisplayName("확정: refresh 세션 삭제(deleteAll)가 실패해도 access blacklist는 독립적으로 수행된다")
+    void confirmExpiredWithdrawals_blacklistRunsEvenIfDeleteAllFails() {
+        User user = pendingUser(); // id=2
+        given(userRepository.findAllByStatusAndWithdrawalRequestedAtBefore(any(), any()))
+                .willReturn(List.of(user));
+        given(withdrawalConfirmer.confirm(2L)).willReturn(true);
+        willThrow(new RuntimeException("redis down")).given(refreshTokenStore).deleteAll(2L);
+
+        withdrawalService.confirmExpiredWithdrawals();
+
+        then(refreshTokenStore).should().deleteAll(2L);
+        then(tokenBlacklistStore).should().blacklist(2L); // deleteAll 실패해도 blacklist 수행
     }
 
     @Test

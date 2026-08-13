@@ -67,4 +67,13 @@ class JwtTokenProviderTest {
 
         assertThat(provider.getSessionId(access)).isNull();
     }
+
+    @Test
+    @DisplayName("같은 userId·sid로 연속 발급해도 refresh 토큰은 매번 다르다 (jti로 충돌 방지)")
+    void refreshToken_isUniquePerIssue() {
+        String t1 = provider.createRefreshToken(1L, "A");
+        String t2 = provider.createRefreshToken(1L, "A");
+
+        assertThat(t1).isNotEqualTo(t2);
+    }
 }
