@@ -1,5 +1,6 @@
 package com.pokade.domain.user.service;
 
+import com.pokade.domain.auth.store.RefreshTokenStore;
 import com.pokade.domain.user.dto.response.UserResponse;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.repository.UserRepository;
@@ -19,6 +20,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenStore refreshTokenStore;
 
     @Transactional(readOnly = true)
     public UserResponse getMyInfo(Long userId) {
@@ -68,5 +70,6 @@ public class UserService {
         }
 
         user.changePassword(passwordEncoder.encode(newPassword));
+        refreshTokenStore.deleteAll(userId); // 비밀번호 변경 시 모든 리프레시 토큰 무효화
     }
 }
