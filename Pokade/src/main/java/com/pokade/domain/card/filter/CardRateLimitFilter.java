@@ -50,12 +50,15 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
         thread.setDaemon(true);
         return thread;
     });
+    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
     private final MeterRegistry meterRegistry;
 
+    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
     public CardRateLimitFilter() {
         this(new SimpleMeterRegistry());
     }
 
+    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
     public CardRateLimitFilter(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
         cleanupExecutor.scheduleAtFixedRate(this::evictIdleEntries,
@@ -69,11 +72,13 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
         entry.touch();
 
         if (entry.bucket().tryConsume(1)) {
+            // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
             meterRegistry.counter("card.ratelimit.allowed").increment();
             filterChain.doFilter(request, response);
             return;
         }
 
+        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
         meterRegistry.counter("card.ratelimit.rejected").increment();
         response.setStatus(ErrorCode.CARD_RATE_LIMIT_EXCEEDED.getStatus().value());
         response.setContentType(JSON_CONTENT_TYPE);

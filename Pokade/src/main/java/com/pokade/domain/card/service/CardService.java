@@ -71,6 +71,7 @@ public class CardService {
     @Autowired
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
+    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
     @Timed(value = "card.search.duration")
     @Transactional(readOnly = true)
     public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
@@ -90,6 +91,7 @@ public class CardService {
         Card card = cardRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
         cardRepository.incrementViewCount(id);
+        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
         meterRegistry.counter("card.view.increment.calls").increment();
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
         Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id, GRADE_WHITELIST_LIST),
@@ -107,6 +109,7 @@ public class CardService {
         return result;
     }
 
+    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
     @Timed(value = "card.search.keyword.duration")
     @Transactional(readOnly = true)
     public Page<CardResponse> searchByKeyword(String q, Pageable pageable) {
@@ -185,6 +188,7 @@ public class CardService {
     }
 
     private Map<Long, List<String>> fetchGradesByCardIds(List<Card> cards) {
+        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
         meterRegistry.counter("card.grade.batch.calls").increment();
         if (cards.isEmpty()) {
             return Map.of();
