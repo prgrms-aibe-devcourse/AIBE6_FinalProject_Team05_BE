@@ -695,6 +695,38 @@ class CardServiceTest {
         assertThat(result.rarities()).containsExactly("プロモ");
     }
 
+    @Test
+    @DisplayName("t50 name이 null인 expansion이 있어도 NPE 없이 빈 문자열로 노출된다")
+    void t50() {
+        Expansion expansion = Expansion.builder().id("legacy1").name(null).syncedAt(LocalDateTime.now()).build();
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(expansionRepository.findAll()).willReturn(List.of(expansion));
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.expansions()).hasSize(1);
+        assertThat(result.expansions().get(0).id()).isEqualTo("legacy1");
+        assertThat(result.expansions().get(0).name()).isEqualTo("");
+    }
+
+    @Test
+    @DisplayName("t51 name이 null인 expansion과 정상 expansion이 섞여 있어도 나머지는 이름순 정렬이 유지된다")
+    void t51() {
+        Expansion legacy = Expansion.builder().id("legacy1").name(null).syncedAt(LocalDateTime.now()).build();
+        Expansion base = Expansion.builder().id("base1").name("Base").syncedAt(LocalDateTime.now()).build();
+        Expansion swsh = Expansion.builder().id("swsh1").name("Sword & Shield").syncedAt(LocalDateTime.now()).build();
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(expansionRepository.findAll()).willReturn(List.of(swsh, legacy, base));
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.expansions())
+                .extracting(CardFacetsResponse.ExpansionFacet::name)
+                .containsExactly("", "Base", "Sword & Shield");
+    }
+
     private CardRepository.CardRarityView rarityView(String rarityCode, String rarity) {
         return new CardRepository.CardRarityView() {
             @Override

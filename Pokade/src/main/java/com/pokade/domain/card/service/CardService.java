@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -159,9 +160,13 @@ public class CardService {
         for (CardRepository.CardRarityView view : cardRepository.findDistinctRarityCodes()) {
             rarities.add(CardRarityResolver.resolve(view.getRarityCode(), view.getRarity()));
         }
+        // expansions.name이 NULL인 레거시/수동 적재 데이터가 있을 수 있어, FE 응답 스키마(name: string,
+        // non-null)를 깨지 않도록 빈 문자열로 대체하고 정렬도 null-safe하게 처리한다.
         List<CardFacetsResponse.ExpansionFacet> expansions = expansionRepository.findAll().stream()
-                .map(expansion -> new CardFacetsResponse.ExpansionFacet(expansion.getId(), expansion.getName()))
-                .sorted(Comparator.comparing(CardFacetsResponse.ExpansionFacet::name))
+                .map(expansion -> new CardFacetsResponse.ExpansionFacet(
+                        expansion.getId(), Objects.requireNonNullElse(expansion.getName(), "")))
+                .sorted(Comparator.comparing(CardFacetsResponse.ExpansionFacet::name,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
         return CardFacetsResponse.of(List.copyOf(types), List.copyOf(rarities), expansions);
     }
