@@ -2,6 +2,7 @@ package com.pokade.domain.auth.store;
 
 import com.pokade.global.security.JwtProperties;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
@@ -81,6 +82,61 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
             return HexFormat.of().formatHex(bytes);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 not available", e);
+        }
+    }
+
+    private String key(Long userId, String sid) {
+        return REFRESH_KEY_PREFIX + userId + ":" + sid;
+    }
+
+    private String graceKey(Long userId, String sid) {
+        return GRACE_KEY_PREFIX + userId + ":" + sid;
+    }
+
+    @Override
+    public void save(Long userId, String sid, String refreshToken) {
+        redisTemplate.opsForValue().set(key(userId, sid), hash(refreshToken), jwtProperties.refreshExpiration());
+    }
+
+    @Override
+    public boolean exists(Long userId, String sid) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key(userId, sid)));
+    }
+
+    @Override
+    public boolean compareAndRotate(Long userId, String sid, String presentedToken, String newRefreshToken) {
+        Long rotated = redisTemplate.execute(COMPARE_AND_ROTATE,
+                List.of(key(userId, sid), graceKey(userId, sid)),
+                hash(presentedToken), hash(newRefreshToken),
+                String.valueOf(GRACE_TTL.getSeconds()),
+                String.valueOf(jwtProperties.refreshExpiration().getSeconds()));
+        return Long.valueOf(1L).equals(rotated);
+    }
+
+    @Override
+    public boolean matchesGrace(Long userId, String sid, String refreshToken) {
+        String store = redisTemplate.opsForValue().get(graceKey(userId, sid));
+        return store != null && store.equals(hash(refreshToken));
+    }
+
+    @Override
+    public void delete(Long userId, String sid) {
+        redisTemplate.delete(graceKey(userId, sid));
+        redisTemplate.delete(key(userId, sid));
+    }
+
+    @Override
+    public void deleteAll(Long userId) {
+        deleteByPattern(REFRESH_KEY_PREFIX + userId + ":*");
+        deleteByPattern(GRACE_KEY_PREFIX + userId + ":*");
+    }
+
+    private void deleteByPattern(String pattern) {
+        var options = ScanOptions.scanOptions().match(pattern).count(100).build();
+        try (var cursor = redisTemplate.scan(options)) {
+            while (cursor.hasNext()) {
+                redisTemplate.delete(cursor.next());
+            }
         }
     }
 }

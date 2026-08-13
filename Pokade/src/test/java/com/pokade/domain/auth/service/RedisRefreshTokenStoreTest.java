@@ -143,4 +143,62 @@ class RedisRefreshTokenStoreTest {
         assertThat(store.exists(1L)).isFalse();
         assertThat(store.matchesGrace(1L, "R0")).isFalse();
     }
+
+    // ===== 세션 스코프 (다중 세션) =====
+
+    @Test
+    @DisplayName("두 세션은 독립 공존하고, 한쪽 회전이 다른 세션을 건드리지 않는다")
+    void twoSessions_independent_rotateOneKeepsOther() {
+        store.save(5L, "A", "tokenA");
+        store.save(5L, "B", "tokenB");
+
+        assertThat(store.compareAndRotate(5L, "A", "tokenA", "tokenA2")).isTrue();
+        assertThat(store.exists(5L, "B")).isTrue();                                 // B 생존
+        assertThat(store.compareAndRotate(5L, "B", "tokenB", "tokenB2")).isTrue();  // B 정상
+    }
+
+    @Test
+    @DisplayName("delete(userId, sid)는 그 세션만 삭제하고 다른 세션은 유지한다")
+    void deleteSession_removesOnlyThatSession() {
+        store.save(5L, "A", "tA");
+        store.save(5L, "B", "tB");
+
+        store.delete(5L, "A");
+
+        assertThat(store.exists(5L, "A")).isFalse();
+        assertThat(store.exists(5L, "B")).isTrue();
+    }
+
+    @Test
+    @DisplayName("deleteAll(userId)는 그 유저의 모든 세션을 삭제하고 다른 유저는 건드리지 않는다")
+    void deleteAll_removesAllSessionsOfUserOnly() {
+        store.save(5L, "A", "tA");
+        store.save(5L, "B", "tB");
+        store.save(6L, "C", "tC");
+
+        store.deleteAll(5L);
+
+        assertThat(store.exists(5L, "A")).isFalse();
+        assertThat(store.exists(5L, "B")).isFalse();
+        assertThat(store.exists(6L, "C")).isTrue();
+    }
+
+    @Test
+    @DisplayName("matchesGrace는 회전 후 그 세션의 grace에만 옛 토큰이 담긴다")
+    void matchesGrace_scopedToSession() {
+        store.save(5L, "A", "tA");
+        store.compareAndRotate(5L, "A", "tA", "tA2");
+
+        assertThat(store.matchesGrace(5L, "A", "tA")).isTrue();   // 그 세션 grace
+        assertThat(store.matchesGrace(5L, "B", "tA")).isFalse();  // 다른 세션엔 없음
+    }
+
+    @Test
+    @DisplayName("세션 키에 TTL이 설정된다")
+    void sessionKey_hasTtl() {
+        store.save(5L, "A", "tA");
+
+        Long ttl = redisTemplate.getExpire("auth:refresh:5:A");
+        assertThat(ttl).isNotNull().isGreaterThan(0);
+    }
 }
