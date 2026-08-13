@@ -85,6 +85,14 @@ public class Listing {
         this.staleNoticeSent = true;
     }
 
+    // 관리자가 신고 검토 후 매물을 숨김 처리한다.
+    public void hide() {
+        if (this.status == ListingStatus.HIDDEN) {
+            throw new BusinessException(ErrorCode.INVALID_LISTING_STATUS, "이미 숨김 처리된 매물입니다.");
+        }
+        this.status = ListingStatus.HIDDEN;
+    }
+
     private void requireActive() {
         if (this.status != ListingStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.INVALID_LISTING_STATUS);
