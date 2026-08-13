@@ -227,6 +227,41 @@ public class PriceService {
         return new PriceStatsResponse(changeRate, changeAmount, volume);
     }
 
+    // 워치리스트 "등락" 배지용 - getStatsFromTrades()와 동일한 7일 블록 비교를, 여러 카드를 한 번에
+    // 계산한다(getRanking()과 같은 방식으로 배치 조회 후 원하는 cardId만 골라 쓴다). 데이터가 부족하면
+    // getStats()와 동일하게 0으로 채운다(랭킹처럼 후보에서 제외하지 않음 - 워치리스트 항목은 항상 표시돼야 함).
+    public Map<Long, BigDecimal> getChangeRates(List<Long> cardIds) {
+        LocalDateTime recentFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS);
+        LocalDateTime previousFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS * 2L);
+
+        Map<Long, Double> recentAvgByCard = priceTradeStatsRepository
+                .findAveragePricesByGradeSince(STATS_GRADE, TradeStatus.COMPLETED, recentFrom).stream()
+                .collect(Collectors.toMap(
+                        PriceTradeStatsRepository.CardAvgPriceView::getCardId,
+                        PriceTradeStatsRepository.CardAvgPriceView::getAvgPrice));
+        Map<Long, Double> previousAvgByCard = priceTradeStatsRepository
+                .findAveragePricesByGradeBetween(STATS_GRADE, TradeStatus.COMPLETED, previousFrom, recentFrom).stream()
+                .collect(Collectors.toMap(
+                        PriceTradeStatsRepository.CardAvgPriceView::getCardId,
+                        PriceTradeStatsRepository.CardAvgPriceView::getAvgPrice));
+
+        return cardIds.stream().distinct().collect(Collectors.toMap(
+                Function.identity(),
+                cardId -> computeChangeRate(recentAvgByCard.get(cardId), previousAvgByCard.get(cardId))));
+    }
+
+    private BigDecimal computeChangeRate(Double recentAvg, Double previousAvg) {
+        if (recentAvg == null || previousAvg == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal recentAvgAmount = BigDecimal.valueOf(recentAvg);
+        BigDecimal previousAvgAmount = BigDecimal.valueOf(previousAvg);
+        return recentAvgAmount.subtract(previousAvgAmount)
+                .divide(previousAvgAmount, 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
     // PSA10/PSA9/PSA8은 공인 등급이라 company='PSA', 자체 AI등급(S/A/B)은 company=''.
     private PriceStatsResponse getStatsFromCardPrices(Long variantId, ListingGrade grade, StatsPeriod period) {
         GradeKey gradeKey = toGradeKey(grade);
