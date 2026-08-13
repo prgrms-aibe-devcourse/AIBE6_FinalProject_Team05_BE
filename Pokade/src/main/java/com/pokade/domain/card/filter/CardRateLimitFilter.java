@@ -18,6 +18,8 @@ import com.pokade.global.response.ApiResponse;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,8 +50,14 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
         thread.setDaemon(true);
         return thread;
     });
+    private final MeterRegistry meterRegistry;
 
     public CardRateLimitFilter() {
+        this(new SimpleMeterRegistry());
+    }
+
+    public CardRateLimitFilter(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
         cleanupExecutor.scheduleAtFixedRate(this::evictIdleEntries,
                 CLEANUP_INTERVAL.toMillis(), CLEANUP_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
     }
@@ -61,10 +69,12 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
         entry.touch();
 
         if (entry.bucket().tryConsume(1)) {
+            meterRegistry.counter("card.ratelimit.allowed").increment();
             filterChain.doFilter(request, response);
             return;
         }
 
+        meterRegistry.counter("card.ratelimit.rejected").increment();
         response.setStatus(ErrorCode.CARD_RATE_LIMIT_EXCEEDED.getStatus().value());
         response.setContentType(JSON_CONTENT_TYPE);
         response.getWriter().write(objectMapper.writeValueAsString(ApiResponse.fail(ErrorCode.CARD_RATE_LIMIT_EXCEEDED)));

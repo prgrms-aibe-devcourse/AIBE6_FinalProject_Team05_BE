@@ -1,5 +1,6 @@
 package com.pokade.domain.card.filter;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,9 +17,9 @@ import org.springframework.core.Ordered;
 public class CardRateLimitFilterConfig {
 
     @Bean
-    public FilterRegistrationBean<CardRateLimitFilter> cardRateLimitFilterRegistration() {
+    public FilterRegistrationBean<CardRateLimitFilter> cardRateLimitFilterRegistration(MeterRegistry meterRegistry) {
         FilterRegistrationBean<CardRateLimitFilter> registration = new FilterRegistrationBean<>();
-        registration.setFilter(new CardRateLimitFilter());
+        registration.setFilter(new CardRateLimitFilter(meterRegistry));
         registration.addUrlPatterns("/api/cards/*");
         // Spring Security 필터체인보다 먼저 실행되어, 초과 요청은 JWT 인증 이전에 차단된다.
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
