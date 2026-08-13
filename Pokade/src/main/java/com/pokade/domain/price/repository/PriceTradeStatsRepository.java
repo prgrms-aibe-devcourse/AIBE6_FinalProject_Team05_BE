@@ -77,9 +77,7 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
         Double getAvgPrice();
     }
 
-    // 워치리스트 "목표가 도달" 판정용: 카드별 체결가 전체 기간 최저/최고가를 한 번에 조회한다.
-    // 목표가가 이 구간(min~max) 안에 들어오면 시세가 오르내리는 동안 그 가격을 실제로 지나간 적이
-    // 있다고 보고 도달로 판정한다(매수/매도 목표가를 구분하지 않고 동일하게 적용).
+    // 워치리스트 "목표가 도달" 판정용: 카드별 체결가 전체 기간 최저/최고가를 한 번에 조회
     @Query("SELECT l.cardId AS cardId, MIN(t.price) AS minPrice, MAX(t.price) AS maxPrice FROM Trade t JOIN t.listing l "
             + "WHERE l.cardId IN :cardIds AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
             + "GROUP BY l.cardId")

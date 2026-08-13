@@ -42,13 +42,7 @@ public record WatchlistResponse(
         );
     }
 
-    /**
-     * 목록 조회 응답 - 배치로 조회한 카드 정보·현재 시세·등락률을 함께 담는다.
-     * targetReached는 "지금 시세가 목표가 대비 얼마인지"가 아니라 "체결가가 그동안 한 번이라도 그
-     * 목표가를 지나간 적이 있는지"로 판정하므로(WatchlistService 참고), 여기서는 그 결과를 그대로 받는다.
-     * changeRate는 PriceStatsResponse/PriceRankingResponse와 같은 최근 7일 vs 이전 7일 S등급 평균
-     * 체결가 비교(%)이고, 데이터가 부족하면 0으로 채운다(랭킹처럼 항목 자체를 빼지 않음).
-     */
+
     public static WatchlistResponse withPrice(
             Watchlist watchlist, Card card, CardPriceSummaryResponse currentPrice,
             BigDecimal changeRate, boolean targetReached) {

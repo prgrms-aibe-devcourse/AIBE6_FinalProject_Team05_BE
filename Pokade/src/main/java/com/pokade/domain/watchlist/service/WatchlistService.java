@@ -65,9 +65,7 @@ public class WatchlistService {
         if (watchlists.isEmpty()) {
             return List.of();
         }
-
-        // 대표 variant 기준 시세만 배치 조회한다 - watchlist에 variantId가 지정된 항목도 지금은
-        // 대표 variant 시세로 표시된다(개별 variant 시세 반영은 추후 필요해지면 확장).
+        
         List<Long> cardIds = watchlists.stream().map(Watchlist::getCardId).distinct().toList();
         Map<Long, CardPriceSummaryResponse> priceByCardId = priceService.getSummaries(cardIds, null, true)
                 .stream()
@@ -75,9 +73,7 @@ public class WatchlistService {
         Map<Long, Card> cardById = cardRepository.findAllById(cardIds)
                 .stream()
                 .collect(Collectors.toMap(Card::getId, Function.identity()));
-        // "목표가 도달"은 지금 시세가 목표가보다 높은지/낮은지가 아니라, 체결가가 그동안 오르내리며
-        // 그 목표가를 한 번이라도 지나간 적이 있는지로 판정한다 - 그래서 매수/매도 구분 없이 전체 기간
-        // 체결가의 최저~최고 구간에 목표가가 들어오는지만 본다(사용자 요청, 2026-08-13).
+
         Map<Long, PriceTradeStatsRepository.CardPriceRangeView> rangeByCardId =
                 priceTradeStatsRepository.findPriceRangesByCardIds(cardIds, null, TradeStatus.COMPLETED)
                         .stream()
