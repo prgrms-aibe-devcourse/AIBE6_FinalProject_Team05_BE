@@ -155,7 +155,7 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_FAILED);
 
-        then(refreshTokenStore).should(never()).save(any(), any());
+        then(refreshTokenStore).should(never()).save(any(), any(), any());
         then(loginAttemptStore).should().recordFailure(email);  // 실패 → 카운트
     }
 
@@ -170,7 +170,7 @@ class AuthServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_FAILED);
 
         then(passwordEncoder).should().matches(any(), any());   // ← 추가: 유저 없어도 더미 비교 호출
-        then(refreshTokenStore).should(never()).save(any(), any());
+        then(refreshTokenStore).should(never()).save(any(), any(), any());
         then(loginAttemptStore).should().recordFailure(email);  // 실패 → 카운트
     }
 
@@ -185,7 +185,7 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED);
 
-        then(refreshTokenStore).should(never()).save(any(), any());
+        then(refreshTokenStore).should(never()).save(any(), any(), any());
     }
 
     @Test
@@ -199,7 +199,7 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.ACCOUNT_SUSPENDED);
 
-        then(refreshTokenStore).should(never()).save(any(), any());
+        then(refreshTokenStore).should(never()).save(any(), any(), any());
         then(loginAttemptStore).should(never()).reset(email);
     }
 
@@ -214,7 +214,7 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.LOGIN_FAILED);
 
-        then(refreshTokenStore).should(never()).save(any(), any());
+        then(refreshTokenStore).should(never()).save(any(), any(), any());
         then(loginAttemptStore).should(never()).reset(email);
     }
 

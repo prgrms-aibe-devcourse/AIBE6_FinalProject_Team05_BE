@@ -35,45 +35,6 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
     private final StringRedisTemplate redisTemplate;
     private final JwtProperties jwtProperties;
 
-    // refresh 토큰을 해시로 저장 (원문 미보관)
-    @Override
-    public void save(Long userId, String refreshToken) {
-        redisTemplate.opsForValue().set(
-                REFRESH_KEY_PREFIX + userId, hash(refreshToken), jwtProperties.refreshExpiration()
-        );
-    }
-
-    //refresh 키 존재 여부
-    @Override
-    public boolean exists(Long userId) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(REFRESH_KEY_PREFIX + userId));
-    }
-
-    // 제시된 토큰의 해시가 저장된 refresh 해시와 일치하는지
-    @Override
-    public boolean compareAndRotate(Long userId, String presentedToken, String newRefreshToken) {
-        Long rotated = redisTemplate.execute(COMPARE_AND_ROTATE,
-                List.of(REFRESH_KEY_PREFIX + userId, GRACE_KEY_PREFIX + userId),
-                hash(presentedToken),
-                hash(newRefreshToken),
-                String.valueOf(GRACE_TTL.getSeconds()),
-                String.valueOf(jwtProperties.refreshExpiration().getSeconds()));
-        return Long.valueOf(1L).equals(rotated);
-    }
-
-    // 제시된 토큰의 해시가 grace 해시와 일치하는지
-    @Override
-    public boolean matchesGrace(Long userId, String refreshToken) {
-        String stored = redisTemplate.opsForValue().get(GRACE_KEY_PREFIX + userId);
-        return stored != null && stored.equals(hash(refreshToken));
-    }
-
-    @Override
-    public void delete(Long userId) {
-        redisTemplate.delete(REFRESH_KEY_PREFIX + userId);
-        redisTemplate.delete(GRACE_KEY_PREFIX + userId);
-    }
-
     // SHA-256 해시 -> 16진 문자열 (외부 의존성 없이 JDK만)
     private String hash(String token) {
         try {
