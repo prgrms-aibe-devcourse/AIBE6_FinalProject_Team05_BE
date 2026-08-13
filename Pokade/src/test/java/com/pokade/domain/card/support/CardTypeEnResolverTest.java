@@ -2,6 +2,7 @@ package com.pokade.domain.card.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -65,5 +66,31 @@ class CardTypeEnResolverTest {
     @DisplayName("t7 역매핑 대상이 null이면 null을 반환한다")
     void t7() {
         assertThat(CardTypeEnResolver.resolveOriginalValues(null)).isNull();
+    }
+
+    @Test
+    @DisplayName("t8 리스트에 null 원소가 섞여 있어도 NPE 없이 나머지 원소만 정상 처리된다")
+    void t8() {
+        assertThat(CardTypeEnResolver.resolve(Arrays.asList("炎", null, "UnknownType")))
+                .containsExactly("Fire", "UnknownType");
+    }
+
+    @Test
+    @DisplayName("t9 리스트가 전부 null이면 빈 리스트를 반환한다")
+    void t9() {
+        assertThat(CardTypeEnResolver.resolve(Arrays.asList(null, null))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("t10 역매핑 대상 리스트에 null 원소가 섞여 있어도 NPE 없이 나머지 원소만 정상 처리된다")
+    void t10() {
+        assertThat(CardTypeEnResolver.resolveOriginalValues(Arrays.asList("Fire", null)))
+                .containsExactlyInAnyOrder("Fire", "炎");
+    }
+
+    @Test
+    @DisplayName("t11 역매핑 대상 리스트가 전부 null이면 빈 리스트를 반환한다")
+    void t11() {
+        assertThat(CardTypeEnResolver.resolveOriginalValues(Arrays.asList(null, null))).isEmpty();
     }
 }
