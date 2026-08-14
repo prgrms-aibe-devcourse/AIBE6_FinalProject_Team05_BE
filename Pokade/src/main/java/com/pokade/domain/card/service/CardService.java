@@ -68,7 +68,10 @@ public class CardService {
 
     // Actuator/Prometheus 로컬 실험용 계측 - 커밋 대상 아님.
     // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
-    @Autowired
+    // required = false: @DataJpaTest 등 슬라이스 테스트엔 MeterRegistry 빈이 없어 NoSuchBeanDefinitionException으로
+    // 컨텍스트 로딩 자체가 깨졌다(#224). 매칭되는 빈이 없으면 Spring이 필드를 건드리지 않고 그대로 두므로
+    // (value == null이면 field.set() 자체를 안 함), 아래 기본값(SimpleMeterRegistry)이 계속 살아남아 null이 되지 않는다.
+    @Autowired(required = false)
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
