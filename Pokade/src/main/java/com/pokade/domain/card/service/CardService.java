@@ -177,7 +177,12 @@ public class CardService {
         Set<String> types = new TreeSet<>(CardTypeEnResolver.resolve(cardRepository.findDistinctTypes()));
         Set<String> rarities = new TreeSet<>();
         for (CardRepository.CardRarityView view : cardRepository.findDistinctRarityCodes()) {
-            rarities.add(CardRarityResolver.resolve(view.getRarityCode(), view.getRarity()));
+            // rarity_code와 rarity가 둘 다 null인 카드가 있으면 resolve()가 null을 반환하는데,
+            // TreeSet.add(null)은 자연순서 비교 시 NullPointerException을 던지므로 여기서 걸러낸다.
+            String resolvedRarity = CardRarityResolver.resolve(view.getRarityCode(), view.getRarity());
+            if (resolvedRarity != null) {
+                rarities.add(resolvedRarity);
+            }
         }
         // expansions.name이 NULL인 레거시/수동 적재 데이터가 있을 수 있어, FE 응답 스키마(name: string,
         // non-null)를 깨지 않도록 빈 문자열로 대체하고 정렬도 null-safe하게 처리한다.
