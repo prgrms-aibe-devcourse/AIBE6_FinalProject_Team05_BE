@@ -68,6 +68,7 @@ class NotificationServiceTest {
 
         notificationService.markAsRead(1L, 1L);
 
+        then(notificationRepository).should(Mockito.times(1)).markAsReadIfUnread(1L, 1L);
         then(notificationRepository).should(Mockito.never()).findByIdAndUserId(Mockito.any(), Mockito.any());
     }
 
