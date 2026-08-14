@@ -64,6 +64,13 @@ public class CardUpsertService {
             log.warn("is_online_only=true 카드가 필터를 통과해 응답에 포함됨 - skip. externalId={}", dto.id());
             return false;
         }
+        // 카드 이름은 카드의 정체성 자체라 blank/null이면 세트/판본/가격까지 갈 필요 없이 여기서 건너뛴다.
+        // Card.name은 nullable=false라 그대로 저장을 시도하면 DataIntegrityViolationException으로
+        // (CardSyncService의 카드별 try/catch에 잡히긴 하지만) 불필요하게 실패 처리되므로 미리 막는다.
+        if (dto.name() == null || dto.name().isBlank()) {
+            log.warn("카드 이름이 없어(blank/null) 동기화를 건너뜁니다. externalId={}", dto.id());
+            return false;
+        }
 
         LocalDateTime now = LocalDateTime.now();
         Expansion expansion = expansionDto == null ? null : syncExpansion(expansionDto, now);
@@ -71,6 +78,12 @@ public class CardUpsertService {
 
         CardVariantDto primaryVariant = selectPrimaryVariant(dto.variants());
         if (primaryVariant == null) {
+            return true;
+        }
+        // 판본 이름도 blank/null이면(대표 판본 선정 자체는 가능했더라도) 판본/가격 동기화만 건너뛴다 -
+        // 카드 자체는 이미 정상 저장됐으므로 그 값은 유지한다.
+        if (primaryVariant.name() == null || primaryVariant.name().isBlank()) {
+            log.warn("대표 판본 이름이 없어(blank/null) 판본/가격 동기화를 건너뜁니다. externalId={}", dto.id());
             return true;
         }
 
@@ -82,19 +95,32 @@ public class CardUpsertService {
     private Expansion syncExpansion(ExpansionDto dto, LocalDateTime now) {
         return expansionRepository.findById(dto.id())
                 .map(existing -> backfillTranslation(existing, dto))
-                .orElseGet(() -> expansionRepository.save(Expansion.builder()
-                        .id(dto.id())
-                        .name(dto.name())
-                        .series(dto.series())
-                        .code(dto.code())
-                        .total(dto.total())
-                        .languageCode(dto.languageCode())
-                        .releaseDate(parseReleaseDate(dto.releaseDate()))
-                        .logo(dto.logo())
-                        .symbol(dto.symbol())
-                        .translation(toJsonString(extractTranslationName(dto.translation())))
-                        .syncedAt(now)
-                        .build()));
+                .orElseGet(() -> createExpansion(dto, now));
+    }
+
+    /**
+     * 세트 이름이 없으면(blank/null) 세트 생성을 건너뛰고 null을 반환한다 - 호출부(upsertCard)가
+     * expansionDto == null일 때와 동일하게 처리하므로(Card.expansion은 nullable), 카드 자체 저장에는
+     * 영향이 없다.
+     */
+    private Expansion createExpansion(ExpansionDto dto, LocalDateTime now) {
+        if (dto.name() == null || dto.name().isBlank()) {
+            log.warn("세트 이름이 없어(blank/null) 세트 동기화를 건너뜁니다. expansionId={}", dto.id());
+            return null;
+        }
+        return expansionRepository.save(Expansion.builder()
+                .id(dto.id())
+                .name(dto.name())
+                .series(dto.series())
+                .code(dto.code())
+                .total(dto.total())
+                .languageCode(dto.languageCode())
+                .releaseDate(parseReleaseDate(dto.releaseDate()))
+                .logo(dto.logo())
+                .symbol(dto.symbol())
+                .translation(toJsonString(extractTranslationName(dto.translation())))
+                .syncedAt(now)
+                .build());
     }
 
     /**

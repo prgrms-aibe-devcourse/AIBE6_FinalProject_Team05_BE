@@ -40,6 +40,11 @@ public class CardNameKoResolver {
             return null;
         }
         Integer pokedexNumber = pokedexNumbers.get(0);
+        if (pokedexNumber == null) {
+            // pokedexKoNameCache는 내부적으로 Map.of()/ConcurrentHashMap을 쓰는데 둘 다 null 키를
+            // 허용하지 않아 get(null)이 NPE를 던진다 - 원본 이름 폴백으로 안전하게 빠진다.
+            return null;
+        }
         String nameEn = pokedexKoNameCache.getNameEn(pokedexNumber);
         String nameKo = pokedexKoNameCache.getNameKo(pokedexNumber);
         if (nameEn == null || nameKo == null) {

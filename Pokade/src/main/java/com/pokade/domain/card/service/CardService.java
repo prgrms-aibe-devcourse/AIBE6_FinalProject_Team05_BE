@@ -68,7 +68,10 @@ public class CardService {
 
     // Actuator/Prometheus 로컬 실험용 계측 - 커밋 대상 아님.
     // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
-    @Autowired
+    // required = false: @DataJpaTest 등 슬라이스 테스트엔 MeterRegistry 빈이 없어 NoSuchBeanDefinitionException으로
+    // 컨텍스트 로딩 자체가 깨졌다(#224). 매칭되는 빈이 없으면 Spring이 필드를 건드리지 않고 그대로 두므로
+    // (value == null이면 field.set() 자체를 안 함), 아래 기본값(SimpleMeterRegistry)이 계속 살아남아 null이 되지 않는다.
+    @Autowired(required = false)
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
@@ -83,7 +86,7 @@ public class CardService {
         List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(rarities);
         Page<Card> cards = cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
+        return cards.map(card -> toCardResponse(card, gradesByCardId));
     }
 
     @Transactional
@@ -126,7 +129,7 @@ public class CardService {
                 ? searchByPokedexKoName(keyword, pageable)
                 : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
+        return cards.map(card -> toCardResponse(card, gradesByCardId));
     }
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
@@ -159,8 +162,14 @@ public class CardService {
         }
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of()), cardNameKoResolver.resolve(c), CardTypeEnResolver.resolve(c.getTypes()), CardRarityResolver.resolve(c.getRarityCode(), c.getRarity())))
+                .map(relatedCard -> toCardResponse(relatedCard, gradesByCardId))
                 .toList();
+    }
+
+    private CardResponse toCardResponse(Card card, Map<Long, List<String>> gradesByCardId) {
+        return CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()),
+                cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()),
+                CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()));
     }
 
     /**
@@ -174,7 +183,12 @@ public class CardService {
         Set<String> types = new TreeSet<>(CardTypeEnResolver.resolve(cardRepository.findDistinctTypes()));
         Set<String> rarities = new TreeSet<>();
         for (CardRepository.CardRarityView view : cardRepository.findDistinctRarityCodes()) {
-            rarities.add(CardRarityResolver.resolve(view.getRarityCode(), view.getRarity()));
+            // rarity_code와 rarity가 둘 다 null인 카드가 있으면 resolve()가 null을 반환하는데,
+            // TreeSet.add(null)은 자연순서 비교 시 NullPointerException을 던지므로 여기서 걸러낸다.
+            String resolvedRarity = CardRarityResolver.resolve(view.getRarityCode(), view.getRarity());
+            if (resolvedRarity != null) {
+                rarities.add(resolvedRarity);
+            }
         }
         // expansions.name이 NULL인 레거시/수동 적재 데이터가 있을 수 있어, FE 응답 스키마(name: string,
         // non-null)를 깨지 않도록 빈 문자열로 대체하고 정렬도 null-safe하게 처리한다.
