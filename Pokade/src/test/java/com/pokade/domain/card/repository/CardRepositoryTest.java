@@ -694,4 +694,39 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         Page<Card> page0Retry = cardRepository.findByNationalPokedexNumbersIn(List.of(132), PageRequest.of(0, 1));
         assertThat(page0Retry.getContent()).extracting(Card::getId).containsExactly(dittoFirst.getId());
     }
+
+    @Test
+    @DisplayName("t57 rarity_code와 rarity가 둘 다 null인 카드도 findDistinctRarityCodes() 결과에 (null, null) 조합으로 포함된다")
+    void t57() {
+        Expansion expansion = persistExpansion("null-rarity-set", "Null Rarity Set");
+        Card mysteryCard = Card.builder()
+                .name("Mystery Card")
+                .supertype("Pokémon")
+                .expansion(expansion)
+                .rarity(null)
+                .rarityCode(null)
+                .syncedAt(LocalDateTime.now())
+                .build();
+        entityManager.persist(mysteryCard);
+        entityManager.flush();
+
+        List<CardRepository.CardRarityView> result = cardRepository.findDistinctRarityCodes();
+
+        // CardService.getFacets()에서 이 (null, null) 조합이 실제로 NPE 없이 걸러지는지는
+        // CardServiceTest(t52)가 서비스 레벨에서 검증하고, 여기서는 리포지토리 쿼리 자체가
+        // 실제 Postgres에서 이 조합을 WHERE로 걸러내지 않고 그대로 돌려주는지만 확인한다.
+        assertThat(result).anyMatch(v -> v.getRarityCode() == null && v.getRarity() == null);
+        // setUp()의 기존 카드들(rarity_code는 항상 null, rarity는 값이 있음)도 여전히 섞여 나온다.
+        assertThat(result).anyMatch(v -> v.getRarityCode() == null && "Rare Holo".equals(v.getRarity()));
+    }
+
+    @Test
+    @DisplayName("t58 findDistinctTypes()는 실제 저장된 카드들의 type을 중복 없이 전부 반환한다")
+    void t58() {
+        List<String> result = cardRepository.findDistinctTypes();
+
+        // setUp()에서 Fire(Charizard/Charizard ex 중복)/Water/Lightning을 심어뒀다 - 중복 제거되고
+        // 트레이너 카드(types 없음)는 섞이지 않는지 함께 확인한다.
+        assertThat(result).containsExactlyInAnyOrder("Fire", "Water", "Lightning");
+    }
 }
