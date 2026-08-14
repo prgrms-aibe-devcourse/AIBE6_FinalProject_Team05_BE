@@ -41,13 +41,14 @@ public class NotificationService {
         Notification notification = Notification.builder()
                 .userId(watchlist.getUserId())
                 .type(NotificationType.PRICE_TARGET)
-                .message(buildPriceTargetMessage(cardName, reachedTargetPrice))
+                .message(buildPriceTargetMessage(watchlist, cardName, reachedTargetPrice))
                 .build();
 
         notificationRepository.save(notification);
     }
 
-    private String buildPriceTargetMessage(String cardName, Integer reachedTargetPrice) {
-        return String.format("%s 카드가 목표가 %,d원에 도달했습니다.", cardName, reachedTargetPrice);
+    private String buildPriceTargetMessage(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
+        String targetLabel = reachedTargetPrice.equals(watchlist.getTargetBuyPrice()) ? "구매" : "판매";
+        return String.format("%s 카드가 %s 목표가 %,d원에 도달했습니다.", cardName, targetLabel, reachedTargetPrice);
     }
 }

@@ -107,8 +107,8 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("목표가 도달 알림 생성: 메시지에 카드명과 목표가가 포함된다")
-    void createPriceTargetNotification_message() {
+    @DisplayName("목표가 도달 알림 생성: 메시지에 카드명, 목표가, '판매' 라벨이 포함된다")
+    void createPriceTargetNotification_message_sell() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetSellPrice(150000).build();
 
         notificationService.createPriceTargetNotification(watchlist, "리자몽", 150000);
@@ -117,6 +117,22 @@ class NotificationServiceTest {
         then(notificationRepository).should().save(captor.capture());
         assertThat(captor.getValue().getMessage())
                 .contains("리자몽")
-                .contains("150,000");
+                .contains("150,000")
+                .contains("판매");
+    }
+
+    @Test
+    @DisplayName("목표가 도달 알림 생성: 도달한 쪽이 구매 목표가면 메시지에 '구매' 라벨이 포함된다")
+    void createPriceTargetNotification_message_buy() {
+        Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L)
+                .targetBuyPrice(100000).targetSellPrice(150000).build();
+
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        then(notificationRepository).should().save(captor.capture());
+        assertThat(captor.getValue().getMessage())
+                .contains("100,000")
+                .contains("구매");
     }
 }

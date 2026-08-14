@@ -92,16 +92,24 @@ public class WatchlistService {
     }
 
     private boolean isTargetReached(Watchlist watchlist, PriceTradeStatsRepository.CardPriceRangeView range) {
+        return resolveReachedTargetPrice(watchlist, range) != null;
+    }
+
+    // 목표가(구매/판매) 도달 판정 - 도달한 목표가 값을 반환(없으면 null).
+    // isTargetReached()와 동일한 판정 로직을 재사용 가능한 형태로 추출한 것 (WatchlistTargetPriceNoticeService에서 재사용).
+    Integer resolveReachedTargetPrice(Watchlist watchlist, PriceTradeStatsRepository.CardPriceRangeView range) {
         if (range == null || range.getMinPrice() == null || range.getMaxPrice() == null) {
-            return false;
+            return null;
         }
         Integer targetBuyPrice = watchlist.getTargetBuyPrice();
         if (targetBuyPrice != null && range.getMinPrice() <= targetBuyPrice && targetBuyPrice <= range.getMaxPrice()) {
-            return true;
+            return targetBuyPrice;
         }
         Integer targetSellPrice = watchlist.getTargetSellPrice();
-        return targetSellPrice != null
-                && range.getMinPrice() <= targetSellPrice && targetSellPrice <= range.getMaxPrice();
+        if (targetSellPrice != null && range.getMinPrice() <= targetSellPrice && targetSellPrice <= range.getMaxPrice()) {
+            return targetSellPrice;
+        }
+        return null;
     }
 
     @Transactional

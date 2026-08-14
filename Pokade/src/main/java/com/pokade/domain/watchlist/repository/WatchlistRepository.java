@@ -15,4 +15,6 @@ public interface WatchlistRepository extends JpaRepository<Watchlist, Long> {
     long countByUserId(Long userId);
 
     Optional<Watchlist> findByIdAndUserId(Long id, Long userId);
+
+    List<Watchlist> findByIsNotifiedFalse();
 }
