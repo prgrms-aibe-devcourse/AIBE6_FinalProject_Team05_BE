@@ -2,7 +2,10 @@ package com.pokade.domain.card.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -93,5 +96,14 @@ class CardNameKoResolverTest {
         given(pokedexKoNameCache.getNameKo(940)).willReturn("파이코");
 
         assertThat(cardNameKoResolver.resolve("クヌギダマ", List.of(940))).isEqualTo("파이코");
+    }
+
+    @Test
+    @DisplayName("t10 pokedexNumbers의 첫 번째 원소가 null이면 NPE 없이 null을 반환한다(원본 이름 폴백)")
+    void t10() {
+        assertThat(cardNameKoResolver.resolve("Charizard", Arrays.asList(null, 6))).isNull();
+
+        then(pokedexKoNameCache).should(never()).getNameEn(org.mockito.ArgumentMatchers.any());
+        then(pokedexKoNameCache).should(never()).getNameKo(org.mockito.ArgumentMatchers.any());
     }
 }
