@@ -12,6 +12,7 @@ import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -102,10 +103,25 @@ class WatchlistServiceTest {
 
         WatchlistResponse response = watchlistService.addWatchlist(1L, request);
 
+        then(watchlistRepository).should().acquireUserLock(1L);
         then(watchlistRepository).should().save(any(Watchlist.class));
         assertThat(response.cardId()).isEqualTo(1L);
         assertThat(response.variantId()).isEqualTo(2L);
         assertThat(response.targetBuyPrice()).isEqualTo(1000);
+    }
+
+    @Test
+    @DisplayName("등록: 사전 체크를 통과했지만 저장 시점에 DB UNIQUE 제약을 위반하면(동시 등록 경합) DUPLICATE_WATCHLIST로 변환된다")
+    void addWatchlist_saveThrowsDataIntegrityViolation_convertsToDuplicateWatchlist() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 1000, null);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class)))
+                .willThrow(new DataIntegrityViolationException("unique constraint violation"));
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.DUPLICATE_WATCHLIST);
     }
 
     @Test

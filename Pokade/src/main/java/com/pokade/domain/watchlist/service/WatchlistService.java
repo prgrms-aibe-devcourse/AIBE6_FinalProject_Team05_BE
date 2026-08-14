@@ -13,6 +13,7 @@ import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,10 @@ public class WatchlistService {
             throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
         }
 
+        // 동시 등록 요청에서 "중복 체크 + 20개 제한 체크 + 저장" 구간이 원자적이도록, 같은 유저의 요청만
+        // 트랜잭션 종료까지 직렬화한다(다른 유저는 영향 없음).
+        watchlistRepository.acquireUserLock(userId);
+
         if (watchlistRepository.existsByUserIdAndCardId(userId, request.cardId())) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
@@ -56,8 +61,13 @@ public class WatchlistService {
                 .targetSellPrice(request.targetSellPrice())
                 .build();
 
-        Watchlist saved = watchlistRepository.save(watchlist);
-        return WatchlistResponse.of(saved);
+        // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
+        try {
+            Watchlist saved = watchlistRepository.save(watchlist);
+            return WatchlistResponse.of(saved);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
+        }
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {

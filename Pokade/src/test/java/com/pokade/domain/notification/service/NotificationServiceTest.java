@@ -59,9 +59,22 @@ class NotificationServiceTest {
     }
 
     // ===== 읽음 처리 =====
+    // markAsReadIfUnread()는 "조회 후 갱신"이 아니라 조건부 원자적 UPDATE라, 존재하지 않는 알림과
+    // 이미 읽은 알림을 구분하려면 0건 갱신 시에만 findByIdAndUserId로 원인을 판별한다.
     @Test
-    @DisplayName("읽음 처리: 존재하지 않으면 NOTIFICATION_NOT_FOUND")
+    @DisplayName("읽음 처리: 원자적 갱신이 1건이면 정상 처리되고 존재 여부를 다시 조회하지 않는다")
+    void markAsRead_success() {
+        given(notificationRepository.markAsReadIfUnread(1L, 1L)).willReturn(1);
+
+        notificationService.markAsRead(1L, 1L);
+
+        then(notificationRepository).should(Mockito.never()).findByIdAndUserId(Mockito.any(), Mockito.any());
+    }
+
+    @Test
+    @DisplayName("읽음 처리: 갱신 0건이고 존재하지도 않으면 NOTIFICATION_NOT_FOUND")
     void markAsRead_notFound() {
+        given(notificationRepository.markAsReadIfUnread(1L, 1L)).willReturn(0);
         given(notificationRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> notificationService.markAsRead(1L, 1L))
@@ -70,15 +83,14 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("읽음 처리: 정상 케이스면 notification.markAsRead()가 호출된다")
-    void markAsRead_success() {
-        Notification target = Mockito.spy(notification(1L));
-        given(notificationRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+    @DisplayName("읽음 처리: 갱신 0건인데 존재는 하면(이미 읽음, 동시 요청 경합 포함) NOTIFICATION_ALREADY_READ")
+    void markAsRead_alreadyRead() {
+        given(notificationRepository.markAsReadIfUnread(1L, 1L)).willReturn(0);
+        given(notificationRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(notification(1L)));
 
-        notificationService.markAsRead(1L, 1L);
-
-        then(target).should().markAsRead();
-        assertThat(target.isRead()).isTrue();
+        assertThatThrownBy(() -> notificationService.markAsRead(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NOTIFICATION_ALREADY_READ);
     }
 
     // ===== 목표가 도달 알림 생성 =====
