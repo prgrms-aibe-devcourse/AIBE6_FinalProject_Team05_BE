@@ -41,7 +41,7 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
 
     // 카드별 가장 최근 체결가 1건(grade 지정 시 해당 등급만)
     @Query("SELECT l.cardId AS cardId, t.price AS price FROM Trade t JOIN t.listing l "
-            + "WHERE l.cardId IN :cardIds AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
+            + "WHERE l.cardId IN (:cardIds) AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
             + "AND t.confirmedAt = ("
             + "    SELECT MAX(t2.confirmedAt) FROM Trade t2 JOIN t2.listing l2 "
             + "    WHERE l2.cardId = l.cardId AND (:grade IS NULL OR l2.grade = :grade) AND t2.status = :status"
@@ -79,7 +79,7 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
 
     // 워치리스트 "목표가 도달" 판정용: 카드별 체결가 전체 기간 최저/최고가를 한 번에 조회
     @Query("SELECT l.cardId AS cardId, MIN(t.price) AS minPrice, MAX(t.price) AS maxPrice FROM Trade t JOIN t.listing l "
-            + "WHERE l.cardId IN :cardIds AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
+            + "WHERE l.cardId IN (:cardIds) AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
             + "GROUP BY l.cardId")
     List<CardPriceRangeView> findPriceRangesByCardIds(@Param("cardIds") List<Long> cardIds,
                                                        @Param("grade") ListingGrade grade,
@@ -90,4 +90,14 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
         Integer getMinPrice();
         Integer getMaxPrice();
     }
+
+    // 워치리스트 "목표가 도달" 판정용: 워치리스트 등록(createdAt) 이후 체결된 것만 카드별 최저/최고가 조회
+    @Query("SELECT l.cardId AS cardId, MIN(t.price) AS minPrice, MAX(t.price) AS maxPrice FROM Trade t JOIN t.listing l "
+            + "WHERE l.cardId IN (:cardIds) AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
+            + "AND t.confirmedAt >= :from "
+            + "GROUP BY l.cardId")
+    List<CardPriceRangeView> findPriceRangesByCardIdsSince(@Param("cardIds") List<Long> cardIds,
+                                                            @Param("grade") ListingGrade grade,
+                                                            @Param("status") TradeStatus status,
+                                                            @Param("from") LocalDateTime from);
 }

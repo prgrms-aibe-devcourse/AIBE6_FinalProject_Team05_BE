@@ -13,6 +13,7 @@ import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,10 @@ public class WatchlistService {
             throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
         }
 
+        // 동시 등록 요청에서 "중복 체크 + 20개 제한 체크 + 저장" 구간이 원자적이도록, 같은 유저의 요청만
+        // 트랜잭션 종료까지 직렬화한다(다른 유저는 영향 없음).
+        watchlistRepository.acquireUserLock(userId);
+
         if (watchlistRepository.existsByUserIdAndCardId(userId, request.cardId())) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
@@ -56,8 +61,13 @@ public class WatchlistService {
                 .targetSellPrice(request.targetSellPrice())
                 .build();
 
-        Watchlist saved = watchlistRepository.save(watchlist);
-        return WatchlistResponse.of(saved);
+        // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
+        try {
+            Watchlist saved = watchlistRepository.save(watchlist);
+            return WatchlistResponse.of(saved);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
+        }
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
@@ -92,16 +102,24 @@ public class WatchlistService {
     }
 
     private boolean isTargetReached(Watchlist watchlist, PriceTradeStatsRepository.CardPriceRangeView range) {
+        return resolveReachedTargetPrice(watchlist, range) != null;
+    }
+
+    // 목표가(구매/판매) 도달 판정 - 도달한 목표가 값을 반환(없으면 null).
+    // isTargetReached()와 동일한 판정 로직을 재사용 가능한 형태로 추출한 것 (WatchlistTargetPriceNoticeService에서 재사용).
+    Integer resolveReachedTargetPrice(Watchlist watchlist, PriceTradeStatsRepository.CardPriceRangeView range) {
         if (range == null || range.getMinPrice() == null || range.getMaxPrice() == null) {
-            return false;
+            return null;
         }
         Integer targetBuyPrice = watchlist.getTargetBuyPrice();
         if (targetBuyPrice != null && range.getMinPrice() <= targetBuyPrice && targetBuyPrice <= range.getMaxPrice()) {
-            return true;
+            return targetBuyPrice;
         }
         Integer targetSellPrice = watchlist.getTargetSellPrice();
-        return targetSellPrice != null
-                && range.getMinPrice() <= targetSellPrice && targetSellPrice <= range.getMaxPrice();
+        if (targetSellPrice != null && range.getMinPrice() <= targetSellPrice && targetSellPrice <= range.getMaxPrice()) {
+            return targetSellPrice;
+        }
+        return null;
     }
 
     @Transactional

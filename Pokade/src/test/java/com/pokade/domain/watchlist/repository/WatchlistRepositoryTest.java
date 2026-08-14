@@ -75,6 +75,27 @@ class WatchlistRepositoryTest {
     }
 
     @Test
+    void findByIsNotifiedFalse는_알림_미발송_항목만_조회한다() {
+        Long userId = insertUser("notified@test.com");
+        Long notifiedCardId = insertCard("watch-notified-a");
+        Long unnotifiedCardId = insertCard("watch-notified-b");
+        Watchlist notified = saveWatchlist(userId, notifiedCardId, 1000, null);
+        Watchlist unnotified = saveWatchlist(userId, unnotifiedCardId, 2000, null);
+        notified.markAsNotified();
+        watchlistRepository.save(notified);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<Watchlist> found = watchlistRepository.findByIsNotifiedFalse();
+
+        // 전역 조회라 다른 테스트/기존 데이터의 미알림 워치리스트가 섞여 있을 수 있어, "정확히 이 목록만"이
+        // 아니라 "이 테스트가 만든 미알림 항목은 포함되고, 알림 완료 항목은 제외되는지"만 검증한다.
+        assertThat(found).extracting(Watchlist::getId)
+                .contains(unnotified.getId())
+                .doesNotContain(notified.getId());
+    }
+
+    @Test
     void 같은_유저가_같은_카드로_두번_저장하면_UNIQUE_제약으로_예외가_발생한다() {
         Long userId = insertUser("dup@test.com");
         Long cardId = insertCard("watch-dup");
