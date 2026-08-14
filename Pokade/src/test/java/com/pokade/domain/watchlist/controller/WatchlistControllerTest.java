@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.auth.service.OAuth2LoginService;
+import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.service.WatchlistService;
@@ -90,7 +91,7 @@ class WatchlistControllerTest {
     void 등록에_성공하면_200과_등록된_항목을_반환한다() throws Exception {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 10000, null);
         WatchlistResponse response = new WatchlistResponse(
-                1L, 1L, null, 10000, null, false, LocalDateTime.now());
+                1L, 1L, null, "피카츄", "기본팩", "image.png", 10000, null, false, LocalDateTime.now(), null, null, false);
 
         given(watchlistService.addWatchlist(anyLong(), any(WatchlistCreateRequest.class)))
                 .willReturn(response);
@@ -138,7 +139,7 @@ class WatchlistControllerTest {
     @Test
     void 목록_조회에_성공하면_200과_목록을_반환한다() throws Exception {
         WatchlistResponse response = new WatchlistResponse(
-                1L, 1L, null, 10000, null, false, LocalDateTime.now());
+                1L, 1L, null, "피카츄", "기본팩", "image.png", 10000, null, false, LocalDateTime.now(), null, null, false);
 
         given(watchlistService.getWatchlist(100L)).willReturn(List.of(response));
 
@@ -146,6 +147,25 @@ class WatchlistControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].id").value(1L));
+    }
+
+    @Test
+    void 목록_조회_응답에_현재_시세와_목표가_도달_여부가_포함된다() throws Exception {
+        CardPriceSummaryResponse currentPrice =
+                new CardPriceSummaryResponse(1L, 9000, 8000, null, "KRW", null, null);
+        WatchlistResponse response = new WatchlistResponse(
+                1L, 1L, null, "피카츄", "기본팩", "image.png", 10000, null, false, LocalDateTime.now(),
+                currentPrice, new java.math.BigDecimal("3.25"), true);
+
+        given(watchlistService.getWatchlist(100L)).willReturn(List.of(response));
+
+        mockMvc.perform(get("/api/watchlist").with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].cardName").value("피카츄"))
+                .andExpect(jsonPath("$.data[0].currentPrice.buyPrice").value(9000))
+                .andExpect(jsonPath("$.data[0].currentPrice.sellPrice").value(8000))
+                .andExpect(jsonPath("$.data[0].changeRate").value(3.25))
+                .andExpect(jsonPath("$.data[0].targetReached").value(true));
     }
 
     @Test

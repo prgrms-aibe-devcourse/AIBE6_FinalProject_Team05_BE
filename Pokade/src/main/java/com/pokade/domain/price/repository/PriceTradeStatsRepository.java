@@ -76,4 +76,18 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
         Long getCardId();
         Double getAvgPrice();
     }
+
+    // 워치리스트 "목표가 도달" 판정용: 카드별 체결가 전체 기간 최저/최고가를 한 번에 조회
+    @Query("SELECT l.cardId AS cardId, MIN(t.price) AS minPrice, MAX(t.price) AS maxPrice FROM Trade t JOIN t.listing l "
+            + "WHERE l.cardId IN :cardIds AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
+            + "GROUP BY l.cardId")
+    List<CardPriceRangeView> findPriceRangesByCardIds(@Param("cardIds") List<Long> cardIds,
+                                                       @Param("grade") ListingGrade grade,
+                                                       @Param("status") TradeStatus status);
+
+    interface CardPriceRangeView {
+        Long getCardId();
+        Integer getMinPrice();
+        Integer getMaxPrice();
+    }
 }
