@@ -90,4 +90,14 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
         Integer getMinPrice();
         Integer getMaxPrice();
     }
+
+    // 워치리스트 "목표가 도달" 판정용: 워치리스트 등록(createdAt) 이후 체결된 것만 카드별 최저/최고가 조회
+    @Query("SELECT l.cardId AS cardId, MIN(t.price) AS minPrice, MAX(t.price) AS maxPrice FROM Trade t JOIN t.listing l "
+            + "WHERE l.cardId IN :cardIds AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
+            + "AND t.confirmedAt >= :from "
+            + "GROUP BY l.cardId")
+    List<CardPriceRangeView> findPriceRangesByCardIdsSince(@Param("cardIds") List<Long> cardIds,
+                                                            @Param("grade") ListingGrade grade,
+                                                            @Param("status") TradeStatus status,
+                                                            @Param("from") LocalDateTime from);
 }
