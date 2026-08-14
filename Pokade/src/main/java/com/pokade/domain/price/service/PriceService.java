@@ -226,6 +226,38 @@ public class PriceService {
 
         return new PriceStatsResponse(changeRate, changeAmount, volume);
     }
+    
+    public Map<Long, BigDecimal> getChangeRates(List<Long> cardIds) {
+        LocalDateTime recentFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS);
+        LocalDateTime previousFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS * 2L);
+
+        Map<Long, Double> recentAvgByCard = priceTradeStatsRepository
+                .findAveragePricesByGradeSince(STATS_GRADE, TradeStatus.COMPLETED, recentFrom).stream()
+                .collect(Collectors.toMap(
+                        PriceTradeStatsRepository.CardAvgPriceView::getCardId,
+                        PriceTradeStatsRepository.CardAvgPriceView::getAvgPrice));
+        Map<Long, Double> previousAvgByCard = priceTradeStatsRepository
+                .findAveragePricesByGradeBetween(STATS_GRADE, TradeStatus.COMPLETED, previousFrom, recentFrom).stream()
+                .collect(Collectors.toMap(
+                        PriceTradeStatsRepository.CardAvgPriceView::getCardId,
+                        PriceTradeStatsRepository.CardAvgPriceView::getAvgPrice));
+
+        return cardIds.stream().distinct().collect(Collectors.toMap(
+                Function.identity(),
+                cardId -> computeChangeRate(recentAvgByCard.get(cardId), previousAvgByCard.get(cardId))));
+    }
+
+    private BigDecimal computeChangeRate(Double recentAvg, Double previousAvg) {
+        if (recentAvg == null || previousAvg == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal recentAvgAmount = BigDecimal.valueOf(recentAvg);
+        BigDecimal previousAvgAmount = BigDecimal.valueOf(previousAvg);
+        return recentAvgAmount.subtract(previousAvgAmount)
+                .divide(previousAvgAmount, 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
 
     // PSA10/PSA9/PSA8은 공인 등급이라 company='PSA', 자체 AI등급(S/A/B)은 company=''.
     private PriceStatsResponse getStatsFromCardPrices(Long variantId, ListingGrade grade, StatsPeriod period) {

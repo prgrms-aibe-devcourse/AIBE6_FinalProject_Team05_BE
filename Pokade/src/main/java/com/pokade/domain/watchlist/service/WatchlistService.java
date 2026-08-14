@@ -1,5 +1,11 @@
 package com.pokade.domain.watchlist.service;
 
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.repository.PriceTradeStatsRepository;
+import com.pokade.domain.price.service.PriceService;
+import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.entity.Watchlist;
@@ -10,7 +16,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +30,9 @@ public class WatchlistService {
     private static final long WATCHLIST_LIMIT = 20;
 
     private final WatchlistRepository watchlistRepository;
+    private final PriceService priceService;
+    private final CardRepository cardRepository;
+    private final PriceTradeStatsRepository priceTradeStatsRepository;
 
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
@@ -48,10 +61,47 @@ public class WatchlistService {
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
-        return watchlistRepository.findByUserId(userId)
+        List<Watchlist> watchlists = watchlistRepository.findByUserId(userId);
+        if (watchlists.isEmpty()) {
+            return List.of();
+        }
+        
+        List<Long> cardIds = watchlists.stream().map(Watchlist::getCardId).distinct().toList();
+        Map<Long, CardPriceSummaryResponse> priceByCardId = priceService.getSummaries(cardIds, null, true)
                 .stream()
-                .map(WatchlistResponse::of)
+                .collect(Collectors.toMap(CardPriceSummaryResponse::cardId, Function.identity()));
+        Map<Long, Card> cardById = cardRepository.findAllById(cardIds)
+                .stream()
+                .collect(Collectors.toMap(Card::getId, Function.identity()));
+
+        Map<Long, PriceTradeStatsRepository.CardPriceRangeView> rangeByCardId =
+                priceTradeStatsRepository.findPriceRangesByCardIds(cardIds, null, TradeStatus.COMPLETED)
+                        .stream()
+                        .collect(Collectors.toMap(PriceTradeStatsRepository.CardPriceRangeView::getCardId, Function.identity()));
+        // "등락" 배지용 - 최근 7일 vs 이전 7일 S등급 평균 체결가 비교(%). getStats()/getRanking()과 같은 기준.
+        Map<Long, BigDecimal> changeRateByCardId = priceService.getChangeRates(cardIds);
+
+        return watchlists.stream()
+                .map(watchlist -> WatchlistResponse.withPrice(
+                        watchlist,
+                        cardById.get(watchlist.getCardId()),
+                        priceByCardId.get(watchlist.getCardId()),
+                        changeRateByCardId.get(watchlist.getCardId()),
+                        isTargetReached(watchlist, rangeByCardId.get(watchlist.getCardId()))))
                 .toList();
+    }
+
+    private boolean isTargetReached(Watchlist watchlist, PriceTradeStatsRepository.CardPriceRangeView range) {
+        if (range == null || range.getMinPrice() == null || range.getMaxPrice() == null) {
+            return false;
+        }
+        Integer targetBuyPrice = watchlist.getTargetBuyPrice();
+        if (targetBuyPrice != null && range.getMinPrice() <= targetBuyPrice && targetBuyPrice <= range.getMaxPrice()) {
+            return true;
+        }
+        Integer targetSellPrice = watchlist.getTargetSellPrice();
+        return targetSellPrice != null
+                && range.getMinPrice() <= targetSellPrice && targetSellPrice <= range.getMaxPrice();
     }
 
     @Transactional
