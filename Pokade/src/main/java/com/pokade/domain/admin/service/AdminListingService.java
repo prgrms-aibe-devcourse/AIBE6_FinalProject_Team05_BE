@@ -1,6 +1,5 @@
 package com.pokade.domain.admin.service;
 
-import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.report.dto.ReportResponse;
 import com.pokade.domain.report.entity.ReportTargetType;
@@ -29,12 +28,18 @@ public class AdminListingService {
                 .toList();
     }
 
-    // FR-ADMIN-02: 신고 검토 후 매물 숨김 처리
+    // FR-ADMIN-02: 신고 검토 후 매물 숨김 처리.
+    // 존재 확인과 상태 전환을 분리하되, 상태 전환 자체는 조건부 UPDATE(hideIfNotAlreadyHidden)로
+    // 원자적으로 처리해 동시에 두 요청이 들어와도 하나만 성공하도록 한다.
     @Transactional
     public void hideListing(Long listingId) {
-        Listing listing = listingRepository.findById(listingId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+        if (!listingRepository.existsById(listingId)) {
+            throw new BusinessException(ErrorCode.LISTING_NOT_FOUND);
+        }
 
-        listing.hide();
+        int updated = listingRepository.hideIfNotAlreadyHidden(listingId);
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.INVALID_LISTING_STATUS, "이미 숨김 처리된 매물입니다.");
+        }
     }
 }
