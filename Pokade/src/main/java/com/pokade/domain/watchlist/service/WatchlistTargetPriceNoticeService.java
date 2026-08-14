@@ -74,15 +74,15 @@ public class WatchlistTargetPriceNoticeService {
             return;
         }
 
-        // 배치가 후보를 읽은 뒤 알림을 생성하기까지 사이에 사용자가 해당 워치리스트를 삭제했을 수 있어(레이스),
-        // 알림 생성 직전 재확인한다. existsById()는 이 트랜잭션 안에 이미 로드된 엔티티가 있어도
-        // DB에 COUNT 쿼리를 직접 던지므로, 다른 트랜잭션에서 커밋된 삭제를 즉시 반영해 감지할 수 있다.
-        if (!watchlistRepository.existsById(watchlist.getId())) {
-            log.info("워치리스트가 이미 삭제되어 알림 생성을 스킵합니다: watchlistId={}", watchlist.getId());
+        // 알림 생성 전, 조건부 원자적 UPDATE(WHERE id=:id AND is_notified=false)로 "알림 생성 권한"을 먼저
+        // 선점한다. 갱신 행 수가 0이면(그 사이 삭제됐거나 다른 트랜잭션/인스턴스가 이미 선점한 경우) 안전하게
+        // 스킵한다 - existsById() 단순 존재 확인보다 더 넓은 레이스(다중 인스턴스 중복 실행 포함)를 막는다.
+        int claimed = watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId());
+        if (claimed == 0) {
+            log.info("워치리스트 알림 생성 권한을 확보하지 못해 스킵합니다(이미 처리됨 또는 삭제됨): watchlistId={}", watchlist.getId());
             return;
         }
 
         notificationService.createPriceTargetNotification(watchlist, card.getName(), reachedTargetPrice);
-        watchlist.markAsNotified();
     }
 }

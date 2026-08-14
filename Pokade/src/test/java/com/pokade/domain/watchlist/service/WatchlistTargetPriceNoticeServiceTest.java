@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class WatchlistTargetPriceNoticeServiceTest {
@@ -57,8 +58,8 @@ class WatchlistTargetPriceNoticeServiceTest {
     }
 
     @Test
-    @DisplayName("목표가 도달: 알림 생성 후 isNotified가 true로 갱신된다")
-    void detect_targetReached_createsNotificationAndMarksNotified() {
+    @DisplayName("목표가 도달: 알림 생성 권한(원자적 UPDATE)을 확보한 뒤 알림을 생성한다")
+    void detect_targetReached_claimsAndCreatesNotification() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(1000).build();
         given(watchlistRepository.findByIsNotifiedFalse()).willReturn(List.of(watchlist));
         given(cardRepository.findAllById(List.of(10L)))
@@ -74,17 +75,17 @@ class WatchlistTargetPriceNoticeServiceTest {
                 eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED), any()))
                 .willReturn(List.of(sinceRegistration));
         given(watchlistService.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
-        given(watchlistRepository.existsById(watchlist.getId())).willReturn(true);
+        given(watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId())).willReturn(1);
 
         noticeService.detectTargetPriceReached();
 
+        then(watchlistRepository).should().markAsNotifiedIfNotYet(watchlist.getId());
         then(notificationService).should().createPriceTargetNotification(watchlist, "리자몽", 1000);
-        assertThat(watchlist.isNotified()).isTrue();
     }
 
     @Test
-    @DisplayName("알림 생성 직전 워치리스트가 이미 삭제된 경우(레이스), 알림을 생성하지 않고 안전하게 스킵한다")
-    void detect_watchlistDeletedJustBeforeNotification_skipsSafely() {
+    @DisplayName("알림 생성 권한 확보(원자적 UPDATE)가 0건이면(이미 처리됨 또는 삭제됨) 알림을 생성하지 않고 안전하게 스킵한다")
+    void detect_claimFails_skipsSafely() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(1000).build();
         given(watchlistRepository.findByIsNotifiedFalse()).willReturn(List.of(watchlist));
         given(cardRepository.findAllById(List.of(10L)))
@@ -100,13 +101,12 @@ class WatchlistTargetPriceNoticeServiceTest {
                 eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED), any()))
                 .willReturn(List.of(sinceRegistration));
         given(watchlistService.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
-        // 목표가는 도달했지만, 알림 생성 직전 재확인 시점엔 이미 삭제되어 없는 상태를 시뮬레이션
-        given(watchlistRepository.existsById(watchlist.getId())).willReturn(false);
+        // 목표가는 도달했지만, 알림 생성 직전 원자적 권한 확보에 실패한 상태(삭제됐거나 다른 인스턴스가 선점)를 시뮬레이션
+        given(watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId())).willReturn(0);
 
         noticeService.detectTargetPriceReached();
 
         then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
-        assertThat(watchlist.isNotified()).isFalse();
     }
 
     @Test
@@ -159,13 +159,14 @@ class WatchlistTargetPriceNoticeServiceTest {
                 eq(List.of(20L)), isNull(), eq(TradeStatus.COMPLETED), any()))
                 .willReturn(List.of(succeedingSince));
         given(watchlistService.resolveReachedTargetPrice(succeeding, succeedingSince)).willReturn(2000);
-        given(watchlistRepository.existsById(succeeding.getId())).willReturn(true);
+        given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
 
         noticeService.detectTargetPriceReached();
 
+        // failing/succeeding 둘 다 빌더로 만들어 getId()가 null이라 인자로는 구분할 수 없으므로,
+        // "권한 확보 시도가 정확히 1번만"(= 예외를 던진 failing은 그 앞 단계에서 걸러졌다는 뜻) 호출 횟수로 검증한다.
+        then(watchlistRepository).should(times(1)).markAsNotifiedIfNotYet(any());
         then(notificationService).should().createPriceTargetNotification(succeeding, "이브이", 2000);
         then(notificationService).should(never()).createPriceTargetNotification(eq(failing), any(), any());
-        assertThat(succeeding.isNotified()).isTrue();
-        assertThat(failing.isNotified()).isFalse();
     }
 }
