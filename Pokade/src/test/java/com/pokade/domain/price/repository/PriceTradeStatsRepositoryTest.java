@@ -179,4 +179,32 @@ class PriceTradeStatsRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(ranges).isEmpty();
     }
+
+    @Test
+    @DisplayName("t7 IN (:cardIds)절에 카드 여러 개를 넘겨도 각 카드별로 정확히 매칭돼 확장된다")
+    void t7() {
+        Card secondCard = Card.builder().name("Blastoise").build();
+        entityManager.persist(secondCard);
+        Long secondCardId = secondCard.getId();
+
+        Listing firstCardListing = persistListing(3000000, ListingGrade.S);
+        Listing secondCardListing = listingRepository.save(
+                Listing.builder().cardId(secondCardId).sellerId(sellerId).price(5000000).grade(ListingGrade.S).build());
+
+        persistCompletedTrade(firstCardListing, LocalDateTime.now().minusDays(1));
+        persistCompletedTrade(secondCardListing, LocalDateTime.now().minusDays(1));
+
+        var ranges = priceTradeStatsRepository.findPriceRangesByCardIds(
+                List.of(cardId, secondCardId), null, TradeStatus.COMPLETED);
+
+        assertThat(ranges).hasSize(2);
+        assertThat(ranges).extracting(PriceTradeStatsRepository.CardPriceRangeView::getCardId)
+                .containsExactlyInAnyOrder(cardId, secondCardId);
+        assertThat(ranges).filteredOn(r -> r.getCardId().equals(cardId))
+                .extracting(PriceTradeStatsRepository.CardPriceRangeView::getMinPrice)
+                .containsExactly(3000000);
+        assertThat(ranges).filteredOn(r -> r.getCardId().equals(secondCardId))
+                .extracting(PriceTradeStatsRepository.CardPriceRangeView::getMinPrice)
+                .containsExactly(5000000);
+    }
 }
