@@ -86,7 +86,7 @@ public class CardService {
         List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(rarities);
         Page<Card> cards = cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
+        return cards.map(card -> toCardResponse(card, gradesByCardId));
     }
 
     @Transactional
@@ -129,7 +129,7 @@ public class CardService {
                 ? searchByPokedexKoName(keyword, pageable)
                 : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
+        return cards.map(card -> toCardResponse(card, gradesByCardId));
     }
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
@@ -162,8 +162,14 @@ public class CardService {
         }
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of()), cardNameKoResolver.resolve(c), CardTypeEnResolver.resolve(c.getTypes()), CardRarityResolver.resolve(c.getRarityCode(), c.getRarity())))
+                .map(relatedCard -> toCardResponse(relatedCard, gradesByCardId))
                 .toList();
+    }
+
+    private CardResponse toCardResponse(Card card, Map<Long, List<String>> gradesByCardId) {
+        return CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()),
+                cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()),
+                CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()));
     }
 
     /**
