@@ -74,11 +74,39 @@ class WatchlistTargetPriceNoticeServiceTest {
                 eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED), any()))
                 .willReturn(List.of(sinceRegistration));
         given(watchlistService.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
+        given(watchlistRepository.existsById(watchlist.getId())).willReturn(true);
 
         noticeService.detectTargetPriceReached();
 
         then(notificationService).should().createPriceTargetNotification(watchlist, "리자몽", 1000);
         assertThat(watchlist.isNotified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("알림 생성 직전 워치리스트가 이미 삭제된 경우(레이스), 알림을 생성하지 않고 안전하게 스킵한다")
+    void detect_watchlistDeletedJustBeforeNotification_skipsSafely() {
+        Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(1000).build();
+        given(watchlistRepository.findByIsNotifiedFalse()).willReturn(List.of(watchlist));
+        given(cardRepository.findAllById(List.of(10L)))
+                .willReturn(List.of(Card.builder().id(10L).name("리자몽").build()));
+
+        PriceRange allTimeRange = new PriceRange(10L, 800, 1200);
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED)))
+                .willReturn(List.of(allTimeRange));
+        given(watchlistService.resolveReachedTargetPrice(watchlist, allTimeRange)).willReturn(1000);
+
+        PriceRange sinceRegistration = new PriceRange(10L, 900, 1100);
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSince(
+                eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED), any()))
+                .willReturn(List.of(sinceRegistration));
+        given(watchlistService.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
+        // 목표가는 도달했지만, 알림 생성 직전 재확인 시점엔 이미 삭제되어 없는 상태를 시뮬레이션
+        given(watchlistRepository.existsById(watchlist.getId())).willReturn(false);
+
+        noticeService.detectTargetPriceReached();
+
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        assertThat(watchlist.isNotified()).isFalse();
     }
 
     @Test
@@ -131,6 +159,7 @@ class WatchlistTargetPriceNoticeServiceTest {
                 eq(List.of(20L)), isNull(), eq(TradeStatus.COMPLETED), any()))
                 .willReturn(List.of(succeedingSince));
         given(watchlistService.resolveReachedTargetPrice(succeeding, succeedingSince)).willReturn(2000);
+        given(watchlistRepository.existsById(succeeding.getId())).willReturn(true);
 
         noticeService.detectTargetPriceReached();
 
