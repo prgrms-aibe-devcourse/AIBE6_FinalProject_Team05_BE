@@ -63,6 +63,35 @@ class NotificationRepositoryTest {
         assertThat(otherResult).isEmpty();
     }
 
+    @Test
+    void markAsReadIfUnread는_읽지_않은_알림을_1건_갱신하고_이후_재호출은_0건이다() {
+        Long userId = insertUser("mark-unread@test.com");
+        Notification saved = saveNotification(userId, NotificationType.PRICE_TARGET, "unread");
+
+        int firstResult = notificationRepository.markAsReadIfUnread(saved.getId(), userId);
+        entityManager.flush();
+        entityManager.clear();
+        // 두 번째 호출이 "동시에 들어온 다른 요청"을 대신한다 - is_read=false 조건이 이미 거짓이라 0건이어야 한다.
+        int secondResult = notificationRepository.markAsReadIfUnread(saved.getId(), userId);
+
+        assertThat(firstResult).isEqualTo(1);
+        assertThat(secondResult).isEqualTo(0);
+        Notification reloaded = notificationRepository.findById(saved.getId()).orElseThrow();
+        assertThat(reloaded.isRead()).isTrue();
+    }
+
+    @Test
+    void markAsReadIfUnread는_본인_소유가_아니면_갱신하지_않는다() {
+        Long ownerId = insertUser("mark-owner@test.com");
+        Long otherUserId = insertUser("mark-other@test.com");
+        Notification saved = saveNotification(ownerId, NotificationType.PRICE_TARGET, "owned");
+
+        int result = notificationRepository.markAsReadIfUnread(saved.getId(), otherUserId);
+
+        assertThat(result).isEqualTo(0);
+        assertThat(notificationRepository.findById(saved.getId()).orElseThrow().isRead()).isFalse();
+    }
+
     private Notification saveNotification(Long userId, NotificationType type, String message) {
         Notification saved = notificationRepository.save(
                 Notification.builder()

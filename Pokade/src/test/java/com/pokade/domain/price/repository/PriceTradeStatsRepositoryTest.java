@@ -3,6 +3,7 @@ package com.pokade.domain.price.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -63,6 +64,9 @@ class PriceTradeStatsRepositoryTest extends AbstractIntegrationTest {
     private Trade persistCompletedTrade(Listing listing, LocalDateTime confirmedAt) {
         Trade trade = tradeRepository.save(
                 Trade.builder().listing(listing).buyerId(buyerId).price(listing.getPrice()).build());
+        trade.shipToPlatform();
+        trade.markInspected();
+        trade.markDelivered();
         trade.complete();
         entityManager.flush();
         entityManager.createNativeQuery("UPDATE trades SET confirmed_at = :confirmedAt WHERE id = :id")
@@ -138,5 +142,69 @@ class PriceTradeStatsRepositoryTest extends AbstractIntegrationTest {
                 cardId, ListingGrade.S, TradeStatus.COMPLETED, LocalDateTime.now().minusDays(7));
 
         assertThat(count).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("t5 워치리스트 등록(createdAt) 이후 체결분만 반영해 카드별 최저/최고가를 계산한다")
+    void t5() {
+        Listing beforeRegistration = persistListing(2000000, ListingGrade.S);
+        Listing afterRegistrationLow = persistListing(3000000, ListingGrade.S);
+        Listing afterRegistrationHigh = persistListing(3500000, ListingGrade.S);
+
+        LocalDateTime registeredAt = LocalDateTime.now().minusDays(5);
+
+        persistCompletedTrade(beforeRegistration, registeredAt.minusDays(1));
+        persistCompletedTrade(afterRegistrationLow, registeredAt.plusDays(1));
+        persistCompletedTrade(afterRegistrationHigh, registeredAt.plusDays(2));
+
+        var ranges = priceTradeStatsRepository.findPriceRangesByCardIdsSince(
+                List.of(cardId), null, TradeStatus.COMPLETED, registeredAt);
+
+        assertThat(ranges).hasSize(1);
+        assertThat(ranges.get(0).getCardId()).isEqualTo(cardId);
+        assertThat(ranges.get(0).getMinPrice()).isEqualTo(3000000);
+        assertThat(ranges.get(0).getMaxPrice()).isEqualTo(3500000);
+    }
+
+    @Test
+    @DisplayName("t6 등록 이후 체결 이력이 없으면 결과에서 제외된다")
+    void t6() {
+        Listing beforeRegistration = persistListing(2000000, ListingGrade.S);
+
+        LocalDateTime registeredAt = LocalDateTime.now().minusDays(5);
+        persistCompletedTrade(beforeRegistration, registeredAt.minusDays(1));
+
+        var ranges = priceTradeStatsRepository.findPriceRangesByCardIdsSince(
+                List.of(cardId), null, TradeStatus.COMPLETED, registeredAt);
+
+        assertThat(ranges).isEmpty();
+    }
+
+    @Test
+    @DisplayName("t7 IN (:cardIds)절에 카드 여러 개를 넘겨도 각 카드별로 정확히 매칭돼 확장된다")
+    void t7() {
+        Card secondCard = Card.builder().name("Blastoise").build();
+        entityManager.persist(secondCard);
+        Long secondCardId = secondCard.getId();
+
+        Listing firstCardListing = persistListing(3000000, ListingGrade.S);
+        Listing secondCardListing = listingRepository.save(
+                Listing.builder().cardId(secondCardId).sellerId(sellerId).price(5000000).grade(ListingGrade.S).build());
+
+        persistCompletedTrade(firstCardListing, LocalDateTime.now().minusDays(1));
+        persistCompletedTrade(secondCardListing, LocalDateTime.now().minusDays(1));
+
+        var ranges = priceTradeStatsRepository.findPriceRangesByCardIds(
+                List.of(cardId, secondCardId), null, TradeStatus.COMPLETED);
+
+        assertThat(ranges).hasSize(2);
+        assertThat(ranges).extracting(PriceTradeStatsRepository.CardPriceRangeView::getCardId)
+                .containsExactlyInAnyOrder(cardId, secondCardId);
+        assertThat(ranges).filteredOn(r -> r.getCardId().equals(cardId))
+                .extracting(PriceTradeStatsRepository.CardPriceRangeView::getMinPrice)
+                .containsExactly(3000000);
+        assertThat(ranges).filteredOn(r -> r.getCardId().equals(secondCardId))
+                .extracting(PriceTradeStatsRepository.CardPriceRangeView::getMinPrice)
+                .containsExactly(5000000);
     }
 }
