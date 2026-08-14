@@ -105,9 +105,11 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
         NotificationService notificationService = new NotificationService(notificationRepository);
         WatchlistService watchlistService = new WatchlistService(watchlistRepository,
                 mock(PriceService.class), cardRepository, priceTradeStatsRepository);
+        WatchlistTargetPriceNoticeProcessor processor = new WatchlistTargetPriceNoticeProcessor(
+                watchlistRepository, priceTradeStatsRepository, notificationService, watchlistService);
 
         return new WatchlistTargetPriceNoticeService(watchlistRepository, cardRepository,
-                priceTradeStatsRepository, notificationService, watchlistService);
+                priceTradeStatsRepository, processor);
     }
 
     private TransactionTemplate newRequiresNewTemplate() {
