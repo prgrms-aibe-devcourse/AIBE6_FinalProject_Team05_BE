@@ -727,6 +727,21 @@ class CardServiceTest {
                 .containsExactly("", "Base", "Sword & Shield");
     }
 
+    @Test
+    @DisplayName("t52 rarity_code와 rarity가 둘 다 null인 카드가 섞여 있어도 NPE 없이 나머지 rarity는 정상 노출된다")
+    void t52() {
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of(
+                rarityView(null, null),
+                rarityView("C", "Common"),
+                rarityView(null, "프로모")));
+        given(expansionRepository.findAll()).willReturn(List.of());
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.rarities()).containsExactlyInAnyOrder("Common", "프로모");
+    }
+
     private CardRepository.CardRarityView rarityView(String rarityCode, String rarity) {
         return new CardRepository.CardRarityView() {
             @Override
