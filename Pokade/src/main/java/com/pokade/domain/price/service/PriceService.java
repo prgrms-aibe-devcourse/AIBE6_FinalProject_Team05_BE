@@ -24,6 +24,7 @@ import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,8 @@ public class PriceService {
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final PriceCardStatsRepository priceCardStatsRepository;
     private final CardPriceRepository cardPriceRepository;
+    // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
+    private final MeterRegistry meterRegistry;
 
     public PriceSummaryResponse getSummary(Long cardId, Long variantId) {
         if (!cardRepository.existsById(cardId)) {
@@ -169,6 +172,8 @@ public class PriceService {
         }
 
         ChartPeriod chartPeriod = ChartPeriod.from(period);
+        // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("price.chart.requests", "period", chartPeriod.name()).increment();
         LocalDateTime from = LocalDateTime.now().minusDays(chartPeriod.getDays());
 
         return tradeRepository
@@ -348,6 +353,8 @@ public class PriceService {
     // 그 테이블은 PSA/CGC 같은 공인 등급만 있고 우리 자체 S등급 데이터가 없다(getStats와 동일한 이유).
     public List<PriceRankingResponse> getRanking(String type) {
         RankingType rankingType = RankingType.from(type);
+        // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("price.ranking.requests", "type", rankingType.name()).increment();
 
         LocalDateTime recentFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS);
         LocalDateTime previousFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS * 2L);
