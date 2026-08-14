@@ -88,7 +88,11 @@ class WatchlistRepositoryTest {
 
         List<Watchlist> found = watchlistRepository.findByIsNotifiedFalse();
 
-        assertThat(found).extracting(Watchlist::getId).containsExactly(unnotified.getId());
+        // 전역 조회라 다른 테스트/기존 데이터의 미알림 워치리스트가 섞여 있을 수 있어, "정확히 이 목록만"이
+        // 아니라 "이 테스트가 만든 미알림 항목은 포함되고, 알림 완료 항목은 제외되는지"만 검증한다.
+        assertThat(found).extracting(Watchlist::getId)
+                .contains(unnotified.getId())
+                .doesNotContain(notified.getId());
     }
 
     @Test
