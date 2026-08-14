@@ -23,6 +23,10 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.web.PageableValidator;
 
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,6 +39,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 @RequiredArgsConstructor
@@ -61,6 +66,13 @@ public class CardService {
     private final ExpansionRepository expansionRepository;
     private final CardNameKoResolver cardNameKoResolver;
 
+    // Actuator/Prometheus 로컬 실험용 계측 - 커밋 대상 아님.
+    // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
+    @Autowired
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+
+    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+    @Timed(value = "card.search.duration")
     @Transactional(readOnly = true)
     public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
@@ -79,6 +91,8 @@ public class CardService {
         Card card = cardRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
         cardRepository.incrementViewCount(id);
+        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("card.view.increment.calls").increment();
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
         Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id, GRADE_WHITELIST_LIST),
                 CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade);
@@ -95,6 +109,8 @@ public class CardService {
         return result;
     }
 
+    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+    @Timed(value = "card.search.keyword.duration")
     @Transactional(readOnly = true)
     public Page<CardResponse> searchByKeyword(String q, Pageable pageable) {
         if (q == null || q.isBlank()) {
@@ -175,6 +191,8 @@ public class CardService {
         if (cards.isEmpty()) {
             return Map.of();
         }
+        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("card.grade.batch.calls").increment();
         List<Long> cardIds = cards.stream().map(Card::getId).toList();
         return groupByKey(cardRepository.findGradesByCardIds(cardIds, GRADE_WHITELIST_LIST),
                 CardRepository.CardGradeView::getCardId, CardRepository.CardGradeView::getGrade);

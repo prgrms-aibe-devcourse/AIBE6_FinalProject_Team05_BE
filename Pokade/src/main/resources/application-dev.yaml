@@ -46,6 +46,13 @@ spring:
 sync:
   enabled: false
 
+# Actuator/Prometheus 로컬 실험용 - 커밋 대상 아님
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+
 scrydex:
   api-key: ${SCRYDEX_API_KEY:}
   team-id: ${SCRYDEX_TEAM_ID:}

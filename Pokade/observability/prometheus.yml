@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+
+scrape_configs:
+  - job_name: pokade-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # host.docker.internal: Docker Desktop(Windows/Mac)에서 컨테이너가 호스트에서 실행 중인
+      # ./gradlew bootRun 앱(기본 포트 8080)에 접근하기 위한 특수 DNS 이름.
+      - targets: ["host.docker.internal:8080"]
