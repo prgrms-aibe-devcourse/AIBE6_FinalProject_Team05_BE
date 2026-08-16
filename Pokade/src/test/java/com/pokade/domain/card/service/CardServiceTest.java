@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -740,6 +741,74 @@ class CardServiceTest {
         CardFacetsResponse result = cardService.getFacets();
 
         assertThat(result.rarities()).containsExactlyInAnyOrder("Common", "프로모");
+    }
+
+    @Test
+    @DisplayName("t53 series가 있는 expansion은 series 값이 그대로 Facet에 노출된다")
+    void t53() {
+        Expansion expansion = Expansion.builder().id("sv3pt5").name("151")
+                .series("Scarlet & Violet").syncedAt(LocalDateTime.now()).build();
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(expansionRepository.findAll()).willReturn(List.of(expansion));
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.expansions().get(0).series()).isEqualTo("Scarlet & Violet");
+    }
+
+    @Test
+    @DisplayName("t54 series가 null인 expansion은 \"기타\" 그룹으로 노출된다")
+    void t54() {
+        Expansion expansion = Expansion.builder().id("legacy1").name("Legacy")
+                .series(null).syncedAt(LocalDateTime.now()).build();
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(expansionRepository.findAll()).willReturn(List.of(expansion));
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.expansions().get(0).series()).isEqualTo("기타");
+    }
+
+    @Test
+    @DisplayName("t55 series 그룹은 그룹 내 최신 release_date 기준 내림차순으로, 그룹 내에서는 이름순으로 정렬된다")
+    void t55() {
+        // Old Series의 최신 release_date(2016)보다 New Series의 release_date(2020)가 더 최신이므로
+        // New Series 그룹 전체가 앞에 와야 한다.
+        Expansion oldSeriesNewer = Expansion.builder().id("old2").name("Old B")
+                .series("Old Series").releaseDate(LocalDate.of(2016, 1, 1)).syncedAt(LocalDateTime.now()).build();
+        Expansion oldSeriesOlder = Expansion.builder().id("old1").name("Old A")
+                .series("Old Series").releaseDate(LocalDate.of(2015, 1, 1)).syncedAt(LocalDateTime.now()).build();
+        Expansion newSeries = Expansion.builder().id("new1").name("New A")
+                .series("New Series").releaseDate(LocalDate.of(2020, 1, 1)).syncedAt(LocalDateTime.now()).build();
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(expansionRepository.findAll()).willReturn(List.of(oldSeriesNewer, oldSeriesOlder, newSeries));
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.expansions())
+                .extracting(CardFacetsResponse.ExpansionFacet::name)
+                .containsExactly("New A", "Old A", "Old B");
+    }
+
+    @Test
+    @DisplayName("t56 release_date가 전부 null인 series는 가장 오래된 것으로 취급돼 맨 뒤로 정렬된다")
+    void t56() {
+        Expansion noDateSeries = Expansion.builder().id("nodate1").name("No Date")
+                .series("Unknown Timing").syncedAt(LocalDateTime.now()).build();
+        Expansion datedSeries = Expansion.builder().id("dated1").name("Dated")
+                .series("Dated Series").releaseDate(LocalDate.of(1999, 1, 1)).syncedAt(LocalDateTime.now()).build();
+        given(cardRepository.findDistinctTypes()).willReturn(List.of());
+        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(expansionRepository.findAll()).willReturn(List.of(noDateSeries, datedSeries));
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.expansions())
+                .extracting(CardFacetsResponse.ExpansionFacet::name)
+                .containsExactly("Dated", "No Date");
     }
 
     private CardRepository.CardRarityView rarityView(String rarityCode, String rarity) {

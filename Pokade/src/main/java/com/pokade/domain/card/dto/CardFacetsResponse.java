@@ -8,7 +8,7 @@ public record CardFacetsResponse(
         List<ExpansionFacet> expansions
 ) {
 
-    public record ExpansionFacet(String id, String name) {
+    public record ExpansionFacet(String id, String name, String series) {
     }
 
     public static CardFacetsResponse of(List<String> types, List<String> rarities, List<ExpansionFacet> expansions) {

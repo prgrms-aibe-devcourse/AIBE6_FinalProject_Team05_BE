@@ -4,6 +4,7 @@ import com.pokade.domain.notification.dto.NotificationResponse;
 import com.pokade.domain.notification.entity.Notification;
 import com.pokade.domain.notification.entity.NotificationType;
 import com.pokade.domain.notification.repository.NotificationRepository;
+import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
@@ -15,19 +16,28 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
 
     @Mock NotificationRepository notificationRepository;
+    @Mock SseEmitterStore sseEmitterStore;
     @InjectMocks NotificationService notificationService;
 
     private Notification notification(Long userId) {
@@ -147,5 +157,87 @@ class NotificationServiceTest {
         assertThat(captor.getValue().getMessage())
                 .contains("100,000")
                 .contains("구매");
+    }
+
+    @Test
+    @DisplayName("목표가 도달 알림 생성: 구독 중인 Emitter가 있으면 notification 이벤트를 전송한다")
+    void createPriceTargetNotification_pushes_to_subscriber() throws Exception {
+        Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
+        SseEmitter emitter = mock(SseEmitter.class);
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
+
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000);
+
+        then(emitter).should().send(any(SseEmitter.SseEventBuilder.class));
+    }
+
+    @Test
+    @DisplayName("목표가 도달 알림 생성: 구독 중인 Emitter가 없으면 예외 없이 조용히 스킵된다")
+    void createPriceTargetNotification_no_subscriber_noop() {
+        Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of());
+
+        assertThatCode(() -> notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("목표가 도달 알림 생성: 전송 중 IOException이 발생하면 Emitter를 종료 처리한다")
+    void createPriceTargetNotification_send_fails_completesWithError() throws Exception {
+        Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
+        SseEmitter emitter = mock(SseEmitter.class);
+        doThrow(new IOException("broken pipe")).when(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
+
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000);
+
+        then(emitter).should().completeWithError(any(IOException.class));
+    }
+
+    // ===== SSE 구독 =====
+    @Test
+    @DisplayName("subscribe: Emitter를 생성해 저장소에 등록하고 반환한다")
+    void subscribe_registers_emitter() {
+        SseEmitter emitter = notificationService.subscribe(1L);
+
+        assertThat(emitter).isNotNull();
+        then(sseEmitterStore).should().save(eq(1L), eq(emitter));
+    }
+
+    // ===== 하트비트 =====
+    @Test
+    @DisplayName("sendHeartbeat: 등록된 모든 Emitter에 comment 이벤트를 보낸다")
+    void sendHeartbeat_sends_to_every_emitter() throws Exception {
+        SseEmitter first = mock(SseEmitter.class);
+        SseEmitter second = mock(SseEmitter.class);
+        given(sseEmitterStore.findAll()).willReturn(List.of(first, second));
+
+        notificationService.sendHeartbeat();
+
+        then(first).should().send(any(SseEmitter.SseEventBuilder.class));
+        then(second).should().send(any(SseEmitter.SseEventBuilder.class));
+    }
+
+    @Test
+    @DisplayName("sendHeartbeat: 하나의 Emitter 전송이 실패해도 나머지 Emitter는 정상 전송된다")
+    void sendHeartbeat_one_failure_does_not_block_others() throws Exception {
+        SseEmitter failing = mock(SseEmitter.class);
+        SseEmitter healthy = mock(SseEmitter.class);
+        doThrow(new IOException("broken pipe")).when(failing).send(any(SseEmitter.SseEventBuilder.class));
+        given(sseEmitterStore.findAll()).willReturn(List.of(failing, healthy));
+
+        assertThatCode(() -> notificationService.sendHeartbeat()).doesNotThrowAnyException();
+
+        then(failing).should().completeWithError(any(IOException.class));
+        then(healthy).should().send(any(SseEmitter.SseEventBuilder.class));
+        then(healthy).should(never()).completeWithError(any());
+    }
+
+    @Test
+    @DisplayName("sendHeartbeat: 등록된 Emitter가 없으면 예외 없이 조용히 끝난다")
+    void sendHeartbeat_no_subscribers_noop() {
+        given(sseEmitterStore.findAll()).willReturn(List.of());
+
+        assertThatCode(() -> notificationService.sendHeartbeat()).doesNotThrowAnyException();
     }
 }

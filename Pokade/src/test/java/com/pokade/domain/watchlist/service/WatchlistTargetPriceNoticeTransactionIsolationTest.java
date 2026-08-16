@@ -37,7 +37,8 @@ import static org.mockito.BDDMockito.given;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({WatchlistTargetPriceNoticeService.class, WatchlistTargetPriceNoticeProcessor.class,
-        WatchlistService.class, com.pokade.domain.notification.service.NotificationService.class})
+        WatchlistService.class, com.pokade.domain.notification.service.NotificationService.class,
+        com.pokade.domain.notification.store.SseEmitterStore.class})
 class WatchlistTargetPriceNoticeTransactionIsolationTest {
 
     @Autowired
