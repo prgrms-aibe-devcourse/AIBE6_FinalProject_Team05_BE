@@ -1,5 +1,6 @@
 package com.pokade.domain.user.controller;
 
+import com.pokade.domain.user.dto.response.MyProfileResponse;
 import com.pokade.domain.user.dto.response.PublicProfileResponse;
 import com.pokade.domain.user.dto.response.UserResponse;
 import com.pokade.domain.user.entity.type.Provider;
@@ -31,6 +32,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.hamcrest.Matchers.nullValue;
@@ -45,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(UserController.class)
 @AutoConfigureMockMvc
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, JwtAuthenticationEntryPoint.class}) // 401 계약을 검증하려면 실물 엔트리포인트가 필요
 class UserControllerTest {
 
     @Autowired
@@ -55,8 +58,6 @@ class UserControllerTest {
     private UserService userService;
     @MockitoBean
     private JwtTokenProvider jwtTokenProvider;                 // 실제 JwtAuthenticationFilter가 요구
-    @MockitoBean
-    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint; // SecurityConfig가 요구
     @MockitoBean
     private TokenBlacklistStore tokenBlacklistStore;                 // JwtAuthenticationFilter가 요구
     @MockitoBean
@@ -109,12 +110,33 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }
 
+    @Test
+    @DisplayName("인증된 사용자가 내 프로필 상세를 조회하면 200과 상세 필드를 반환한다")
+    void getMyProfile_success() throws Exception {
+        MyProfileResponse res = new MyProfileResponse(
+                "user@pokade.com", "010-1234-5678", Provider.GOOGLE, true,
+                LocalDateTime.of(2026, 1, 2, 3, 4), LocalDate.of(1998, 7, 15));
+        given(profileService.getMyProfile(1L)).willReturn(res);
+
+        mockMvc.perform(get("/api/users/me/profile").with(userId(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.email").value("user@pokade.com"))
+                .andExpect(jsonPath("$.data.phoneNumber").value("010-1234-5678"))
+                .andExpect(jsonPath("$.data.provider").value("GOOGLE"))
+                .andExpect(jsonPath("$.data.socialLinked").value(true))
+                .andExpect(jsonPath("$.data.birthDate").value("1998-07-15"));
+
+        then(profileService).should().getMyProfile(1L);
+    }
+
     // ===== 인가 회귀: 공개 프로필을 열면서 /me 까지 열리지 않았는지 =====
 
     @Test
-    @DisplayName("인가: 토큰 없이 GET /api/users/me 는 컨트롤러까지 도달하지 못한다")
+    @DisplayName("인가: 토큰 없이 GET /api/users/me 는 401이고 컨트롤러까지 도달하지 못한다")
     void getMyInfo_withoutToken_blocked() throws Exception {
-        mockMvc.perform(get("/api/users/me"));
+        mockMvc.perform(get("/api/users/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
 
         then(userService).should(never()).getMyInfo(any());
     }
