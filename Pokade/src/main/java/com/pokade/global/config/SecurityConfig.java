@@ -77,7 +77,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/chat/query").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/chat/quick-questions").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.GET,"/api/users/\\d+")).permitAll()
+                        .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.GET, "/api/users/\\d+(\\?.*)?")).permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
