@@ -10,6 +10,7 @@ import com.pokade.domain.card.dto.CardFacetsResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
+import com.pokade.domain.card.entity.Expansion;
 import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
@@ -27,6 +28,7 @@ import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -37,6 +39,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -172,6 +175,9 @@ public class CardService {
                 CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()));
     }
 
+    // series가 없는(null) 세트를 묶는 그룹 라벨 - FE 아코디언에서 "기타" 그룹으로 표시된다.
+    private static final String UNKNOWN_SERIES_LABEL = "기타";
+
     /**
      * 카드 필터 옵션(타입/레어도/세트)을 DB에 실제로 존재하는 값 기준으로 조회한다.
      * types/rarity_code는 원본이 다국어로 혼재돼 있어 리졸버 적용 후 표준명 기준으로 중복 제거한다
@@ -190,15 +196,38 @@ public class CardService {
                 rarities.add(resolvedRarity);
             }
         }
-        // expansions.name이 NULL인 레거시/수동 적재 데이터가 있을 수 있어, FE 응답 스키마(name: string,
-        // non-null)를 깨지 않도록 빈 문자열로 대체하고 정렬도 null-safe하게 처리한다.
-        List<CardFacetsResponse.ExpansionFacet> expansions = expansionRepository.findAll().stream()
-                .map(expansion -> new CardFacetsResponse.ExpansionFacet(
-                        expansion.getId(), Objects.requireNonNullElse(expansion.getName(), "")))
-                .sorted(Comparator.comparing(CardFacetsResponse.ExpansionFacet::name,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
+        List<CardFacetsResponse.ExpansionFacet> expansions = buildExpansionFacets();
         return CardFacetsResponse.of(List.copyOf(types), List.copyOf(rarities), expansions);
+    }
+
+    // expansions.name/series가 NULL인 레거시/수동 적재 데이터가 있을 수 있어, FE 응답 스키마(non-null)를
+    // 깨지 않도록 각각 빈 문자열/"기타"로 대체한다. FE가 series로 묶어 아코디언 렌더링을 하기 편하도록,
+    // 목록 자체를 "series 그룹의 최신 발매일(release_date) 내림차순 -> 그룹 내 세트명 오름차순"으로 정렬해
+    // 반환한다(같은 series가 여러 해에 걸쳐 발매될 수 있어 그룹의 대표값은 MIN이 아닌 MAX release_date를 쓴다.
+    // release_date가 전부 NULL인 series는 가장 오래된 것으로 취급해 뒤로 보낸다).
+    private List<CardFacetsResponse.ExpansionFacet> buildExpansionFacets() {
+        List<Expansion> allExpansions = expansionRepository.findAll();
+
+        Map<String, LocalDate> latestReleaseBySeries = allExpansions.stream()
+                .collect(Collectors.groupingBy(
+                        expansion -> Objects.requireNonNullElse(expansion.getSeries(), UNKNOWN_SERIES_LABEL),
+                        Collectors.mapping(Expansion::getReleaseDate,
+                                Collectors.collectingAndThen(Collectors.toList(), dates -> dates.stream()
+                                        .filter(Objects::nonNull)
+                                        .max(Comparator.naturalOrder())
+                                        .orElse(LocalDate.MIN)))));
+
+        return allExpansions.stream()
+                .map(expansion -> new CardFacetsResponse.ExpansionFacet(
+                        expansion.getId(),
+                        Objects.requireNonNullElse(expansion.getName(), ""),
+                        Objects.requireNonNullElse(expansion.getSeries(), UNKNOWN_SERIES_LABEL)))
+                .sorted(Comparator
+                        .comparing((CardFacetsResponse.ExpansionFacet facet) -> latestReleaseBySeries.get(facet.series()))
+                        .reversed()
+                        .thenComparing(CardFacetsResponse.ExpansionFacet::name,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
     }
 
     private Map<Long, List<String>> fetchGradesByCardIds(List<Card> cards) {
