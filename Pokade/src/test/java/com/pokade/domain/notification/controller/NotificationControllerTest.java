@@ -14,6 +14,7 @@ import com.pokade.global.security.oauth.CustomOAuth2UserService;
 import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
 import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
 import com.pokade.global.security.oauth.RedisAuthorizationRequestRepository;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -25,19 +26,24 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(NotificationController.class)
@@ -122,5 +128,33 @@ class NotificationControllerTest {
         mockMvc.perform(patch("/api/notifications/1/read").with(userId(100L)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("NOTIFICATION_ALREADY_READ"));
+    }
+
+    @Test
+    void SSE_구독_요청은_비동기로_시작된다() throws Exception {
+        given(notificationService.subscribe(100L)).willReturn(new SseEmitter());
+
+        mockMvc.perform(get("/api/notifications/subscribe").with(userId(100L)))
+                .andExpect(request().asyncStarted())
+                .andExpect(status().isOk());
+
+        then(notificationService).should().subscribe(100L);
+    }
+
+    @Test
+    void 인증되지_않은_SSE_구독_요청은_401을_반환한다() throws Exception {
+        // 이 테스트 슬라이스의 jwtAuthenticationEntryPoint는 별도 스텁이 없으면 응답 상태를 건드리지 않아
+        // 기본값(200)이 나온다. anyRequest().authenticated() 규칙이 실제로 이 경로를 막는지 검증하려면
+        // 진입점이 401을 쓰도록 이 테스트에서만 동작을 지정한다.
+        willAnswer(invocation -> {
+            HttpServletResponse response = invocation.getArgument(1);
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return null;
+        }).given(jwtAuthenticationEntryPoint).commence(any(), any(), any());
+
+        mockMvc.perform(get("/api/notifications/subscribe"))
+                .andExpect(status().isUnauthorized());
+
+        then(notificationService).should(never()).subscribe(any());
     }
 }
