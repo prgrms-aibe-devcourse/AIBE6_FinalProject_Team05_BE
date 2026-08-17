@@ -46,14 +46,22 @@ public class AdminMetricsService {
                             + "/ sum(increase(http_server_requests_seconds_count[24h])) * 1000", "ms")
     );
 
+    // group: 같은 group끼리는 한 차트에 겹쳐 그릴 수 있다는 뜻(FE가 이 값으로 묶는다) - 단위/스케일이
+    // 다른 지표(%, ms)를 개수(회/건)와 한 차트에 억지로 합치면 서로 안 보이게 되므로 그룹을 분리한다.
     private static final List<SeriesDefinition> SERIES = List.of(
-            new SeriesDefinition("visits", "방문 수", "increase(site_visits_total[1h])", "회"),
+            new SeriesDefinition("visits", "방문 수", "increase(site_visits_total[1h])", "회", "activity"),
             new SeriesDefinition("aiGrade", "AI 진단 사용 수",
                     "sum(increase(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
-                            + "\",method=\"POST\",status=\"200\"}[1h]))", "회"),
+                            + "\",method=\"POST\",status=\"200\"}[1h]))", "회", "activity"),
             new SeriesDefinition("tradesConfirmed", "거래 확정 수",
                     "sum(increase(http_server_requests_seconds_count{uri=\"" + TRADE_CONFIRM_URI
-                            + "\",method=\"PATCH\",status=\"200\"}[1h]))", "건")
+                            + "\",method=\"PATCH\",status=\"200\"}[1h]))", "건", "activity"),
+            new SeriesDefinition("httpErrorRate", "HTTP 5xx 에러율",
+                    "(sum(increase(http_server_requests_seconds_count{status=~\"5..\"}[1h])) or vector(0)) "
+                            + "/ sum(increase(http_server_requests_seconds_count[1h])) * 100", "%", "errorRate"),
+            new SeriesDefinition("avgLatency", "평균 응답 지연",
+                    "sum(increase(http_server_requests_seconds_sum[1h])) "
+                            + "/ sum(increase(http_server_requests_seconds_count[1h])) * 1000", "ms", "latency")
     );
 
     private final PrometheusClient prometheusClient;
@@ -84,7 +92,7 @@ public class AdminMetricsService {
             log.warn("Prometheus 시계열 조회 실패: key={}, promql={}", def.key(), def.promql(), e);
             points = List.of();
         }
-        return new AdminMetricSeriesResponse(def.key(), def.label(), def.unit(), points);
+        return new AdminMetricSeriesResponse(def.key(), def.label(), def.unit(), def.group(), points);
     }
 
     private Double safeQueryScalar(String promql) {
@@ -103,6 +111,6 @@ public class AdminMetricsService {
         }
     }
 
-    private record SeriesDefinition(String key, String label, String promql, String unit) {
+    private record SeriesDefinition(String key, String label, String promql, String unit, String group) {
     }
 }

@@ -37,6 +37,13 @@ class AdminMetricsServiceTest {
 
         assertThat(response.cards()).isNotEmpty();
         assertThat(response.cards()).allSatisfy(card -> assertThat(card.value()).isEqualTo(42.0));
+        assertThat(response.cards())
+                .filteredOn(card -> card.key().equals("totalVisits"))
+                .singleElement()
+                .satisfies(card -> {
+                    assertThat(card.subLabel()).isEqualTo("오늘 증가");
+                    assertThat(card.subValue()).isEqualTo(42.0);
+                });
         assertThat(response.series()).isNotEmpty();
         assertThat(response.series().get(0).points()).containsExactly(
                 new com.pokade.domain.admin.metrics.dto.AdminMetricSeriesResponse.Point(1000L, 3.0));
@@ -67,5 +74,9 @@ class AdminMetricsServiceTest {
         AdminDashboardResponse response = adminMetricsService.getDashboard();
 
         assertThat(response.cards()).allSatisfy(card -> assertThat(card.value()).isNull());
+        assertThat(response.cards())
+                .filteredOn(card -> card.key().equals("totalVisits"))
+                .singleElement()
+                .satisfies(card -> assertThat(card.subValue()).isNull());
     }
 }

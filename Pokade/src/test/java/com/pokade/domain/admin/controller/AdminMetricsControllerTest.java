@@ -75,14 +75,16 @@ class AdminMetricsControllerTest {
     @Test
     void 관리자가_대시보드를_조회하면_200과_카드_시리즈를_반환한다() throws Exception {
         AdminDashboardResponse response = new AdminDashboardResponse(
-                List.of(new AdminMetricCardResponse("priceChartRequests", "시세 차트 조회 수", 42.0, "회")),
+                List.of(new AdminMetricCardResponse("totalVisits", "총 방문자 수", 128540.0, "명", "오늘 증가", 42.0)),
                 List.of());
         given(adminMetricsService.getDashboard()).willReturn(response);
 
         mockMvc.perform(get("/api/admin/metrics/dashboard").with(admin()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.cards[0].key").value("priceChartRequests"))
-                .andExpect(jsonPath("$.data.cards[0].value").value(42.0));
+                .andExpect(jsonPath("$.data.cards[0].key").value("totalVisits"))
+                .andExpect(jsonPath("$.data.cards[0].value").value(128540.0))
+                .andExpect(jsonPath("$.data.cards[0].subLabel").value("오늘 증가"))
+                .andExpect(jsonPath("$.data.cards[0].subValue").value(42.0));
     }
 
     @Test
