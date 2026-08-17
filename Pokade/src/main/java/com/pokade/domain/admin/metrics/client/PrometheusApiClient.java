@@ -1,0 +1,86 @@
+package com.pokade.domain.admin.metrics.client;
+
+import com.pokade.domain.admin.metrics.client.dto.PrometheusQueryResponse;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+
+import java.util.List;
+import java.util.Optional;
+
+@Component
+public class PrometheusApiClient implements PrometheusClient {
+
+    private final RestClient restClient;
+
+    public PrometheusApiClient(PrometheusProperties properties) {
+        this.restClient = RestClient.builder().baseUrl(properties.baseUrl()).build();
+    }
+
+    @Override
+    public Optional<Double> queryScalar(String promql) {
+        PrometheusQueryResponse response = restClient.get()
+                .uri(uriBuilder -> uriBuilder.path("/api/v1/query").queryParam("query", promql).build())
+                .retrieve()
+                .body(PrometheusQueryResponse.class);
+
+        return firstResult(response)
+                .map(PrometheusQueryResponse.Result::value)
+                .flatMap(PrometheusApiClient::parseValueAt1);
+    }
+
+    @Override
+    public List<PrometheusPoint> queryRange(String promql, long startEpochSeconds, long endEpochSeconds, String step) {
+        PrometheusQueryResponse response = restClient.get()
+                .uri(uriBuilder -> uriBuilder.path("/api/v1/query_range")
+                        .queryParam("query", promql)
+                        .queryParam("start", startEpochSeconds)
+                        .queryParam("end", endEpochSeconds)
+                        .queryParam("step", step)
+                        .build())
+                .retrieve()
+                .body(PrometheusQueryResponse.class);
+
+        return firstResult(response)
+                .map(PrometheusQueryResponse.Result::values)
+                .map(values -> values.stream()
+                        .map(PrometheusApiClient::parsePoint)
+                        .flatMap(Optional::stream)
+                        .toList())
+                .orElseGet(List::of);
+    }
+
+    // 여러 시리즈(라벨 조합)가 나올 수 있지만, 우리는 항상 sum(...) 등으로 하나로 합쳐서 쿼리하므로 첫 번째만 쓴다.
+    private static Optional<PrometheusQueryResponse.Result> firstResult(PrometheusQueryResponse response) {
+        if (response == null || response.data() == null || response.data().result() == null
+                || response.data().result().isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(response.data().result().get(0));
+    }
+
+    // Prometheus의 [timestamp, "value"] 쌍에서 인덱스 1(값)만 파싱한다. instant/range 공통 포맷.
+    private static Optional<Double> parseValueAt1(List<Object> pair) {
+        if (pair == null || pair.size() < 2) {
+            return Optional.empty();
+        }
+        return parseNumber(String.valueOf(pair.get(1)));
+    }
+
+    private static Optional<PrometheusPoint> parsePoint(List<Object> pair) {
+        if (pair == null || pair.size() < 2) {
+            return Optional.empty();
+        }
+        long epochSeconds = (long) Double.parseDouble(String.valueOf(pair.get(0)));
+        return parseNumber(String.valueOf(pair.get(1))).map(v -> new PrometheusPoint(epochSeconds, v));
+    }
+
+    // 데이터가 없는 구간은 값이 "NaN"으로 내려온다 - 0이 아니라 결측치이므로 스킵한다.
+    private static Optional<Double> parseNumber(String raw) {
+        try {
+            double value = Double.parseDouble(raw);
+            return Double.isNaN(value) ? Optional.empty() : Optional.of(value);
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+}
