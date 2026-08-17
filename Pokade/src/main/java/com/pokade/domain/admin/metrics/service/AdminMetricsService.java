@@ -19,9 +19,12 @@ import java.util.List;
 public class AdminMetricsService {
 
     // Spring Boot가 자동 계측하는 http_server_requests_seconds_*의 uri 태그는 실제 경로가 아니라
-    // 매핑 패턴 그대로("{id}" 포함) 찍힌다 - AiGradeController/TradeController의 @*Mapping 값과 동일해야 매칭된다.
-    private static final String AI_GRADE_URI = "/api/ai/grade";
-    private static final String TRADE_CONFIRM_URI = "/api/trades/{id}/confirm";
+    // 매핑 패턴 그대로("{id}" 포함) 찍힌다 - AiGradeController/TradeController의 @*Mapping 값과 동일해야
+    // 매칭된다. 컨트롤러 쪽 경로가 바뀌면 여기는 컴파일 에러 없이 그냥 조용히 0을 반환하게 되므로,
+    // ControllerMappingAssertionTest가 리플렉션으로 두 상수가 실제 매핑과 일치하는지 검증한다 - 그래서
+    // package-private(테스트 접근용)으로 둔다.
+    static final String AI_GRADE_URI = "/api/ai/grade";
+    static final String TRADE_CONFIRM_URI = "/api/trades/{id}/confirm";
 
     // 새 지표를 추가하려면: (필요 시) 서비스 코드에 Micrometer로 계측 후, 여기에 정의 한 줄만 추가하면 된다.
     // AI 진단/거래 확정처럼 이미 자동 계측되는 http_server_requests_seconds_count를 uri로 필터링해 쓰면
@@ -30,12 +33,16 @@ public class AdminMetricsService {
             // 카운터 원값 자체가 "누적" - 마지막 BE 재시작 이후로 쌓인 합계다(재시작 시 0으로 리셋됨).
             new CardDefinition("totalVisits", "총 방문자 수", "site_visits_total", "명",
                     "오늘 증가", "increase(site_visits_total[24h])"),
-            new CardDefinition("aiGradeToday", "오늘 AI 등급진단 사용 수",
-                    "sum(increase(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
-                            + "\",method=\"POST\",status=\"200\"}[24h]))", "회"),
-            new CardDefinition("tradesConfirmedToday", "오늘 거래 확정 수",
-                    "sum(increase(http_server_requests_seconds_count{uri=\"" + TRADE_CONFIRM_URI
-                            + "\",method=\"PATCH\",status=\"200\"}[24h]))", "건"),
+            new CardDefinition("aiGradeTotal", "AI 등급진단 총 사용 수",
+                    "sum(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
+                            + "\",method=\"POST\",status=\"200\"})", "회",
+                    "오늘 증가", "sum(increase(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
+                            + "\",method=\"POST\",status=\"200\"}[24h]))"),
+            new CardDefinition("tradesConfirmedTotal", "거래 확정 총 건수",
+                    "sum(http_server_requests_seconds_count{uri=\"" + TRADE_CONFIRM_URI
+                            + "\",method=\"PATCH\",status=\"200\"})", "건",
+                    "오늘 증가", "sum(increase(http_server_requests_seconds_count{uri=\"" + TRADE_CONFIRM_URI
+                            + "\",method=\"PATCH\",status=\"200\"}[24h]))"),
             new CardDefinition("httpErrorRate24h", "HTTP 5xx 에러율(24h)",
                     "(sum(increase(http_server_requests_seconds_count{status=~\"5..\"}[24h])) or vector(0)) "
                             + "/ sum(increase(http_server_requests_seconds_count[24h])) * 100", "%"),

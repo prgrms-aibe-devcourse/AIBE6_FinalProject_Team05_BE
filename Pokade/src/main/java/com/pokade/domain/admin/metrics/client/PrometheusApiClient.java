@@ -16,17 +16,14 @@ public class PrometheusApiClient implements PrometheusClient {
     private final RestClient restClient;
     private final String baseUrl;
 
-    public PrometheusApiClient(PrometheusProperties properties) {
+    public PrometheusApiClient(RestClient.Builder restClientBuilder, PrometheusProperties properties) {
         this.baseUrl = properties.baseUrl();
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+        this.restClient = restClientBuilder.baseUrl(baseUrl).build();
     }
 
     @Override
     public Optional<Double> queryScalar(String promql) {
-        // PromQL은 라벨 매처에 { }를 쓰는데, RestClient의 uriBuilder(Function<UriBuilder,URI>) 경로는
-        // 쿼리 파라미터 값 안의 {}도 URI 템플릿 변수로 취급해 깨진다 - URLEncoder로 직접 인코딩한
-        // 완성된 URI를 넘겨 템플릿 해석 자체를 우회한다.
-        URI uri = URI.create(baseUrl + "/api/v1/query?query=" + encode(promql));
+        URI uri = buildQueryUri(baseUrl, promql);
         PrometheusQueryResponse response = restClient.get().uri(uri).retrieve().body(PrometheusQueryResponse.class);
 
         return firstResult(response)
@@ -36,8 +33,7 @@ public class PrometheusApiClient implements PrometheusClient {
 
     @Override
     public List<PrometheusPoint> queryRange(String promql, long startEpochSeconds, long endEpochSeconds, String step) {
-        URI uri = URI.create(baseUrl + "/api/v1/query_range?query=" + encode(promql)
-                + "&start=" + startEpochSeconds + "&end=" + endEpochSeconds + "&step=" + encode(step));
+        URI uri = buildQueryRangeUri(baseUrl, promql, startEpochSeconds, endEpochSeconds, step);
         PrometheusQueryResponse response = restClient.get().uri(uri).retrieve().body(PrometheusQueryResponse.class);
 
         return firstResult(response)
@@ -47,6 +43,19 @@ public class PrometheusApiClient implements PrometheusClient {
                         .flatMap(Optional::stream)
                         .toList())
                 .orElseGet(List::of);
+    }
+
+    // PromQL은 라벨 매처에 { }를 쓰는데, RestClient의 uriBuilder(Function<UriBuilder,URI>) 경로는 쿼리
+    // 파라미터 값 안의 {}도 URI 템플릿 변수로 취급해 깨진다 - URLEncoder로 직접 인코딩한 완성된 URI를
+    // 넘겨 템플릿 해석 자체를 우회한다. package-private + static인 이유: 실제 HTTP 호출 없이 이 인코딩
+    // 자체를 단위 테스트로 검증하기 위함(PrometheusApiClientTest 참고).
+    static URI buildQueryUri(String baseUrl, String promql) {
+        return URI.create(baseUrl + "/api/v1/query?query=" + encode(promql));
+    }
+
+    static URI buildQueryRangeUri(String baseUrl, String promql, long startEpochSeconds, long endEpochSeconds, String step) {
+        return URI.create(baseUrl + "/api/v1/query_range?query=" + encode(promql)
+                + "&start=" + startEpochSeconds + "&end=" + endEpochSeconds + "&step=" + encode(step));
     }
 
     private static String encode(String value) {
