@@ -4,6 +4,9 @@ import com.pokade.domain.admin.metrics.client.dto.PrometheusQueryResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 
@@ -11,17 +14,20 @@ import java.util.Optional;
 public class PrometheusApiClient implements PrometheusClient {
 
     private final RestClient restClient;
+    private final String baseUrl;
 
     public PrometheusApiClient(PrometheusProperties properties) {
-        this.restClient = RestClient.builder().baseUrl(properties.baseUrl()).build();
+        this.baseUrl = properties.baseUrl();
+        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
     }
 
     @Override
     public Optional<Double> queryScalar(String promql) {
-        PrometheusQueryResponse response = restClient.get()
-                .uri(uriBuilder -> uriBuilder.path("/api/v1/query").queryParam("query", promql).build())
-                .retrieve()
-                .body(PrometheusQueryResponse.class);
+        // PromQL은 라벨 매처에 { }를 쓰는데, RestClient의 uriBuilder(Function<UriBuilder,URI>) 경로는
+        // 쿼리 파라미터 값 안의 {}도 URI 템플릿 변수로 취급해 깨진다 - URLEncoder로 직접 인코딩한
+        // 완성된 URI를 넘겨 템플릿 해석 자체를 우회한다.
+        URI uri = URI.create(baseUrl + "/api/v1/query?query=" + encode(promql));
+        PrometheusQueryResponse response = restClient.get().uri(uri).retrieve().body(PrometheusQueryResponse.class);
 
         return firstResult(response)
                 .map(PrometheusQueryResponse.Result::value)
@@ -30,15 +36,9 @@ public class PrometheusApiClient implements PrometheusClient {
 
     @Override
     public List<PrometheusPoint> queryRange(String promql, long startEpochSeconds, long endEpochSeconds, String step) {
-        PrometheusQueryResponse response = restClient.get()
-                .uri(uriBuilder -> uriBuilder.path("/api/v1/query_range")
-                        .queryParam("query", promql)
-                        .queryParam("start", startEpochSeconds)
-                        .queryParam("end", endEpochSeconds)
-                        .queryParam("step", step)
-                        .build())
-                .retrieve()
-                .body(PrometheusQueryResponse.class);
+        URI uri = URI.create(baseUrl + "/api/v1/query_range?query=" + encode(promql)
+                + "&start=" + startEpochSeconds + "&end=" + endEpochSeconds + "&step=" + encode(step));
+        PrometheusQueryResponse response = restClient.get().uri(uri).retrieve().body(PrometheusQueryResponse.class);
 
         return firstResult(response)
                 .map(PrometheusQueryResponse.Result::values)
@@ -47,6 +47,10 @@ public class PrometheusApiClient implements PrometheusClient {
                         .flatMap(Optional::stream)
                         .toList())
                 .orElseGet(List::of);
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     // 여러 시리즈(라벨 조합)가 나올 수 있지만, 우리는 항상 sum(...) 등으로 하나로 합쳐서 쿼리하므로 첫 번째만 쓴다.
