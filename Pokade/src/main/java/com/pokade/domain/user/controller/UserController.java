@@ -3,7 +3,10 @@ package com.pokade.domain.user.controller;
 import com.pokade.domain.user.dto.request.NicknameUpdateRequest;
 import com.pokade.domain.user.dto.request.PasswordUpdateRequest;
 import com.pokade.domain.user.dto.request.WithdrawalRequest;
+import com.pokade.domain.user.dto.response.MyProfileResponse;
+import com.pokade.domain.user.dto.response.PublicProfileResponse;
 import com.pokade.domain.user.dto.response.UserResponse;
+import com.pokade.domain.user.service.ProfileService;
 import com.pokade.domain.user.service.UserService;
 import com.pokade.domain.user.service.WithdrawalService;
 import com.pokade.global.response.ApiResponse;
@@ -19,10 +22,21 @@ public class UserController {
 
     private final UserService userService;
     private final WithdrawalService withdrawalService;
+    private final ProfileService profileService;
 
     @GetMapping("/me")
     public ApiResponse<UserResponse> getMyInfo(@AuthenticationPrincipal Long userId) {
         return ApiResponse.ok("내 정보 조회 성공", userService.getMyInfo(userId));
+    }
+
+    @GetMapping("/me/profile")
+    public ApiResponse<MyProfileResponse> getMyProfile(@AuthenticationPrincipal Long userId) {
+        return ApiResponse.ok("내 프로필 조회 성공", profileService.getMyProfile(userId));
+    }
+
+    @GetMapping("/{userId}")
+    public ApiResponse<PublicProfileResponse> getPublicProfile(@PathVariable Long userId) {
+        return ApiResponse.ok("공개 프로필 조회 성공", profileService.getPublicProfile(userId));
     }
 
     @PatchMapping("/me")
