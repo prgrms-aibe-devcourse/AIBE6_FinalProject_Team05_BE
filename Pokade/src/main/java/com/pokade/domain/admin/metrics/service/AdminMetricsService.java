@@ -18,17 +18,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AdminMetricsService {
 
-    // Spring Boot가 자동 계측하는 http_server_requests_seconds_*의 uri 태그는 실제 경로가 아니라
-    // 매핑 패턴 그대로("{id}" 포함) 찍힌다 - AiGradeController/TradeController의 @*Mapping 값과 동일해야
-    // 매칭된다. 컨트롤러 쪽 경로가 바뀌면 여기는 컴파일 에러 없이 그냥 조용히 0을 반환하게 되므로,
-    // ControllerMappingAssertionTest가 리플렉션으로 두 상수가 실제 매핑과 일치하는지 검증한다 - 그래서
-    // package-private(테스트 접근용)으로 둔다.
+    // uri 태그는 컨트롤러 매핑 패턴 그대로("{id}" 포함) 찍히므로 실제 매핑과 정확히 같아야 하며, 어긋나면
+    // ControllerMappingAssertionTest가 잡아준다(그래서 package-private).
     static final String AI_GRADE_URI = "/api/ai/grade";
     static final String TRADE_CONFIRM_URI = "/api/trades/{id}/confirm";
 
-    // 새 지표를 추가하려면: (필요 시) 서비스 코드에 Micrometer로 계측 후, 여기에 정의 한 줄만 추가하면 된다.
-    // AI 진단/거래 확정처럼 이미 자동 계측되는 http_server_requests_seconds_count를 uri로 필터링해 쓰면
-    // 별도 계측 없이 바로 지표를 늘릴 수 있다.
+    // 새 지표는 (필요 시 계측 후) 이 리스트에 한 줄만 추가하면 되고, 이미 자동 계측되는 지표는 uri 필터링만으로 추가 가능하다.
     private static final List<CardDefinition> CARDS = List.of(
             // 카운터 원값 자체가 "누적" - 마지막 BE 재시작 이후로 쌓인 합계다(재시작 시 0으로 리셋됨).
             new CardDefinition("totalVisits", "총 방문자 수", "site_visits_total", "명",
@@ -51,10 +46,7 @@ public class AdminMetricsService {
                             + "/ sum(increase(http_server_requests_seconds_count[24h])) * 1000", "ms")
     );
 
-    // group: 같은 group끼리는 한 차트에 겹쳐 그릴 수 있다는 뜻(FE가 이 값으로 묶는다) - 단위/스케일이
-    // 다른 지표(%, ms)를 개수(회/건)와 한 차트에 억지로 합치면 서로 안 보이게 되므로 그룹을 분리한다.
-    // promqlTemplate의 %1$s는 AdminMetricsPeriod.step으로 채워진다 - 조회 단위(10분/1시간/1일)와
-    // increase()의 구간 크기가 어긋나면(예: 10분 단위인데 [1h]로 누적) 값이 서로 겹쳐서 왜곡된다.
+    // group이 같으면 스케일이 맞아 한 차트에 겹쳐 그릴 수 있다(FE가 구분); %1$s는 period.step으로 채워져 increase() 구간을 조회 단위에 맞춘다.
     private static final List<SeriesDefinition> SERIES = List.of(
             new SeriesDefinition("visits", "방문 수", "increase(site_visits_total[%1$s])", "회", "activity"),
             new SeriesDefinition("aiGrade", "AI 진단 사용 수",
