@@ -10,6 +10,7 @@ import com.pokade.domain.card.dto.CardFacetsResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
+import com.pokade.domain.card.entity.Expansion;
 import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
@@ -27,6 +28,7 @@ import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -37,6 +39,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,7 +71,10 @@ public class CardService {
 
     // Actuator/Prometheus 로컬 실험용 계측 - 커밋 대상 아님.
     // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
-    @Autowired
+    // required = false: @DataJpaTest 등 슬라이스 테스트엔 MeterRegistry 빈이 없어 NoSuchBeanDefinitionException으로
+    // 컨텍스트 로딩 자체가 깨졌다(#224). 매칭되는 빈이 없으면 Spring이 필드를 건드리지 않고 그대로 두므로
+    // (value == null이면 field.set() 자체를 안 함), 아래 기본값(SimpleMeterRegistry)이 계속 살아남아 null이 되지 않는다.
+    @Autowired(required = false)
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
@@ -83,7 +89,7 @@ public class CardService {
         List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(rarities);
         Page<Card> cards = cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
+        return cards.map(card -> toCardResponse(card, gradesByCardId));
     }
 
     @Transactional
@@ -126,7 +132,7 @@ public class CardService {
                 ? searchByPokedexKoName(keyword, pageable)
                 : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()), cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity())));
+        return cards.map(card -> toCardResponse(card, gradesByCardId));
     }
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
@@ -159,9 +165,18 @@ public class CardService {
         }
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(c -> CardResponse.from(c, gradesByCardId.getOrDefault(c.getId(), List.of()), cardNameKoResolver.resolve(c), CardTypeEnResolver.resolve(c.getTypes()), CardRarityResolver.resolve(c.getRarityCode(), c.getRarity())))
+                .map(relatedCard -> toCardResponse(relatedCard, gradesByCardId))
                 .toList();
     }
+
+    private CardResponse toCardResponse(Card card, Map<Long, List<String>> gradesByCardId) {
+        return CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()),
+                cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()),
+                CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()));
+    }
+
+    // series가 없는(null) 세트를 묶는 그룹 라벨 - FE 아코디언에서 "기타" 그룹으로 표시된다.
+    private static final String UNKNOWN_SERIES_LABEL = "기타";
 
     /**
      * 카드 필터 옵션(타입/레어도/세트)을 DB에 실제로 존재하는 값 기준으로 조회한다.
@@ -174,17 +189,45 @@ public class CardService {
         Set<String> types = new TreeSet<>(CardTypeEnResolver.resolve(cardRepository.findDistinctTypes()));
         Set<String> rarities = new TreeSet<>();
         for (CardRepository.CardRarityView view : cardRepository.findDistinctRarityCodes()) {
-            rarities.add(CardRarityResolver.resolve(view.getRarityCode(), view.getRarity()));
+            // rarity_code와 rarity가 둘 다 null인 카드가 있으면 resolve()가 null을 반환하는데,
+            // TreeSet.add(null)은 자연순서 비교 시 NullPointerException을 던지므로 여기서 걸러낸다.
+            String resolvedRarity = CardRarityResolver.resolve(view.getRarityCode(), view.getRarity());
+            if (resolvedRarity != null) {
+                rarities.add(resolvedRarity);
+            }
         }
-        // expansions.name이 NULL인 레거시/수동 적재 데이터가 있을 수 있어, FE 응답 스키마(name: string,
-        // non-null)를 깨지 않도록 빈 문자열로 대체하고 정렬도 null-safe하게 처리한다.
-        List<CardFacetsResponse.ExpansionFacet> expansions = expansionRepository.findAll().stream()
-                .map(expansion -> new CardFacetsResponse.ExpansionFacet(
-                        expansion.getId(), Objects.requireNonNullElse(expansion.getName(), "")))
-                .sorted(Comparator.comparing(CardFacetsResponse.ExpansionFacet::name,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
+        List<CardFacetsResponse.ExpansionFacet> expansions = buildExpansionFacets();
         return CardFacetsResponse.of(List.copyOf(types), List.copyOf(rarities), expansions);
+    }
+
+    // expansions.name/series가 NULL인 레거시/수동 적재 데이터가 있을 수 있어, FE 응답 스키마(non-null)를
+    // 깨지 않도록 각각 빈 문자열/"기타"로 대체한다. FE가 series로 묶어 아코디언 렌더링을 하기 편하도록,
+    // 목록 자체를 "series 그룹의 최신 발매일(release_date) 내림차순 -> 그룹 내 세트명 오름차순"으로 정렬해
+    // 반환한다(같은 series가 여러 해에 걸쳐 발매될 수 있어 그룹의 대표값은 MIN이 아닌 MAX release_date를 쓴다.
+    // release_date가 전부 NULL인 series는 가장 오래된 것으로 취급해 뒤로 보낸다).
+    private List<CardFacetsResponse.ExpansionFacet> buildExpansionFacets() {
+        List<Expansion> allExpansions = expansionRepository.findAll();
+
+        Map<String, LocalDate> latestReleaseBySeries = allExpansions.stream()
+                .collect(Collectors.groupingBy(
+                        expansion -> Objects.requireNonNullElse(expansion.getSeries(), UNKNOWN_SERIES_LABEL),
+                        Collectors.mapping(Expansion::getReleaseDate,
+                                Collectors.collectingAndThen(Collectors.toList(), dates -> dates.stream()
+                                        .filter(Objects::nonNull)
+                                        .max(Comparator.naturalOrder())
+                                        .orElse(LocalDate.MIN)))));
+
+        return allExpansions.stream()
+                .map(expansion -> new CardFacetsResponse.ExpansionFacet(
+                        expansion.getId(),
+                        Objects.requireNonNullElse(expansion.getName(), ""),
+                        Objects.requireNonNullElse(expansion.getSeries(), UNKNOWN_SERIES_LABEL)))
+                .sorted(Comparator
+                        .comparing((CardFacetsResponse.ExpansionFacet facet) -> latestReleaseBySeries.get(facet.series()))
+                        .reversed()
+                        .thenComparing(CardFacetsResponse.ExpansionFacet::name,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
     }
 
     private Map<Long, List<String>> fetchGradesByCardIds(List<Card> cards) {

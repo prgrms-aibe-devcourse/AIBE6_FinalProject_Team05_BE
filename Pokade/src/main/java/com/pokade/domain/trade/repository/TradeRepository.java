@@ -2,14 +2,13 @@ package com.pokade.domain.trade.repository;
 
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 public interface TradeRepository extends JpaRepository<Trade, Long> {
 
@@ -32,4 +31,10 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
             + "WHERE (t.buyerId = :userId OR l.sellerId = :userId) AND t.status IN :statuses")
     List<Trade> findByParticipantIdAndStatusIn(@Param("userId") Long userId,
                                                 @Param("statuses") List<TradeStatus> statuses);
+
+    // 공개 프로필용: 확정된 거래 수 ( 구매자, 판매자 양쪽 합산)
+    @Query("SELECT COUNT(t) FROM Trade t JOIN t.listing l "
+            + "WHERE (t.buyerId = :userId OR l.sellerId = :userId) AND t.status = :status")
+    long countByParticipantIdAndStatus(@Param("userId") Long userId,
+                                       @Param("status") TradeStatus status);
 }

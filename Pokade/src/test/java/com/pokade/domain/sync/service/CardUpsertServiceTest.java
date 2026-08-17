@@ -3,6 +3,8 @@ package com.pokade.domain.sync.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,6 +25,7 @@ import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.repository.ExpansionRepository;
 import com.pokade.domain.sync.client.dto.CardDto;
+import com.pokade.domain.sync.client.dto.CardVariantDto;
 import com.pokade.domain.sync.client.dto.ExpansionDto;
 import com.pokade.domain.sync.client.dto.TranslationDto;
 
@@ -162,5 +165,109 @@ class CardUpsertServiceTest {
         assertThat(saved).isTrue();
         assertThat(capturedSavedCard().getSetName()).isEqualTo(ORIGINAL_EXPANSION_NAME);
         assertThat(expansion.getTranslation()).isNull();
+    }
+
+    @Test
+    @DisplayName("t6 카드 이름이 blank면 세트/카드 동기화를 전부 건너뛰고 false를 반환한다")
+    void t6() {
+        CardDto dto = cardDtoWithName("   ", "sv10_ja-6");
+
+        boolean saved = cardUpsertService.upsertCard(dto);
+
+        assertThat(saved).isFalse();
+        then(expansionRepository).should(never()).findById(any());
+        then(cardRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t7 카드 이름이 null이면 세트/카드 동기화를 전부 건너뛰고 false를 반환한다")
+    void t7() {
+        CardDto dto = cardDtoWithName(null, "sv10_ja-7");
+
+        boolean saved = cardUpsertService.upsertCard(dto);
+
+        assertThat(saved).isFalse();
+        then(expansionRepository).should(never()).findById(any());
+        then(cardRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t8 신규 세트인데 세트 이름이 blank면 세트 생성은 건너뛰고, 카드는 expansion 없이 정상 저장된다")
+    void t8() {
+        given(expansionRepository.findById(EXPANSION_ID)).willReturn(Optional.empty());
+        given(cardRepository.findByExternalId("sv10_ja-8")).willReturn(Optional.empty());
+        given(cardRepository.save(any(Card.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        ExpansionDto blankNameExpansion = new ExpansionDto(
+                EXPANSION_ID, "  ", "Scarlet & Violet", null, 98, null,
+                "JA", "2024/11/01", null, null, null, null);
+        CardDto dto = cardDtoWithExpansionAndVariants("sv10_ja-8", blankNameExpansion, null);
+
+        boolean saved = cardUpsertService.upsertCard(dto);
+
+        assertThat(saved).isTrue();
+        then(expansionRepository).should(never()).save(any());
+        assertThat(capturedSavedCard().getExpansion()).isNull();
+    }
+
+    @Test
+    @DisplayName("t9 대표 판본 이름이 blank면 카드는 저장되지만 판본/가격 동기화는 건너뛴다")
+    void t9() {
+        Expansion expansion = existingExpansion(null);
+        given(expansionRepository.findById(EXPANSION_ID)).willReturn(Optional.of(expansion));
+        given(cardRepository.findByExternalId("sv10_ja-9")).willReturn(Optional.empty());
+        given(cardRepository.save(any(Card.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        CardVariantDto blankNameVariant = new CardVariantDto("   ", null, null);
+        CardDto dto = cardDtoWithExpansionAndVariants("sv10_ja-9", null, List.of(blankNameVariant));
+
+        boolean saved = cardUpsertService.upsertCard(dto);
+
+        assertThat(saved).isTrue();
+        then(cardVariantRepository).should(never()).findByCardId(any());
+        then(cardVariantRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t10 정상적인 이름을 가진 대표 판본은 예전처럼 정상적으로 동기화된다(회귀)")
+    void t10() {
+        Expansion expansion = existingExpansion(null);
+        given(expansionRepository.findById(EXPANSION_ID)).willReturn(Optional.of(expansion));
+        given(cardRepository.findByExternalId("sv10_ja-10")).willReturn(Optional.empty());
+        given(cardRepository.save(any(Card.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(cardVariantRepository.findByCardId(any())).willReturn(Optional.empty());
+        given(cardVariantRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+        // prices가 없어(null) findNmPrice()가 즉시 null을 반환하므로 syncPrice()는 cardPriceRepository까지
+        // 가지 않고 조용히 리턴한다 - 이 테스트의 관심사(판본 동기화)와 무관해 가격 관련 스텁은 넣지 않는다.
+        CardVariantDto normalVariant = new CardVariantDto("Normal", null, null);
+        CardDto dto = cardDtoWithExpansionAndVariants("sv10_ja-10", null, List.of(normalVariant));
+
+        boolean saved = cardUpsertService.upsertCard(dto);
+
+        assertThat(saved).isTrue();
+        then(cardVariantRepository).should().save(any());
+    }
+
+    private CardDto cardDtoWithName(String name, String externalId) {
+        ExpansionDto expansionDto = new ExpansionDto(
+                EXPANSION_ID, ORIGINAL_EXPANSION_NAME, "Scarlet & Violet", null, 98, null,
+                "JA", "2024/11/01", null, null, null, null);
+        return new CardDto(
+                externalId, name, "ポケモン", List.of("草"), List.of("たね"),
+                "通常", "●", null, "YASHIRO Nanaco", List.of(204),
+                "001/098", null, null, expansionDto, 1, "JA", null
+        );
+    }
+
+    private CardDto cardDtoWithExpansionAndVariants(String externalId, ExpansionDto expansionDto,
+                                                      List<CardVariantDto> variants) {
+        ExpansionDto resolvedExpansionDto = expansionDto != null ? expansionDto : new ExpansionDto(
+                EXPANSION_ID, ORIGINAL_EXPANSION_NAME, "Scarlet & Violet", null, 98, null,
+                "JA", "2024/11/01", null, null, null, null);
+        return new CardDto(
+                externalId, "クヌギダマ", "ポケモン", List.of("草"), List.of("たね"),
+                "通常", "●", null, "YASHIRO Nanaco", List.of(204),
+                "001/098", null, null, resolvedExpansionDto, 1, "JA", variants
+        );
     }
 }
