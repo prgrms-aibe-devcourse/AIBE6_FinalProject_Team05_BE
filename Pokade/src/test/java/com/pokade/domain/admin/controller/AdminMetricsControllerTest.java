@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -77,7 +78,7 @@ class AdminMetricsControllerTest {
         AdminDashboardResponse response = new AdminDashboardResponse(
                 List.of(new AdminMetricCardResponse("totalVisits", "총 방문자 수", 128540.0, "명", "오늘 증가", 42.0)),
                 List.of());
-        given(adminMetricsService.getDashboard()).willReturn(response);
+        given(adminMetricsService.getDashboard(anyString())).willReturn(response);
 
         mockMvc.perform(get("/api/admin/metrics/dashboard").with(admin()))
                 .andExpect(status().isOk())
