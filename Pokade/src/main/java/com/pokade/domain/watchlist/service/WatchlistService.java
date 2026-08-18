@@ -65,7 +65,19 @@ public class WatchlistService {
         // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
         try {
             Watchlist saved = watchlistRepository.save(watchlist);
-            return WatchlistResponse.of(saved);
+
+            PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
+                    .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+            boolean targetReached = isTargetReached(saved, range);
+            // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
+            // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차를 없애기 위함.
+            if (targetReached) {
+                saved.markAsNotified();
+            }
+            return WatchlistResponse.of(saved, targetReached);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }

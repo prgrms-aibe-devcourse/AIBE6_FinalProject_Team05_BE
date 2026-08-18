@@ -114,6 +114,38 @@ class WatchlistServiceTest {
     }
 
     @Test
+    @DisplayName("등록: 등록 시점에 이미 체결가가 목표가 구간 안이면 targetReached=true와 isNotified=true가 함께 반영된다")
+    void addWatchlist_targetAlreadyReached_marksAsNotified() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 2000, null);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(1L, 1800, 2200)));
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.targetReached()).isTrue();
+        assertThat(response.isNotified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("등록: 체결가가 목표가 구간 밖이면 targetReached/isNotified 모두 false로 유지된다")
+    void addWatchlist_targetNotReached_keepsNotifiedFalse() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 9000, null);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(1L, 1800, 2200)));
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.targetReached()).isFalse();
+        assertThat(response.isNotified()).isFalse();
+    }
+
+    @Test
     @DisplayName("등록: 사전 체크를 통과했지만 저장 시점에 DB UNIQUE 제약을 위반하면(동시 등록 경합) DUPLICATE_WATCHLIST로 변환된다")
     void addWatchlist_saveThrowsDataIntegrityViolation_convertsToDuplicateWatchlist() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 1000, null);
