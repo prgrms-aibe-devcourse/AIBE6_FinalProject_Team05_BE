@@ -87,9 +87,9 @@ public class WatchlistService {
         }
     }
 
-    private void notifyIfTargetAlreadyReached(Watchlist saved, Integer reachedTargetPrice) {
-        cardRepository.findById(saved.getCardId())
-                .ifPresent(card -> notificationService.createPriceTargetNotification(saved, card.getName(), reachedTargetPrice));
+    private void notifyIfTargetAlreadyReached(Watchlist watchlist, Integer reachedTargetPrice) {
+        cardRepository.findById(watchlist.getCardId())
+                .ifPresent(card -> notificationService.createPriceTargetNotification(watchlist, card.getName(), reachedTargetPrice));
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
@@ -169,7 +169,15 @@ public class WatchlistService {
                 .stream()
                 .findFirst()
                 .orElse(null);
-        return WatchlistResponse.of(watchlist, isTargetReached(watchlist, range));
+        Integer reachedTargetPrice = resolveReachedTargetPrice(watchlist, range);
+        boolean targetReached = reachedTargetPrice != null;
+        // isNotified가 false인 상태에서 도달했을 때만 알린다 - 가격변경으로 리셋됐든 resend로 리셋됐든
+        // 이유는 안 가리고, 이미 true면(직전에 같은 요청에서 방금 알렸어도) 중복으로 다시 알리지 않는다.
+        if (targetReached && !watchlist.isNotified()) {
+            watchlist.markAsNotified();
+            notifyIfTargetAlreadyReached(watchlist, reachedTargetPrice);
+        }
+        return WatchlistResponse.of(watchlist, targetReached);
     }
 
     private void validateAtLeastOneTargetPrice(Integer targetBuyPrice, Integer targetSellPrice) {
