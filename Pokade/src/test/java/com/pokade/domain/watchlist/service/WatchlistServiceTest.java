@@ -123,6 +123,7 @@ class WatchlistServiceTest {
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
         given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(1L, 1800, 2200)));
         Card card = Card.builder().id(1L).name("리자몽").build();
@@ -159,6 +160,7 @@ class WatchlistServiceTest {
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
         given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(1L, 1800, 2200)));
         given(cardRepository.findById(1L)).willReturn(Optional.empty());
@@ -466,6 +468,23 @@ class WatchlistServiceTest {
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(9000, null, null));
 
         assertThat(response.targetReached()).isFalse();
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("수정: 배치가 그 사이 먼저 선점했으면(claimed=0) 도달 상태여도 중복 알림을 만들지 않는다")
+    void updateWatchlist_batchAlreadyClaimed_skipsDuplicateNotification() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false(메모리 스냅샷 - 배치가 이미 선점한 상황을 재현)
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(0);
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
+
+        assertThat(response.targetReached()).isTrue();
+        assertThat(response.isNotified()).isFalse();
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
     }
 
     @Test
@@ -473,6 +492,7 @@ class WatchlistServiceTest {
     void updateWatchlist_newlyReachedByPriceChange_marksNotifiedAndNotifies() {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
         given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
         Card card = Card.builder().id(10L).name("리자몽").build();
@@ -507,6 +527,7 @@ class WatchlistServiceTest {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
         target.markAsNotified();
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
         given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 800, 1200)));
         Card card = Card.builder().id(10L).name("리자몽").build();
@@ -523,6 +544,7 @@ class WatchlistServiceTest {
     void updateWatchlist_resendAndPriceChangeBothReached_notifiesOnce() {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
         given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
         Card card = Card.builder().id(10L).name("리자몽").build();
@@ -539,6 +561,7 @@ class WatchlistServiceTest {
     void updateWatchlist_targetReachedButCardNotFound_skipsNotification() {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
         given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
         given(cardRepository.findById(10L)).willReturn(Optional.empty());
