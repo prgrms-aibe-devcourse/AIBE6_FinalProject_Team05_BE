@@ -3,6 +3,7 @@ package com.pokade.domain.watchlist.service;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
@@ -37,6 +38,7 @@ public class WatchlistService {
     private final CardRepository cardRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final CardNameKoResolver cardNameKoResolver;
+    private final NotificationService notificationService;
 
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
@@ -65,10 +67,44 @@ public class WatchlistService {
         // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
         try {
             Watchlist saved = watchlistRepository.save(watchlist);
-            return WatchlistResponse.of(saved);
+
+            PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
+                    .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+            Integer reachedTargetPrice = resolveReachedTargetPrice(saved, range);
+            boolean targetReached = reachedTargetPrice != null;
+            // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
+            // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
+            notifyIfNewlyReached(saved, reachedTargetPrice);
+            return WatchlistResponse.of(saved, targetReached);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
+    }
+
+    // 목표가에 새로 도달한 경우(아직 알림 안 간 상태에서 도달)에만 markAsNotified + 실제 알림 생성을 한다.
+    // "이미 알림 갔는지"는 메모리 값이 아니라 markAsNotifiedIfNotYet()의 원자적 조건부 UPDATE(DB 기준)로
+    // 판정한다 - 배치(WatchlistTargetPriceNoticeProcessor)가 그 사이 먼저 선점했을 수 있어서, 메모리에 로드된
+    // isNotified만 믿으면 중복 알림이 생길 수 있다. claimed>0일 때만 엔티티도 true로 맞춰서, 이 메서드가
+    // 반환하는 WatchlistResponse의 isNotified가 실제 DB 상태와 일치하게 한다(배치는 응답 DTO가 없어서 이
+    // 동기화가 필요 없었던 것과 다른 점).
+    private void notifyIfNewlyReached(Watchlist watchlist, Integer reachedTargetPrice) {
+        if (reachedTargetPrice == null) {
+            return;
+        }
+        int claimed = watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId());
+        if (claimed == 0) {
+            return;
+        }
+        watchlist.markAsNotified();
+        notifyIfTargetAlreadyReached(watchlist, reachedTargetPrice);
+    }
+
+    private void notifyIfTargetAlreadyReached(Watchlist watchlist, Integer reachedTargetPrice) {
+        cardRepository.findById(watchlist.getCardId())
+                .ifPresent(card -> notificationService.createPriceTargetNotification(watchlist, card.getName(), reachedTargetPrice));
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
@@ -142,7 +178,16 @@ public class WatchlistService {
         if (resend) {
             watchlist.requestNotificationAgain();
         }
-        return WatchlistResponse.of(watchlist);
+
+        PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
+                .findPriceRangesByCardIds(List.of(watchlist.getCardId()), null, TradeStatus.COMPLETED)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        Integer reachedTargetPrice = resolveReachedTargetPrice(watchlist, range);
+        boolean targetReached = reachedTargetPrice != null;
+        notifyIfNewlyReached(watchlist, reachedTargetPrice);
+        return WatchlistResponse.of(watchlist, targetReached);
     }
 
     private void validateAtLeastOneTargetPrice(Integer targetBuyPrice, Integer targetSellPrice) {
