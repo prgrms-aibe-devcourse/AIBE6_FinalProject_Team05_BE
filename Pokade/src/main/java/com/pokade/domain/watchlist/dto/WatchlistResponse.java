@@ -12,6 +12,7 @@ public record WatchlistResponse(
         Long cardId,
         Long variantId,
         String cardName,
+        String cardNameKo,
         String setName,
         String imageUrl,
         Integer targetBuyPrice,
@@ -32,6 +33,7 @@ public record WatchlistResponse(
                 null,
                 null,
                 null,
+                null,
                 watchlist.getTargetBuyPrice(),
                 watchlist.getTargetSellPrice(),
                 watchlist.isNotified(),
@@ -44,13 +46,14 @@ public record WatchlistResponse(
 
 
     public static WatchlistResponse withPrice(
-            Watchlist watchlist, Card card, CardPriceSummaryResponse currentPrice,
+            Watchlist watchlist, Card card, String cardNameKo, CardPriceSummaryResponse currentPrice,
             BigDecimal changeRate, boolean targetReached) {
         return new WatchlistResponse(
                 watchlist.getId(),
                 watchlist.getCardId(),
                 watchlist.getVariantId(),
                 card != null ? card.getName() : null,
+                cardNameKo,
                 card != null ? card.getSetName() : null,
                 card != null ? resolveImageUrl(card) : null,
                 watchlist.getTargetBuyPrice(),

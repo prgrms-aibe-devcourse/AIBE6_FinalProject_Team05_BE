@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.notification.entity.Notification;
 import com.pokade.domain.notification.repository.NotificationRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
@@ -64,6 +65,9 @@ class WatchlistTargetPriceNoticeTransactionIsolationTest {
 
     @MockitoBean
     private PriceService priceService;
+
+    @MockitoBean
+    private CardNameKoResolver cardNameKoResolver;
 
     private record PriceRange(Long cardId, Integer minPrice, Integer maxPrice)
             implements PriceTradeStatsRepository.CardPriceRangeView {

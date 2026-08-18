@@ -27,6 +27,7 @@ import com.pokade.global.web.PageableValidator;
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -183,7 +184,11 @@ public class CardService {
      * types/rarity_code는 원본이 다국어로 혼재돼 있어 리졸버 적용 후 표준명 기준으로 중복 제거한다
      * (예: 일본어 "草"와 영문 "Grass"가 함께 있으면 리졸버를 거쳐 "Grass" 하나로 합쳐짐).
      * 세트명은 아직 언어별 표준화가 없어 원본 그대로 반환한다.
+     *
+     * 동기화 완료를 알리는 이벤트/훅이 없어 캐시 무효화를 값 변경 시점에 걸 수 없으므로,
+     * TTL 1시간(CacheConfig의 "cardFacets" 캐시 설정) 기반으로 캐싱한다.
      */
+    @Cacheable(cacheNames = "cardFacets")
     @Transactional(readOnly = true)
     public CardFacetsResponse getFacets() {
         Set<String> types = new TreeSet<>(CardTypeEnResolver.resolve(cardRepository.findDistinctTypes()));

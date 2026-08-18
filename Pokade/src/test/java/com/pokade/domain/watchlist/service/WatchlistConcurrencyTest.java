@@ -1,6 +1,7 @@
 package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
@@ -49,7 +50,7 @@ class WatchlistConcurrencyTest {
 
     private WatchlistService newWatchlistService() {
         return new WatchlistService(watchlistRepository, mock(PriceService.class),
-                mock(CardRepository.class), mock(PriceTradeStatsRepository.class));
+                mock(CardRepository.class), mock(PriceTradeStatsRepository.class), mock(CardNameKoResolver.class));
     }
 
     @Test
