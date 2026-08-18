@@ -46,6 +46,15 @@ class ProfileServiceTest {
                 .build();
     }
 
+    private User userWithProfileImage(String profileImageKey) {
+        return User.builder()
+                .id(1L).email("user@pokade.com").password("ENCODED_PW")
+                .nickname("지우").role(Role.USER).provider(Provider.LOCAL)
+                .status(UserStatus.ACTIVE).pointBalance(0)
+                .profileImageUrl(profileImageKey)
+                .build();
+    }
+
     // ===== 공개 프로필 =====
 
     @Test
@@ -61,6 +70,17 @@ class ProfileServiceTest {
         assertThat(res.nickname()).isEqualTo("지우");
         assertThat(res.completedTradeCount()).isEqualTo(3L);
         assertThat(res.activeListingCount()).isEqualTo(2L);
+        assertThat(res.profileImageUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("공개 프로필: 프로필 이미지가 있으면 S3 key 대신 프록시 조회 경로를 내려준다")
+    void getPublicProfile_returnsImageProxyPath() {
+        given(userRepository.findById(1L)).willReturn(Optional.of(userWithProfileImage("profile/9f3c2a.png")));
+
+        PublicProfileResponse res = profileService.getPublicProfile(1L);
+
+        assertThat(res.profileImageUrl()).isEqualTo("/api/users/1/profile/image");
     }
 
     @Test
