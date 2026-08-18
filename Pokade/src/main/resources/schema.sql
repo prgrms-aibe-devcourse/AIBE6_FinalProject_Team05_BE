@@ -327,3 +327,13 @@ CREATE TABLE IF NOT EXISTS user_sanctions (
 
 -- 참고: Refresh Token은 Redis 기반 블랙리스트 관리로, 관계형 DB 테이블로 별도 생성하지 않음
 -- 참고: 매물 5분 임시잠금은 Redis(TTL)로 처리 권장, DB 컬럼 추가 안 함
+
+-- ---------- 7. 1:1 문의 ----------
+
+CREATE TABLE IF NOT EXISTS inquiries (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users(id),
+    title        VARCHAR(200) NOT NULL,
+    content      TEXT NOT NULL,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
