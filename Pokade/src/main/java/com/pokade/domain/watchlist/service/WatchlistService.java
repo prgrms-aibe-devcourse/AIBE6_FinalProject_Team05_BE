@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
@@ -35,6 +36,7 @@ public class WatchlistService {
     private final PriceService priceService;
     private final CardRepository cardRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
+    private final CardNameKoResolver cardNameKoResolver;
 
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
@@ -91,12 +93,16 @@ public class WatchlistService {
         Map<Long, BigDecimal> changeRateByCardId = priceService.getChangeRates(cardIds);
 
         return watchlists.stream()
-                .map(watchlist -> WatchlistResponse.withPrice(
-                        watchlist,
-                        cardById.get(watchlist.getCardId()),
-                        priceByCardId.get(watchlist.getCardId()),
-                        changeRateByCardId.get(watchlist.getCardId()),
-                        isTargetReached(watchlist, rangeByCardId.get(watchlist.getCardId()))))
+                .map(watchlist -> {
+                    Card card = cardById.get(watchlist.getCardId());
+                    return WatchlistResponse.withPrice(
+                            watchlist,
+                            card,
+                            card != null ? cardNameKoResolver.resolve(card) : null,
+                            priceByCardId.get(watchlist.getCardId()),
+                            changeRateByCardId.get(watchlist.getCardId()),
+                            isTargetReached(watchlist, rangeByCardId.get(watchlist.getCardId())));
+                })
                 .toList();
     }
 

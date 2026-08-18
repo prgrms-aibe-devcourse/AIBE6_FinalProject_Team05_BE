@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
@@ -41,6 +42,7 @@ class WatchlistServiceTest {
     @Mock PriceService priceService;
     @Mock CardRepository cardRepository;
     @Mock PriceTradeStatsRepository priceTradeStatsRepository;
+    @Mock CardNameKoResolver cardNameKoResolver;
     @InjectMocks WatchlistService watchlistService;
 
     private Watchlist watchlist(Long userId, Long cardId) {
@@ -196,12 +198,28 @@ class WatchlistServiceTest {
         given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlist));
         given(priceService.getSummaries(eq(List.of(10L)), isNull(), eq(true))).willReturn(List.of());
         given(cardRepository.findAllById(List.of(10L))).willReturn(List.of(card));
+        given(cardNameKoResolver.resolve(card)).willReturn("피카츄");
 
         List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
 
         assertThat(result.get(0).cardName()).isEqualTo("피카츄");
+        assertThat(result.get(0).cardNameKo()).isEqualTo("피카츄");
         assertThat(result.get(0).setName()).isEqualTo("기본팩");
         assertThat(result.get(0).imageUrl()).isEqualTo("medium.png");
+    }
+
+    @Test
+    @DisplayName("목록 조회: 카드 정보를 찾지 못하면(삭제된 카드 등) cardNameKo는 resolver를 호출하지 않고 null이다")
+    void getWatchlist_cardNotFound_cardNameKoNull() {
+        Watchlist watchlist = watchlist(1L, 10L);
+        given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlist));
+        given(priceService.getSummaries(eq(List.of(10L)), isNull(), eq(true))).willReturn(List.of());
+        given(cardRepository.findAllById(List.of(10L))).willReturn(List.of());
+
+        List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
+
+        assertThat(result.get(0).cardNameKo()).isNull();
+        then(cardNameKoResolver).should(never()).resolve(any(Card.class));
     }
 
     // targetReached는 "지금 시세가 목표가보다 높은지/낮은지"가 아니라 "체결가가 그동안 오르내리며

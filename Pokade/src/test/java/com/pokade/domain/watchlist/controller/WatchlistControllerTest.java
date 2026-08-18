@@ -93,7 +93,7 @@ class WatchlistControllerTest {
     void 등록에_성공하면_200과_등록된_항목을_반환한다() throws Exception {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 10000, null);
         WatchlistResponse response = new WatchlistResponse(
-                1L, 1L, null, "피카츄", "기본팩", "image.png", 10000, null, false, LocalDateTime.now(), null, null, false);
+                1L, 1L, null, "피카츄", null, "기본팩", "image.png", 10000, null, false, LocalDateTime.now(), null, null, false);
 
         given(watchlistService.addWatchlist(anyLong(), any(WatchlistCreateRequest.class)))
                 .willReturn(response);
@@ -141,7 +141,7 @@ class WatchlistControllerTest {
     @Test
     void 목록_조회에_성공하면_200과_목록을_반환한다() throws Exception {
         WatchlistResponse response = new WatchlistResponse(
-                1L, 1L, null, "피카츄", "기본팩", "image.png", 10000, null, false, LocalDateTime.now(), null, null, false);
+                1L, 1L, null, "피카츄", null, "기본팩", "image.png", 10000, null, false, LocalDateTime.now(), null, null, false);
 
         given(watchlistService.getWatchlist(100L)).willReturn(List.of(response));
 
@@ -156,7 +156,7 @@ class WatchlistControllerTest {
         CardPriceSummaryResponse currentPrice =
                 new CardPriceSummaryResponse(1L, 9000, 8000, null, "KRW", null, null);
         WatchlistResponse response = new WatchlistResponse(
-                1L, 1L, null, "피카츄", "기본팩", "image.png", 10000, null, false, LocalDateTime.now(),
+                1L, 1L, null, "피카츄", "피카츄", "기본팩", "image.png", 10000, null, false, LocalDateTime.now(),
                 currentPrice, new java.math.BigDecimal("3.25"), true);
 
         given(watchlistService.getWatchlist(100L)).willReturn(List.of(response));
@@ -164,6 +164,7 @@ class WatchlistControllerTest {
         mockMvc.perform(get("/api/watchlist").with(userId(100L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].cardName").value("피카츄"))
+                .andExpect(jsonPath("$.data[0].cardNameKo").value("피카츄"))
                 .andExpect(jsonPath("$.data[0].currentPrice.buyPrice").value(9000))
                 .andExpect(jsonPath("$.data[0].currentPrice.sellPrice").value(8000))
                 .andExpect(jsonPath("$.data[0].changeRate").value(3.25))
@@ -174,7 +175,7 @@ class WatchlistControllerTest {
     void 목표가_수정에_성공하면_200과_수정된_항목을_반환한다() throws Exception {
         WatchlistUpdateRequest request = new WatchlistUpdateRequest(20000, null);
         WatchlistResponse response = new WatchlistResponse(
-                1L, 1L, null, null, null, null, 20000, null, false, LocalDateTime.now(), null, null, false);
+                1L, 1L, null, null, null, null, null, 20000, null, false, LocalDateTime.now(), null, null, false);
 
         given(watchlistService.updateWatchlist(anyLong(), anyLong(), any(WatchlistUpdateRequest.class)))
                 .willReturn(response);
