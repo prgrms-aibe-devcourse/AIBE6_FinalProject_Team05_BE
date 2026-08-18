@@ -70,7 +70,11 @@ jobs:
 
       # --match-head-commit: PR HEAD가 이 워크플로가 빌드한 커밋과 다르면 병합을 거부한다.
       # 그 사이 develop이 갱신됐다는 뜻이므로, 검증되지 않은 변경이 main에 들어가지 않도록 실패시킨다.
+      #
+      # --admin: main 룰셋이 승인 4명을 요구하는데 자동 생성 PR에는 승인이 모이지 않는다.
+      # PROMOTE_TOKEN 소유자는 룰셋 bypass 허용자이므로, gh의 사전 검사를 건너뛰고 병합한다.
+      # (--auto는 답이 아니다 — 승인이 채워질 때까지 대기만 해서 워크플로만 초록불이 되고 배포는 안 된다.)
       - name: Merge PR
         run: |
-          gh pr merge ${{ steps.pr.outputs.number }} --merge \
+          gh pr merge ${{ steps.pr.outputs.number }} --merge --admin \
             --match-head-commit "${{ github.sha }}"
