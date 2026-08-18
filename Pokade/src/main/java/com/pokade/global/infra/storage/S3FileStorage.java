@@ -14,6 +14,7 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -33,7 +34,7 @@ public class S3FileStorage {
     private String bucket;
 
     public String upload(MultipartFile file, String folder) {
-        String key = folder + "/" + UUID.randomUUID() + "_" + file.getOriginalFilename();
+        String key = folder + "/" + UUID.randomUUID() + extensionOf(file);
         try {
             PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(bucket)
@@ -43,7 +44,7 @@ public class S3FileStorage {
                     .build();
             s3Client.putObject(request, RequestBody.fromBytes(file.getBytes()));
         } catch (IOException e) {
-            throw new UncheckedIOException("S3 업로드 실패: " + file.getOriginalFilename(), e);
+            throw new UncheckedIOException("S3 업로드 실패 (folder=" + folder + ")", e);
         }
         return key;
     }
@@ -90,6 +91,17 @@ public class S3FileStorage {
                         .key(key)
                         .build()
         );
+    }
+
+    // 원본 파일명은 사용자 입력이라 개인정보가 섞일 수 있어 key에 넣지 않고 확장자만 취한다.
+    private String extensionOf(MultipartFile file) {
+        String name = file.getOriginalFilename();
+        int dot = (name == null) ? -1 : name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) {
+            return "";
+        }
+        String ext = name.substring(dot + 1).toLowerCase(Locale.ROOT);
+        return ext.matches("[a-z0-9]{1,10}") ? "." + ext : "";
     }
 
 }

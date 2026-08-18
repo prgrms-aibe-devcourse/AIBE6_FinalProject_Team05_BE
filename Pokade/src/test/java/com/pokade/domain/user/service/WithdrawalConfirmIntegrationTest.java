@@ -1,5 +1,7 @@
 package com.pokade.domain.user.service;
 
+import com.pokade.domain.auth.service.WithdrawalCodeService;
+import com.pokade.global.event.ProfileImageCleanupEvent;
 import com.pokade.domain.auth.store.RefreshTokenStore;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.Provider;
@@ -18,6 +20,8 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import java.time.LocalDateTime;
 
@@ -31,6 +35,7 @@ import static org.mockito.Mockito.never;
  * Redis 스토어(RefreshTokenStore·TokenBlacklistStore)만 목으로 두고 호출 여부만 본다.
  */
 @DataJpaTest
+@RecordApplicationEvents
 @Import({WithdrawalService.class, WithdrawalConfirmer.class, AnonymizationTokenGenerator.class})
 class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
 
@@ -47,6 +52,9 @@ class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
     private RefreshTokenStore refreshTokenStore;    // Redis 없이 — 호출 여부만 검증
     @MockitoBean
     private TokenBlacklistStore tokenBlacklistStore;
+
+    @MockitoBean
+    private WithdrawalCodeService withdrawalCodeService; // WithdrawalService 생성자 의존만 충족(이 테스트에선 미사용)
 
     @Test
     @DisplayName("실제 빈·DB: 유예 만료 유저를 배치가 DELETED 익명화하고 version을 올리며 토큰 정리를 호출한다")
@@ -84,6 +92,39 @@ class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
                 .isEqualTo(UserStatus.WITHDRAWAL_PENDING);
         then(refreshTokenStore).should().deleteAll(expiredId);
         then(refreshTokenStore).should(never()).deleteAll(freshId);
+    }
+
+    @Test
+    @DisplayName("실제 배선: 프로필 이미지가 있던 유저는 익명화되면서 S3 정리 이벤트가 발행된다")
+    void confirmExpired_publishesProfileImageCleanup(ApplicationEvents events) {
+        Long id = persistPending("e2e-image@pokade.test", "이미지보유", 8);
+        User target = userRepository.findById(id).orElseThrow();
+        target.changeProfile("profile/e2e-key.png");
+        em.flush();
+
+        withdrawalService.confirmExpiredWithdrawals();
+
+        em.flush();
+        em.clear();
+        // 컬럼은 비워지고
+        assertThat(userRepository.findById(id).orElseThrow().getProfileImageUrl()).isNull();
+        // 비워지기 전의 key가 정리 이벤트로 넘어가야 S3 객체를 지울 수 있다
+        assertThat(events.stream(ProfileImageCleanupEvent.class))
+                .singleElement()
+                .satisfies(e -> {
+                    assertThat(e.userId()).isEqualTo(id);
+                    assertThat(e.key()).isEqualTo("profile/e2e-key.png");
+                });
+    }
+
+    @Test
+    @DisplayName("실제 배선: 프로필 이미지가 없던 유저는 정리 이벤트를 발행하지 않는다")
+    void confirmExpired_noCleanupEventWithoutImage(ApplicationEvents events) {
+        persistPending("e2e-noimage@pokade.test", "이미지없음", 8);
+
+        withdrawalService.confirmExpiredWithdrawals();
+
+        assertThat(events.stream(ProfileImageCleanupEvent.class)).isEmpty();
     }
 
     // ACTIVE로 만든 뒤 도메인 메서드로 유예 전환 (requestedDaysAgo일 전 신청으로 기록)
