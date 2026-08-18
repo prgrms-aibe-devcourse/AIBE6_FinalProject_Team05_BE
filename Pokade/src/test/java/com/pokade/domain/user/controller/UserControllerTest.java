@@ -6,6 +6,7 @@ import com.pokade.domain.user.dto.response.UserResponse;
 import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
+import com.pokade.domain.user.service.ProfileImageService;
 import com.pokade.domain.user.service.ProfileService;
 import com.pokade.domain.user.service.UserService;
 import com.pokade.domain.user.service.WithdrawalService;
@@ -28,6 +29,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -38,11 +40,14 @@ import java.util.List;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.never;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,6 +69,8 @@ class UserControllerTest {
     private WithdrawalService withdrawalService;                     // UserController가 요구
     @MockitoBean
     private ProfileService profileService;                           // UserController가 요구
+    @MockitoBean
+    private ProfileImageService profileImageService;                 // UserController가 요구
     @MockitoBean
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;      // SecurityConfig가 요구
     @MockitoBean
@@ -163,5 +170,38 @@ class UserControllerTest {
 
         mockMvc.perform(get("/api/users/1?ref=search"))
                 .andExpect(status().isOk());
+    }
+
+    // ===== 인가 회귀: 프로필 이미지 =====
+
+    @Test
+    @DisplayName("인가: 토큰 없이 프로필 이미지를 업로드하면 401이고 서비스까지 도달하지 못한다")
+    void uploadProfileImage_withoutToken_blocked() throws Exception {
+        MockMultipartFile image = new MockMultipartFile("image", "a.png", "image/png", new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart("/api/users/me/profile/image").file(image))
+                .andExpect(status().isUnauthorized());
+
+        then(profileImageService).should(never()).upload(any(), any());
+    }
+
+    @Test
+    @DisplayName("인가: 토큰 없이 프로필 이미지를 삭제하면 401이고 서비스까지 도달하지 못한다")
+    void deleteProfileImage_withoutToken_blocked() throws Exception {
+        mockMvc.perform(delete("/api/users/me/profile/image"))
+                .andExpect(status().isUnauthorized());
+
+        then(profileImageService).should(never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("인가: 인증된 사용자는 프로필 이미지를 업로드할 수 있다")
+    void uploadProfileImage_success() throws Exception {
+        MockMultipartFile image = new MockMultipartFile("image", "a.png", "image/png", new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart("/api/users/me/profile/image").file(image).with(userId(1L)))
+                .andExpect(status().isOk());
+
+        then(profileImageService).should().upload(eq(1L), any());
     }
 }
