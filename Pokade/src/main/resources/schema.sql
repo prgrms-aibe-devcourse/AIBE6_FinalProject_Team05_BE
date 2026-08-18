@@ -333,7 +333,18 @@ CREATE TABLE IF NOT EXISTS user_sanctions (
 CREATE TABLE IF NOT EXISTS inquiries (
     id           BIGSERIAL PRIMARY KEY,
     user_id      BIGINT NOT NULL REFERENCES users(id),
+    category     VARCHAR(20) NOT NULL DEFAULT 'ETC',
     title        VARCHAR(200) NOT NULL,
     content      TEXT NOT NULL,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- inquiries가 이미 존재하는 기존 DB는 CREATE TABLE IF NOT EXISTS가 스킵되므로 category 컬럼을 별도로 추가한다.
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS category VARCHAR(20) NOT NULL DEFAULT 'ETC';
+
+CREATE TABLE IF NOT EXISTS inquiry_images (
+    id           BIGSERIAL PRIMARY KEY,
+    inquiry_id   BIGINT NOT NULL REFERENCES inquiries(id),
+    image_url    VARCHAR(255) NOT NULL,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

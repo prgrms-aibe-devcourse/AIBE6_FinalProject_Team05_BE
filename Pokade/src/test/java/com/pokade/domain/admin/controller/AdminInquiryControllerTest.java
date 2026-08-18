@@ -2,6 +2,7 @@ package com.pokade.domain.admin.controller;
 
 import com.pokade.domain.admin.service.AdminInquiryService;
 import com.pokade.domain.inquiry.dto.response.InquiryResponse;
+import com.pokade.domain.inquiry.entity.InquiryCategory;
 import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
@@ -80,7 +81,7 @@ class AdminInquiryControllerTest {
 
     @Test
     void 관리자가_문의_목록을_조회하면_200과_목록을_반환한다() throws Exception {
-        InquiryResponse response = new InquiryResponse(1L, 100L, "제목", "내용", LocalDateTime.now());
+        InquiryResponse response = new InquiryResponse(1L, 100L, InquiryCategory.INFO, "제목", "내용", List.of(), LocalDateTime.now());
         given(adminInquiryService.getInquiries()).willReturn(List.of(response));
 
         mockMvc.perform(get("/api/admin/inquiries").with(admin()))
@@ -97,7 +98,7 @@ class AdminInquiryControllerTest {
 
     @Test
     void 관리자가_문의_상세를_조회하면_200을_반환한다() throws Exception {
-        InquiryResponse response = new InquiryResponse(1L, 100L, "제목", "내용", LocalDateTime.now());
+        InquiryResponse response = new InquiryResponse(1L, 100L, InquiryCategory.INFO, "제목", "내용", List.of(), LocalDateTime.now());
         given(adminInquiryService.getInquiry(1L)).willReturn(response);
 
         mockMvc.perform(get("/api/admin/inquiries/{id}", 1L).with(admin()))
