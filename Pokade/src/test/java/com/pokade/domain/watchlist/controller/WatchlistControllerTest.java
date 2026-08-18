@@ -18,6 +18,7 @@ import com.pokade.global.security.oauth.OAuth2LoginFailureHandler;
 import com.pokade.global.security.oauth.OAuth2LoginSuccessHandler;
 import com.pokade.global.security.oauth.RedisAuthorizationRequestRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -33,11 +34,13 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -187,6 +190,26 @@ class WatchlistControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(1L))
                 .andExpect(jsonPath("$.data.targetBuyPrice").value(20000));
+    }
+
+    @Test
+    void 목표가_수정_요청의_resendNotification_필드가_실제로_역직렬화된다() throws Exception {
+        WatchlistResponse response = new WatchlistResponse(
+                1L, 1L, null, null, null, null, null, 1000, null, false, LocalDateTime.now(), null, null, false);
+
+        given(watchlistService.updateWatchlist(anyLong(), anyLong(), any(WatchlistUpdateRequest.class)))
+                .willReturn(response);
+
+        mockMvc.perform(patch("/api/watchlist/1")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resendNotification\":true}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<WatchlistUpdateRequest> requestCaptor = ArgumentCaptor.forClass(WatchlistUpdateRequest.class);
+        verify(watchlistService).updateWatchlist(anyLong(), anyLong(), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().resendNotification()).isTrue();
+        assertThat(requestCaptor.getValue().targetBuyPrice()).isNull();
     }
 
     @Test
