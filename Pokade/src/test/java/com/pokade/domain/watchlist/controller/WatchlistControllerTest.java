@@ -173,7 +173,7 @@ class WatchlistControllerTest {
 
     @Test
     void 목표가_수정에_성공하면_200과_수정된_항목을_반환한다() throws Exception {
-        WatchlistUpdateRequest request = new WatchlistUpdateRequest(20000, null);
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(20000, null, null);
         WatchlistResponse response = new WatchlistResponse(
                 1L, 1L, null, null, null, null, null, 20000, null, false, LocalDateTime.now(), null, null, false);
 
@@ -191,7 +191,7 @@ class WatchlistControllerTest {
 
     @Test
     void 목표가_수정시_둘_다_없으면_400을_반환한다() throws Exception {
-        WatchlistUpdateRequest request = new WatchlistUpdateRequest(null, null);
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(null, null, null);
 
         given(watchlistService.updateWatchlist(anyLong(), anyLong(), any(WatchlistUpdateRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED));
@@ -206,7 +206,7 @@ class WatchlistControllerTest {
 
     @Test
     void 존재하지_않는_항목_수정시_404를_반환한다() throws Exception {
-        WatchlistUpdateRequest request = new WatchlistUpdateRequest(20000, null);
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(20000, null, null);
 
         given(watchlistService.updateWatchlist(anyLong(), anyLong(), any(WatchlistUpdateRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.WATCHLIST_NOT_FOUND));

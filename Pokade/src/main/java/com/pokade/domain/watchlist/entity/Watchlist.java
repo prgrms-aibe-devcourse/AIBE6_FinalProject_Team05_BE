@@ -62,15 +62,29 @@ public class Watchlist {
         this.isNotified = true;
     }
 
-    // 목표가가 실제로 바뀐 경우에만 isNotified를 리셋한다 - 이미 알림이 간 목표가를 그대로 재저장하는
-    // no-op 수정에서는 배치가 불필요하게 재알림을 보내지 않도록 한다.
+    // updateTargetPrices()의 "가격이 실제로 바뀐 경우"에만 리셋하는 조건부 로직과 달리,
+    // 조건 없이 무조건 리셋한다 - 내부적으로 같은 resetNotification()을 공유
+    public void requestNotificationAgain() {
+        resetNotification();
+    }
+
+    private void resetNotification() {
+        this.isNotified = false;
+    }
+
+    // null로 온 필드는 "값을 지운다"가 아니라 "기존 값 유지"로 해석한다 - 부분 업데이트를 지원하기
+    // 위함. 두 필드를 한꺼번에 지우는 기능은 없음(전체 삭제는 DELETE로만 가능).
     public void updateTargetPrices(Integer targetBuyPrice, Integer targetSellPrice) {
-        boolean changed = !Objects.equals(this.targetBuyPrice, targetBuyPrice)
-                || !Objects.equals(this.targetSellPrice, targetSellPrice);
-        this.targetBuyPrice = targetBuyPrice;
-        this.targetSellPrice = targetSellPrice;
+        Integer resolvedBuyPrice = targetBuyPrice != null ? targetBuyPrice : this.targetBuyPrice;
+        Integer resolvedSellPrice = targetSellPrice != null ? targetSellPrice : this.targetSellPrice;
+        // 목표가가 실제로 바뀐 경우에만 isNotified를 리셋한다 - 이미 알림이 간 목표가를 그대로 재저장하는
+        // no-op 수정에서는 배치가 불필요하게 재알림을 보내지 않도록 한다.
+        boolean changed = !Objects.equals(this.targetBuyPrice, resolvedBuyPrice)
+                || !Objects.equals(this.targetSellPrice, resolvedSellPrice);
+        this.targetBuyPrice = resolvedBuyPrice;
+        this.targetSellPrice = resolvedSellPrice;
         if (changed) {
-            this.isNotified = false;
+            resetNotification();
         }
     }
 }

@@ -301,7 +301,7 @@ class WatchlistServiceTest {
     @Test
     @DisplayName("수정: 목표가 둘 다 null이면 TARGET_PRICE_REQUIRED")
     void updateWatchlist_targetPriceRequired() {
-        WatchlistUpdateRequest request = new WatchlistUpdateRequest(null, null);
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(null, null, null);
 
         assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -312,7 +312,7 @@ class WatchlistServiceTest {
     @Test
     @DisplayName("수정: 본인 소유가 아니거나 존재하지 않으면 WATCHLIST_NOT_FOUND")
     void updateWatchlist_notFound() {
-        WatchlistUpdateRequest request = new WatchlistUpdateRequest(2000, null);
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(2000, null, null);
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L, request))
@@ -327,7 +327,7 @@ class WatchlistServiceTest {
         target.markAsNotified();
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
 
-        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null));
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
 
         assertThat(response.targetBuyPrice()).isEqualTo(2000);
         assertThat(response.isNotified()).isFalse();
@@ -340,9 +340,48 @@ class WatchlistServiceTest {
         target.markAsNotified();
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
 
-        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(1000, null));
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(1000, null, null));
 
         assertThat(response.isNotified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("수정: 한쪽 목표가만 보내면 다른 쪽 기존 값은 유지된다(부분 업데이트)")
+    void updateWatchlist_partialUpdate_keepsOtherPrice() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).variantId(null)
+                .targetBuyPrice(1000).targetSellPrice(5000)
+                .build();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
+
+        assertThat(response.targetBuyPrice()).isEqualTo(2000);
+        assertThat(response.targetSellPrice()).isEqualTo(5000);
+    }
+
+    @Test
+    @DisplayName("수정: resendNotification=true면 가격 없이도 통과하고 isNotified가 false로 리셋된다")
+    void updateWatchlist_resendNotification_resetsIsNotifiedWithoutPrice() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(null, null, true));
+
+        assertThat(response.targetBuyPrice()).isEqualTo(1000);
+        assertThat(response.isNotified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수정: resendNotification=true 요청은 이미 isNotified=false여도 에러 없이 성공한다(멱등)")
+    void updateWatchlist_resendNotification_idempotentWhenAlreadyFalse() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(null, null, true));
+
+        assertThat(response.isNotified()).isFalse();
     }
 
     // ===== 삭제 =====

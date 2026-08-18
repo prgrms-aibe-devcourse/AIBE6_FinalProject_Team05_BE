@@ -129,12 +129,19 @@ public class WatchlistService {
 
     @Transactional
     public WatchlistResponse updateWatchlist(Long userId, Long watchlistId, WatchlistUpdateRequest request) {
-        validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
+        boolean resend = Boolean.TRUE.equals(request.resendNotification());
+        // 재알림만 요청할 때는 가격을 안 보낼 수 있음 - 필수 검증에서 예외로 취급
+        if (!resend) {
+            validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
+        }
 
         Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.WATCHLIST_NOT_FOUND));
 
         watchlist.updateTargetPrices(request.targetBuyPrice(), request.targetSellPrice());
+        if (resend) {
+            watchlist.requestNotificationAgain();
+        }
         return WatchlistResponse.of(watchlist);
     }
 

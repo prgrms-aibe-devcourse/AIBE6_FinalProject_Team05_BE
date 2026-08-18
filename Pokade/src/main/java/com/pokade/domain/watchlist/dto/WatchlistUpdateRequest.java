@@ -7,6 +7,9 @@ public record WatchlistUpdateRequest(
         Integer targetBuyPrice,
 
         @Positive(message = "targetSellPrice는 0보다 커야 합니다.")
-        Integer targetSellPrice
+        Integer targetSellPrice,
+
+        // null/false 둘 다 "재알림 요청 없음"으로 취급 - Boolean.TRUE.equals()로 체크할 것(원시 boolean 언박싱 NPE 방지)
+        Boolean resendNotification
 ) {
 }
