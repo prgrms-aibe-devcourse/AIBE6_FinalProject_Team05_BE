@@ -152,6 +152,24 @@ class WatchlistServiceTest {
     }
 
     @Test
+    @DisplayName("등록: 목표가 도달했지만 카드를 찾지 못하면 알림 생성은 스킵되고 targetReached/isNotified는 정상 반영된다")
+    void addWatchlist_targetReachedButCardNotFound_skipsNotification() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 2000, null);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(1L, 1800, 2200)));
+        given(cardRepository.findById(1L)).willReturn(Optional.empty());
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.targetReached()).isTrue();
+        assertThat(response.isNotified()).isTrue();
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+    }
+
+    @Test
     @DisplayName("등록: 사전 체크를 통과했지만 저장 시점에 DB UNIQUE 제약을 위반하면(동시 등록 경합) DUPLICATE_WATCHLIST로 변환된다")
     void addWatchlist_saveThrowsDataIntegrityViolation_convertsToDuplicateWatchlist() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 1000, null);
