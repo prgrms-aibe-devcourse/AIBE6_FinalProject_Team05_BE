@@ -159,4 +159,18 @@ public class User {
         this.birthDate = null;
         this.profileImageUrl = null;
     }
+
+    // 프로필 이미지를 교체하고 S3 key를 돌려준다 (호출자가 이전 객체 정리하도록)
+    public String changeProfile(String newKey) {
+        String previousKey = this.profileImageUrl;
+        this.profileImageUrl = newKey;
+        return previousKey;
+    }
+
+    // 프로필 이미지를 제거하고 직전 S3 key를 돌려준다
+    public String removeProfile() {
+        String previousKey = this.profileImageUrl;
+        this.profileImageUrl = null;
+        return previousKey;
+    }
 }

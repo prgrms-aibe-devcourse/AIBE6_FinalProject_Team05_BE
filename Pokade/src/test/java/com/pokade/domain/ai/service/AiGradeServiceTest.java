@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 
 import java.util.List;
 
+import com.pokade.global.infra.storage.S3FileStorage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,7 +36,7 @@ class AiGradeServiceTest {
     private ChatClient chatClient;
 
     @Mock
-    private S3UploadService s3UploadService;
+    private S3FileStorage s3FileStorage;
 
     @Mock
     private ImageQualityChecker imageQualityChecker;

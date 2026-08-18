@@ -6,6 +6,7 @@ import com.pokade.domain.user.dto.request.WithdrawalRequest;
 import com.pokade.domain.user.dto.response.MyProfileResponse;
 import com.pokade.domain.user.dto.response.PublicProfileResponse;
 import com.pokade.domain.user.dto.response.UserResponse;
+import com.pokade.domain.user.service.ProfileImageService;
 import com.pokade.domain.user.service.ProfileService;
 import com.pokade.domain.user.service.UserService;
 import com.pokade.domain.user.service.WithdrawalService;
@@ -14,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/users")
@@ -23,6 +25,7 @@ public class UserController {
     private final UserService userService;
     private final WithdrawalService withdrawalService;
     private final ProfileService profileService;
+    private final ProfileImageService profileImageService;
 
     @GetMapping("/me")
     public ApiResponse<UserResponse> getMyInfo(@AuthenticationPrincipal Long userId) {
@@ -70,5 +73,18 @@ public class UserController {
     public ApiResponse<Void> sendWithdrawalCode(@AuthenticationPrincipal Long userId) {
         withdrawalService.sendWithdrawalCode(userId);
         return ApiResponse.ok("탈퇴 인증 코드가 발송되었습니다.");
+    }
+
+    @PostMapping("/me/profile/image")
+    public ApiResponse<Void> uploadProfileImage(@AuthenticationPrincipal Long userId,
+                                                @RequestPart MultipartFile image) {
+        profileImageService.upload(userId, image);
+        return ApiResponse.ok("프로필 이미지가 등록되었습니다.");
+    }
+
+    @DeleteMapping("/me/profile/image")
+    public ApiResponse<Void> deleteProfileImage(@AuthenticationPrincipal Long userId) {
+        profileImageService.delete(userId);
+        return ApiResponse.ok("프로필 이미지가 삭제되었습니다.");
     }
 }
