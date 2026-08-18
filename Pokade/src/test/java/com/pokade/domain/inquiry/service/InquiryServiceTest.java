@@ -5,6 +5,7 @@ import com.pokade.domain.inquiry.dto.response.InquiryResponse;
 import com.pokade.domain.inquiry.entity.Inquiry;
 import com.pokade.domain.inquiry.entity.InquiryCategory;
 import com.pokade.domain.inquiry.entity.InquiryImage;
+import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
 import com.pokade.global.exception.BusinessException;
@@ -61,6 +62,7 @@ class InquiryServiceTest {
         assertThat(captor.getValue().getTitle()).isEqualTo("제목");
         assertThat(captor.getValue().getContent()).isEqualTo("내용");
         assertThat(captor.getValue().getCategory()).isEqualTo(InquiryCategory.PAYMENT);
+        assertThat(captor.getValue().getStatus()).isEqualTo(InquiryStatus.UNHANDLED);
         assertThat(response.title()).isEqualTo("제목");
         assertThat(response.imageUrls()).isEmpty();
         then(s3FileStorage).should(never()).upload(any(), anyString());

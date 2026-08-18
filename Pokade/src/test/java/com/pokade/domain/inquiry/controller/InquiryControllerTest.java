@@ -2,6 +2,7 @@ package com.pokade.domain.inquiry.controller;
 
 import com.pokade.domain.inquiry.dto.response.InquiryResponse;
 import com.pokade.domain.inquiry.entity.InquiryCategory;
+import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.service.InquiryService;
 import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
@@ -78,7 +79,7 @@ class InquiryControllerTest {
 
     @Test
     void 로그인한_사용자가_문의를_작성하면_200을_반환한다() throws Exception {
-        InquiryResponse response = new InquiryResponse(1L, 100L, InquiryCategory.INFO, "제목", "내용", List.of(), LocalDateTime.now());
+        InquiryResponse response = new InquiryResponse(1L, 100L, InquiryCategory.INFO, InquiryStatus.UNHANDLED, "제목", "내용", List.of(), LocalDateTime.now());
         given(inquiryService.createInquiry(eq(100L), any(), any())).willReturn(response);
 
         mockMvc.perform(multipart("/api/inquiries")
@@ -97,7 +98,7 @@ class InquiryControllerTest {
 
     @Test
     void 본인_문의_목록_조회에_성공하면_200과_목록을_반환한다() throws Exception {
-        InquiryResponse response = new InquiryResponse(1L, 100L, InquiryCategory.INFO, "제목", "내용", List.of(), LocalDateTime.now());
+        InquiryResponse response = new InquiryResponse(1L, 100L, InquiryCategory.INFO, InquiryStatus.UNHANDLED, "제목", "내용", List.of(), LocalDateTime.now());
         given(inquiryService.getMyInquiries(100L)).willReturn(List.of(response));
 
         mockMvc.perform(get("/api/inquiries/me").with(userId(100L)))

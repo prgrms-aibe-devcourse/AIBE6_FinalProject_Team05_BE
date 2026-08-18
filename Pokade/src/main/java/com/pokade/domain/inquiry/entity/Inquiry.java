@@ -40,6 +40,10 @@ public class Inquiry {
     @Column(nullable = false, length = 20)
     private InquiryCategory category;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private InquiryStatus status;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -50,5 +54,10 @@ public class Inquiry {
         this.title = title;
         this.content = content;
         this.category = category;
+        this.status = InquiryStatus.UNHANDLED;
+    }
+
+    public void changeStatus(InquiryStatus status) {
+        this.status = status;
     }
 }

@@ -2,13 +2,17 @@ package com.pokade.domain.admin.service;
 
 import com.pokade.domain.inquiry.dto.response.InquiryResponse;
 import com.pokade.domain.inquiry.entity.Inquiry;
+import com.pokade.domain.inquiry.entity.InquiryCategory;
 import com.pokade.domain.inquiry.entity.InquiryImage;
+import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,17 +29,29 @@ public class AdminInquiryService {
     private final InquiryImageRepository inquiryImageRepository;
     private final S3FileStorage s3FileStorage;
 
-    public List<InquiryResponse> getInquiries() {
-        List<Inquiry> inquiries = inquiryRepository.findAllByOrderByCreatedAtDesc();
-        Map<Long, List<String>> imageUrlsByInquiryId = loadImageUrls(inquiries);
-        return inquiries.stream()
-                .map(inquiry -> InquiryResponse.of(inquiry, imageUrlsByInquiryId.getOrDefault(inquiry.getId(), List.of())))
-                .toList();
+    public Page<InquiryResponse> getInquiries(InquiryCategory category, Pageable pageable) {
+        Page<Inquiry> inquiries = category != null
+                ? inquiryRepository.findByCategoryOrderByCreatedAtDesc(category, pageable)
+                : inquiryRepository.findAllByOrderByCreatedAtDesc(pageable);
+        Map<Long, List<String>> imageUrlsByInquiryId = loadImageUrls(inquiries.getContent());
+        return inquiries.map(inquiry ->
+                InquiryResponse.of(inquiry, imageUrlsByInquiryId.getOrDefault(inquiry.getId(), List.of())));
     }
 
     public InquiryResponse getInquiry(Long id) {
         Inquiry inquiry = inquiryRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+        List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(id).stream()
+                .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
+                .toList();
+        return InquiryResponse.of(inquiry, imageUrls);
+    }
+
+    @Transactional
+    public InquiryResponse updateStatus(Long id, InquiryStatus status) {
+        Inquiry inquiry = inquiryRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+        inquiry.changeStatus(status);
         List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(id).stream()
                 .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
                 .toList();
