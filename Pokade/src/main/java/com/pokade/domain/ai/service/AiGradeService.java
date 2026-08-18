@@ -9,6 +9,7 @@ import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.infra.storage.S3FileStorage;
 import com.pokade.global.web.PageableValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +49,7 @@ public class AiGradeService {
     // private static final int GRADE_COST = 100;
 
     private final ChatClient chatClient;
-    private final S3UploadService s3UploadService;
+    private final S3FileStorage s3FileStorage;
     private final ImageQualityChecker imageQualityChecker;
     private final GradeResultRepository gradeResultRepository;
     private final GradeResultImageRepository gradeResultImageRepository;
@@ -166,7 +167,7 @@ public class AiGradeService {
 
         Map<PhotoType, String> urls = new LinkedHashMap<>();
         files.forEach((type, file) ->
-                urls.put(type, s3UploadService.upload(file, "ai-grade")));
+                urls.put(type, s3FileStorage.upload(file, "ai-grade")));
         return urls;
     }
 

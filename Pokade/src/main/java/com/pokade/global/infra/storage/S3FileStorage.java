@@ -1,13 +1,13 @@
-package com.pokade.domain.ai.service;
+package com.pokade.global.infra.storage;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
-public class S3UploadService {
+public class S3FileStorage {
 
     private static final Duration PRESIGNED_URL_EXPIRATION = Duration.ofMinutes(10);
 
@@ -61,4 +61,35 @@ public class S3UploadService {
 
         return s3Presigner.presignGetObject(presignRequest).url().toString();
     }
+
+    // 객체 메타데이터만 조회한다 (본문은 받지 않음) - ETag 비교용
+    public HeadObjectResponse head(String key) {
+        return s3Client.headObject(
+                HeadObjectRequest.builder()
+                        .bucket(bucket)
+                        .key(key)
+                        .build()
+        );
+    }
+
+    // 객체 본문 스트림을 연다 - 호출자가 닫아야 한다
+    public ResponseInputStream<GetObjectResponse> openStream(String key) {
+        return s3Client.getObject(
+                GetObjectRequest.builder()
+                        .bucket(bucket)
+                        .key(key)
+                        .build()
+        );
+    }
+
+    // 객체를 삭제한다
+    public void delete(String key) {
+        s3Client.deleteObject(
+                DeleteObjectRequest.builder()
+                        .bucket(bucket)
+                        .key(key)
+                        .build()
+        );
+    }
+
 }
