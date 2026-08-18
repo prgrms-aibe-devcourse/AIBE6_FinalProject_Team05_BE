@@ -72,5 +72,5 @@ jobs:
       # 그 사이 develop이 갱신됐다는 뜻이므로, 검증되지 않은 변경이 main에 들어가지 않도록 실패시킨다.
       - name: Merge PR
         run: |
-          gh pr merge ${{ steps.pr.outputs.number }} --merge \
+          gh pr merge ${{ steps.pr.outputs.number }} --merge --auto \
             --match-head-commit "${{ github.sha }}"
