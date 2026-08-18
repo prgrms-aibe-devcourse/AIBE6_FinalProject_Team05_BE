@@ -4,6 +4,7 @@ import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
+import com.pokade.domain.user.support.ProfileImagePath;
 
 import java.time.LocalDateTime;
 
@@ -25,7 +26,7 @@ public record UserResponse(
                 user.getNickname(),
                 user.getRole(),
                 user.getStatus(),
-                user.getProfileImageUrl(),
+                ProfileImagePath.of(user),
                 user.getPointBalance(),
                 user.getProvider(),
                 user.getWithdrawalRequestedAt()
