@@ -82,6 +82,20 @@ pokade:
     s3:
       bucket: ${AWS_S3_BUCKET}
 
+# 어드민 지표 대시보드용 Prometheus 스크랩 엔드포인트. 앱 포트(8080)와 분리된 별도 포트로만 열어서,
+# SecurityConfig의 permitAll 여부와 무관하게 이 포트를 인터넷에 노출하지 않는 한 외부 접근이 불가능하다.
+# MANAGEMENT_ADDRESS: 앱이 EC2에 맨몸(java -jar)으로 뜨면 127.0.0.1(기본값) 유지,
+# 앱 자체가 별도 도커 컨테이너로 뜨고 Prometheus가 다른 컨테이너에서 스크랩하면 0.0.0.0으로 바꾸고
+# 대신 해당 포트를 호스트에 publish하지 않는 방식으로 막아야 한다(컨테이너 loopback은 서로 안 통한다).
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+    address: ${MANAGEMENT_ADDRESS:127.0.0.1}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+
 logging:
   level:
     root: info

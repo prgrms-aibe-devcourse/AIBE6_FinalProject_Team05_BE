@@ -76,6 +76,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/chat/query").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/chat/quick-questions").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/analytics/visits").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(RegexRequestMatcher.regexMatcher(HttpMethod.GET, "/api/users/\\d+(\\?.*)?")).permitAll()
                         .anyRequest().authenticated()

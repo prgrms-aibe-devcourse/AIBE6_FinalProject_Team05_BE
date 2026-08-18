@@ -24,6 +24,8 @@ import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -63,6 +65,8 @@ public class PriceService {
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final PriceCardStatsRepository priceCardStatsRepository;
     private final CardPriceRepository cardPriceRepository;
+    // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
+    private final MeterRegistry meterRegistry;
 
     public PriceSummaryResponse getSummary(Long cardId, Long variantId) {
         if (!cardRepository.existsById(cardId)) {
@@ -92,6 +96,8 @@ public class PriceService {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "cardIds는 최대 " + MAX_SUMMARIES_BATCH_SIZE + "개까지 조회할 수 있습니다.");
         }
+        // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님 (배치 API가 실제로 몇 개씩 묶여 호출되는지 확인)
+        meterRegistry.summary("price.summaries.batch_size").record(cardIds.size());
 
         List<Long> distinctCardIds = cardIds.stream().distinct().toList();
 
@@ -169,6 +175,8 @@ public class PriceService {
         }
 
         ChartPeriod chartPeriod = ChartPeriod.from(period);
+        // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("price.chart.requests", "period", chartPeriod.name()).increment();
         LocalDateTime from = LocalDateTime.now().minusDays(chartPeriod.getDays());
 
         return tradeRepository
@@ -346,8 +354,12 @@ public class PriceService {
     // FR-PRICE-06: getStats()와 같은 방식(자체 AI등급 S, COMPLETED 거래, 최근 7일 vs 이전 7일 블록 평균 비교)을
     // 전체 카드로 확장해 등락률 상위/하위 10개 카드를 랭킹으로 뽑는다. card_prices(Scrydex 동기화)는 쓰지 않는다 —
     // 그 테이블은 PSA/CGC 같은 공인 등급만 있고 우리 자체 S등급 데이터가 없다(getStats와 동일한 이유).
+    // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
+    @Timed(value = "price.ranking.duration")
     public List<PriceRankingResponse> getRanking(String type) {
         RankingType rankingType = RankingType.from(type);
+        // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("price.ranking.requests", "type", rankingType.name()).increment();
 
         LocalDateTime recentFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS);
         LocalDateTime previousFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS * 2L);
