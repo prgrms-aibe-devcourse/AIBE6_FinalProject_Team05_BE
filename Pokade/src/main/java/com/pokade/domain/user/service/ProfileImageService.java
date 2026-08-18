@@ -49,7 +49,7 @@ public class ProfileImageService {
         String newKey = s3FileStorage.upload(file, FOLDER);
         String previousKey = user.changeProfile(newKey);
 
-        // 커밋이 확정된 뒤에 옛 객체를 지운다 - 롤백되면 DB는 예ㅛ key를 유지하므로 객체가 살아있어야 한다.
+        // 커밋이 확정된 뒤에 옛 객체를 지운다 - 롤백되면 DB는 옛 key를 유지하므로 객체가 살아있어야 한다.
         publishCleanup(userId, previousKey);
     }
 
@@ -119,6 +119,9 @@ public class ProfileImageService {
         }
     }
 
+    /**
+     * 커밋 확정 후에만 옛 S3 객체를 지운다. 정리 실패가 본 작업을 되돌리지 않도록 예외를 삼키되,
+     * 고아 객체가 남는 상황이므로 ERROR로 남긴다(개인정보 노출 방지를 위해 key는 기록하지 않는다)*/
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void cleanupPreviousImage(ProfileImageCleanupEvent event) {
         try {
@@ -128,9 +131,4 @@ public class ProfileImageService {
         }
     }
 
-    private String extensionOf(MultipartFile file) {
-        String name = file.getOriginalFilename();
-        int dot = (name == null) ? -1 : name.lastIndexOf('.');
-        return (dot < 0) ? "" : name.substring(dot).toLowerCase();
-    }
 }
