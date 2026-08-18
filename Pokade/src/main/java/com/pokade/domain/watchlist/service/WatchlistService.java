@@ -3,6 +3,7 @@ package com.pokade.domain.watchlist.service;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
@@ -37,6 +38,7 @@ public class WatchlistService {
     private final CardRepository cardRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final CardNameKoResolver cardNameKoResolver;
+    private final NotificationService notificationService;
 
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
@@ -71,11 +73,14 @@ public class WatchlistService {
                     .stream()
                     .findFirst()
                     .orElse(null);
-            boolean targetReached = isTargetReached(saved, range);
+            Integer reachedTargetPrice = resolveReachedTargetPrice(saved, range);
+            boolean targetReached = reachedTargetPrice != null;
             // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
-            // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차를 없애기 위함.
+            // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
             if (targetReached) {
                 saved.markAsNotified();
+                cardRepository.findById(saved.getCardId())
+                        .ifPresent(card -> notificationService.createPriceTargetNotification(saved, card.getName(), reachedTargetPrice));
             }
             return WatchlistResponse.of(saved, targetReached);
         } catch (DataIntegrityViolationException e) {

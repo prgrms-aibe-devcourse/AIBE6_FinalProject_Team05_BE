@@ -3,6 +3,7 @@ package com.pokade.domain.watchlist.service;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
@@ -43,6 +44,7 @@ class WatchlistServiceTest {
     @Mock CardRepository cardRepository;
     @Mock PriceTradeStatsRepository priceTradeStatsRepository;
     @Mock CardNameKoResolver cardNameKoResolver;
+    @Mock NotificationService notificationService;
     @InjectMocks WatchlistService watchlistService;
 
     private Watchlist watchlist(Long userId, Long cardId) {
@@ -122,11 +124,14 @@ class WatchlistServiceTest {
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
         given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(1L, 1800, 2200)));
+        Card card = Card.builder().id(1L).name("리자몽").build();
+        given(cardRepository.findById(1L)).willReturn(Optional.of(card));
 
         WatchlistResponse response = watchlistService.addWatchlist(1L, request);
 
         assertThat(response.targetReached()).isTrue();
         assertThat(response.isNotified()).isTrue();
+        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), eq(2000));
     }
 
     @Test
@@ -143,6 +148,7 @@ class WatchlistServiceTest {
 
         assertThat(response.targetReached()).isFalse();
         assertThat(response.isNotified()).isFalse();
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
@@ -33,7 +34,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 // WatchlistService.addWatchlist()의 동시 등록 방어(유저 단위 잠금 + UNIQUE 위반 변환)를 실제 DB로 검증한다.
-// addWatchlist()가 PriceService/CardRepository/PriceTradeStatsRepository를 쓰지 않으므로, 실제 빈이 아니라
+// 여기서 검증하는 중복/제한 체크는 targetReached(체결가 조회) 결과와 무관하고, mock인 PriceTradeStatsRepository는
+// 기본값(빈 리스트)만 반환해 항상 targetReached=false로 끝나므로(CardRepository/NotificationService 호출 없음)
 // WatchlistRepository만 진짜로 연결하고 나머지는 mock으로 채운 WatchlistService를 직접 생성해 사용한다.
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -50,7 +52,8 @@ class WatchlistConcurrencyTest {
 
     private WatchlistService newWatchlistService() {
         return new WatchlistService(watchlistRepository, mock(PriceService.class),
-                mock(CardRepository.class), mock(PriceTradeStatsRepository.class), mock(CardNameKoResolver.class));
+                mock(CardRepository.class), mock(PriceTradeStatsRepository.class), mock(CardNameKoResolver.class),
+                mock(NotificationService.class));
     }
 
     @Test

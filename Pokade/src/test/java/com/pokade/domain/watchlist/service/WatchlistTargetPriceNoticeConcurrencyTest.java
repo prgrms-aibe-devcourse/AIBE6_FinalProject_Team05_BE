@@ -106,7 +106,8 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
 
         NotificationService notificationService = new NotificationService(notificationRepository, new SseEmitterStore());
         WatchlistService watchlistService = new WatchlistService(watchlistRepository,
-                mock(PriceService.class), cardRepository, priceTradeStatsRepository, mock(CardNameKoResolver.class));
+                mock(PriceService.class), cardRepository, priceTradeStatsRepository, mock(CardNameKoResolver.class),
+                notificationService);
         WatchlistTargetPriceNoticeProcessor processor = new WatchlistTargetPriceNoticeProcessor(
                 watchlistRepository, priceTradeStatsRepository, notificationService, watchlistService);
 
