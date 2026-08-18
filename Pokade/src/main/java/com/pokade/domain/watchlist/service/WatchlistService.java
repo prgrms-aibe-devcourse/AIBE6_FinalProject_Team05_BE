@@ -8,6 +8,7 @@ import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
+import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
@@ -37,9 +38,7 @@ public class WatchlistService {
 
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
-        if (request.targetBuyPrice() == null && request.targetSellPrice() == null) {
-            throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
-        }
+        validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
 
         // 동시 등록 요청에서 "중복 체크 + 20개 제한 체크 + 저장" 구간이 원자적이도록, 같은 유저의 요청만
         // 트랜잭션 종료까지 직렬화한다(다른 유저는 영향 없음).
@@ -120,6 +119,23 @@ public class WatchlistService {
             return targetSellPrice;
         }
         return null;
+    }
+
+    @Transactional
+    public WatchlistResponse updateWatchlist(Long userId, Long watchlistId, WatchlistUpdateRequest request) {
+        validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
+
+        Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.WATCHLIST_NOT_FOUND));
+
+        watchlist.updateTargetPrices(request.targetBuyPrice(), request.targetSellPrice());
+        return WatchlistResponse.of(watchlist);
+    }
+
+    private void validateAtLeastOneTargetPrice(Integer targetBuyPrice, Integer targetSellPrice) {
+        if (targetBuyPrice == null && targetSellPrice == null) {
+            throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
+        }
     }
 
     @Transactional

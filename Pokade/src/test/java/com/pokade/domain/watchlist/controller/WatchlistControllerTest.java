@@ -5,6 +5,7 @@ import com.pokade.domain.auth.service.OAuth2LoginService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
+import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
 import com.pokade.domain.watchlist.service.WatchlistService;
 import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.exception.BusinessException;
@@ -40,6 +41,7 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -166,6 +168,54 @@ class WatchlistControllerTest {
                 .andExpect(jsonPath("$.data[0].currentPrice.sellPrice").value(8000))
                 .andExpect(jsonPath("$.data[0].changeRate").value(3.25))
                 .andExpect(jsonPath("$.data[0].targetReached").value(true));
+    }
+
+    @Test
+    void 목표가_수정에_성공하면_200과_수정된_항목을_반환한다() throws Exception {
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(20000, null);
+        WatchlistResponse response = new WatchlistResponse(
+                1L, 1L, null, null, null, null, 20000, null, false, LocalDateTime.now(), null, null, false);
+
+        given(watchlistService.updateWatchlist(anyLong(), anyLong(), any(WatchlistUpdateRequest.class)))
+                .willReturn(response);
+
+        mockMvc.perform(patch("/api/watchlist/1")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.targetBuyPrice").value(20000));
+    }
+
+    @Test
+    void 목표가_수정시_둘_다_없으면_400을_반환한다() throws Exception {
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(null, null);
+
+        given(watchlistService.updateWatchlist(anyLong(), anyLong(), any(WatchlistUpdateRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED));
+
+        mockMvc.perform(patch("/api/watchlist/1")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TARGET_PRICE_REQUIRED"));
+    }
+
+    @Test
+    void 존재하지_않는_항목_수정시_404를_반환한다() throws Exception {
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(20000, null);
+
+        given(watchlistService.updateWatchlist(anyLong(), anyLong(), any(WatchlistUpdateRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.WATCHLIST_NOT_FOUND));
+
+        mockMvc.perform(patch("/api/watchlist/999")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("WATCHLIST_NOT_FOUND"));
     }
 
     @Test

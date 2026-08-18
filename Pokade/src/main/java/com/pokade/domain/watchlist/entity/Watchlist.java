@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "watchlist")
@@ -59,5 +60,17 @@ public class Watchlist {
 
     public void markAsNotified() {
         this.isNotified = true;
+    }
+
+    // 목표가가 실제로 바뀐 경우에만 isNotified를 리셋한다 - 이미 알림이 간 목표가를 그대로 재저장하는
+    // no-op 수정에서는 배치가 불필요하게 재알림을 보내지 않도록 한다.
+    public void updateTargetPrices(Integer targetBuyPrice, Integer targetSellPrice) {
+        boolean changed = !Objects.equals(this.targetBuyPrice, targetBuyPrice)
+                || !Objects.equals(this.targetSellPrice, targetSellPrice);
+        this.targetBuyPrice = targetBuyPrice;
+        this.targetSellPrice = targetSellPrice;
+        if (changed) {
+            this.isNotified = false;
+        }
     }
 }

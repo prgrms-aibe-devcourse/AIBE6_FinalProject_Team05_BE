@@ -8,6 +8,7 @@ import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
+import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
@@ -276,6 +277,54 @@ class WatchlistServiceTest {
         List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
 
         assertThat(result.get(0).changeRate()).isEqualTo(new java.math.BigDecimal("3.25"));
+    }
+
+    // ===== 목표가 수정 =====
+    @Test
+    @DisplayName("수정: 목표가 둘 다 null이면 TARGET_PRICE_REQUIRED")
+    void updateWatchlist_targetPriceRequired() {
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(null, null);
+
+        assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TARGET_PRICE_REQUIRED);
+        then(watchlistRepository).should(never()).findByIdAndUserId(any(), any());
+    }
+
+    @Test
+    @DisplayName("수정: 본인 소유가 아니거나 존재하지 않으면 WATCHLIST_NOT_FOUND")
+    void updateWatchlist_notFound() {
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(2000, null);
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.WATCHLIST_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("수정: 목표가가 실제로 바뀌면 isNotified가 false로 리셋된다")
+    void updateWatchlist_changedPrice_resetsIsNotified() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null));
+
+        assertThat(response.targetBuyPrice()).isEqualTo(2000);
+        assertThat(response.isNotified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수정: 기존과 동일한 값으로 수정하면(no-op) isNotified는 유지된다")
+    void updateWatchlist_samePrice_keepsIsNotified() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(1000, null));
+
+        assertThat(response.isNotified()).isTrue();
     }
 
     // ===== 삭제 =====
