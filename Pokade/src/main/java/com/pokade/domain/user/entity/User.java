@@ -149,7 +149,7 @@ public class User {
     }
 
     // 탈퇴 확정 — soft-delete + 회원정보 익명화(email·nickname은 UNIQUE라 재가입 재사용 위해 비충돌 값 치환)
-    public void confirmWithdrawal(LocalDateTime now, String anonToken) {
+    public String confirmWithdrawal(LocalDateTime now, String anonToken) {
         this.status = UserStatus.DELETED;
         this.deleted_At = now;
         this.email = "deleted_" + anonToken + "@pokade.invalid";
@@ -157,6 +157,22 @@ public class User {
         this.password = null;
         this.phoneNumber = null;
         this.birthDate = null;
+        String previousKey = this.profileImageUrl;
         this.profileImageUrl = null;
+        return previousKey;
+    }
+
+    // 프로필 이미지를 교체하고 S3 key를 돌려준다 (호출자가 이전 객체 정리하도록)
+    public String changeProfile(String newKey) {
+        String previousKey = this.profileImageUrl;
+        this.profileImageUrl = newKey;
+        return previousKey;
+    }
+
+    // 프로필 이미지를 제거하고 직전 S3 key를 돌려준다
+    public String removeProfile() {
+        String previousKey = this.profileImageUrl;
+        this.profileImageUrl = null;
+        return previousKey;
     }
 }
