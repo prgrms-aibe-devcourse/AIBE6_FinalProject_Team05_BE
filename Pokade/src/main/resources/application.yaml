@@ -60,3 +60,6 @@ app:
     secure: ${APP_COOKIE_SECURE:false} # 이미 코드가 참조 중인 값을 명시적으로 노출
   oauth2:
     redirect-base: ${APP_OAUTH2_REDIRECT_BASE:http://localhost:3000}
+
+prometheus:
+  base-url: ${PROMETHEUS_BASE_URL:http://localhost:9090}
