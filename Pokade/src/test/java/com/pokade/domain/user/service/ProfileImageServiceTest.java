@@ -5,15 +5,18 @@ import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.global.event.ProfileImageCleanupEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +27,7 @@ import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.ByteArrayInputStream;
 import java.util.Optional;
@@ -46,6 +50,8 @@ class ProfileImageServiceTest {
     private UserRepository userRepository;
     @Mock
     private S3FileStorage s3FileStorage;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ProfileImageService profileImageService;
@@ -69,7 +75,7 @@ class ProfileImageServiceTest {
     // ===== 업로드 =====
 
     @Test
-    @DisplayName("업로드: S3에 저장하고 사용자 프로필 이미지 key를 갱신한다")
+    @DisplayName("업로드: S3에 저장하고 사용자 프로필 이미지 key를 갱신한다 (이전 이미지가 없으면 정리 이벤트도 없다)")
     void upload_success() {
         User user = userWithImage(null);
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
@@ -78,12 +84,13 @@ class ProfileImageServiceTest {
         profileImageService.upload(1L, png(1024));
 
         assertThat(user.getProfileImageUrl()).isEqualTo("profile/new-key.png");
+        then(eventPublisher).should(never()).publishEvent(any(Object.class));
         then(s3FileStorage).should(never()).delete(anyString());
     }
 
     @Test
-    @DisplayName("업로드: 교체 시 기존 S3 객체를 삭제한다")
-    void upload_replacesAndDeletesPrevious() {
+    @DisplayName("업로드: 교체 시 옛 key 정리를 이벤트로 넘기고 커밋 전에는 직접 삭제하지 않는다")
+    void upload_replacesAndPublishesCleanup() {
         User user = userWithImage("profile/old-key.png");
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(s3FileStorage.upload(any(), any())).willReturn("profile/new-key.png");
@@ -91,7 +98,9 @@ class ProfileImageServiceTest {
         profileImageService.upload(1L, png(1024));
 
         assertThat(user.getProfileImageUrl()).isEqualTo("profile/new-key.png");
-        then(s3FileStorage).should().delete("profile/old-key.png");
+        assertThat(publishedCleanup().key()).isEqualTo("profile/old-key.png");
+        // 커밋 전에 지우면 롤백 시 DB가 가리키는 객체가 사라진다
+        then(s3FileStorage).should(never()).delete(anyString());
     }
 
     @Test
@@ -116,23 +125,30 @@ class ProfileImageServiceTest {
         then(s3FileStorage).should(never()).upload(any(), any());
     }
 
+    // ===== 커밋 이후 정리 (AFTER_COMMIT 리스너) =====
+
     @Test
-    @DisplayName("업로드: S3 삭제가 실패해도 교체 자체는 성공한다")
-    void upload_s3DeleteFailureIsSwallowed() {
-        User user = userWithImage("profile/old-key.png");
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(s3FileStorage.upload(any(), any())).willReturn("profile/new-key.png");
+    @DisplayName("정리: 커밋 이후 리스너가 옛 S3 객체를 삭제한다")
+    void cleanup_deletesPreviousObject() {
+        profileImageService.cleanupPreviousImage(new ProfileImageCleanupEvent(1L, "profile/old-key.png"));
+
+        then(s3FileStorage).should().delete("profile/old-key.png");
+    }
+
+    @Test
+    @DisplayName("정리: S3 삭제가 실패해도 예외를 밖으로 던지지 않는다 (고아 객체만 남김)")
+    void cleanup_swallowsS3Failure() {
         willThrow(new RuntimeException("S3 장애")).given(s3FileStorage).delete("profile/old-key.png");
 
-        profileImageService.upload(1L, png(1024));
+        profileImageService.cleanupPreviousImage(new ProfileImageCleanupEvent(1L, "profile/old-key.png"));
 
-        assertThat(user.getProfileImageUrl()).isEqualTo("profile/new-key.png");
+        then(s3FileStorage).should().delete("profile/old-key.png");
     }
 
     // ===== 삭제 =====
 
     @Test
-    @DisplayName("삭제: 이미지를 지우고 컬럼을 비운다")
+    @DisplayName("삭제: 컬럼을 비우고 옛 key 정리를 이벤트로 넘긴다")
     void delete_success() {
         User user = userWithImage("profile/old-key.png");
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
@@ -140,7 +156,8 @@ class ProfileImageServiceTest {
         profileImageService.delete(1L);
 
         assertThat(user.getProfileImageUrl()).isNull();
-        then(s3FileStorage).should().delete("profile/old-key.png");
+        assertThat(publishedCleanup().key()).isEqualTo("profile/old-key.png");
+        then(s3FileStorage).should(never()).delete(anyString());
     }
 
     @Test
@@ -152,6 +169,7 @@ class ProfileImageServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.PROFILE_IMAGE_NOT_SET);
 
+        then(eventPublisher).should(never()).publishEvent(any(Object.class));
         then(s3FileStorage).should(never()).delete(anyString());
     }
 
@@ -224,15 +242,49 @@ class ProfileImageServiceTest {
     }
 
     @Test
-    @DisplayName("서빙: DB에 key가 있어도 S3 객체가 없으면 PROFILE_IMAGE_NOT_SET")
+    @DisplayName("서빙: DB에 key가 있어도 S3에 객체가 없으면(404) PROFILE_IMAGE_NOT_SET")
     void serve_objectMissingInS3() {
         given(userRepository.findById(1L)).willReturn(Optional.of(userWithImage("profile/key.png")));
-        given(s3FileStorage.head("profile/key.png"))
-                .willThrow(NoSuchKeyException.builder().message("not found").build());
+        given(s3FileStorage.head("profile/key.png")).willThrow(s3Error(404));
 
         assertThatThrownBy(() -> profileImageService.serve(1L, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.PROFILE_IMAGE_NOT_SET);
+    }
+
+    @Test
+    @DisplayName("서빙: NoSuchKeyException도 404로 취급해 PROFILE_IMAGE_NOT_SET")
+    void serve_noSuchKeyIsTreatedAs404() {
+        given(userRepository.findById(1L)).willReturn(Optional.of(userWithImage("profile/key.png")));
+        given(s3FileStorage.head("profile/key.png")).willThrow(
+                (NoSuchKeyException) NoSuchKeyException.builder()
+                        .statusCode(404).message("not found").build());
+
+        assertThatThrownBy(() -> profileImageService.serve(1L, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PROFILE_IMAGE_NOT_SET);
+    }
+
+    @Test
+    @DisplayName("서빙: 404가 아닌 S3 오류(403 등)는 이미지 없음으로 뭉개지 않고 그대로 전파한다")
+    void serve_nonNotFoundS3ErrorPropagates() {
+        given(userRepository.findById(1L)).willReturn(Optional.of(userWithImage("profile/key.png")));
+        given(s3FileStorage.head("profile/key.png")).willThrow(s3Error(403));
+
+        assertThatThrownBy(() -> profileImageService.serve(1L, null))
+                .isInstanceOf(S3Exception.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private ProfileImageCleanupEvent publishedCleanup() {
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        then(eventPublisher).should().publishEvent(captor.capture());
+        assertThat(captor.getValue()).isInstanceOf(ProfileImageCleanupEvent.class);
+        return (ProfileImageCleanupEvent) captor.getValue();
+    }
+
+    private S3Exception s3Error(int statusCode) {
+        return (S3Exception) S3Exception.builder().statusCode(statusCode).message("s3 error").build();
     }
 
     private ResponseInputStream<GetObjectResponse> stream(byte[] bytes) {

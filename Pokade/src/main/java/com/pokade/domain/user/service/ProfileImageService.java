@@ -2,22 +2,26 @@ package com.pokade.domain.user.service;
 
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.global.event.ProfileImageCleanupEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.Resource;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.util.Set;
 
@@ -32,6 +36,7 @@ public class ProfileImageService {
 
     private final UserRepository userRepository;
     private final S3FileStorage s3FileStorage;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 프로필 이미지를 업로드하고 기존 이미지를 정리한다.
     @Transactional
@@ -43,7 +48,9 @@ public class ProfileImageService {
 
         String newKey = s3FileStorage.upload(file, FOLDER);
         String previousKey = user.changeProfile(newKey);
-        deleteQuietly(previousKey);
+
+        // 커밋이 확정된 뒤에 옛 객체를 지운다 - 롤백되면 DB는 예ㅛ key를 유지하므로 객체가 살아있어야 한다.
+        publishCleanup(userId, previousKey);
     }
 
     // 프로필 이미지를 제거하고 기본 이미지로 되돌린다.
@@ -57,7 +64,7 @@ public class ProfileImageService {
         }
 
         String previousKey = user.removeProfile();
-        deleteQuietly(previousKey);
+        publishCleanup(userId, previousKey);
     }
 
     public ResponseEntity<Resource> serve(Long userId, String ifNoneMatch) {
@@ -72,8 +79,12 @@ public class ProfileImageService {
         HeadObjectResponse metadata;
         try {
             metadata = s3FileStorage.head(key);
-        } catch (NoSuchKeyException e) {
-            throw new BusinessException(ErrorCode.PROFILE_IMAGE_NOT_SET);
+        } catch (S3Exception e) {
+            // 없는 객체(404)만 "이미지 없음"으로 바꾸고, 권한 오류 등 나머지는 그대로 올린다
+            if (e.statusCode() == 404) {
+                throw new BusinessException(ErrorCode.PROFILE_IMAGE_NOT_SET);
+            }
+            throw e;
         }
 
         String eTag = metadata.eTag();
@@ -102,15 +113,24 @@ public class ProfileImageService {
         }
     }
 
-    // S3 정리 실패가 이미지 교체, 삭제를 막지 않도록 로그만 남긴다.
-    private void deleteQuietly(String key) {
-        if (key == null) {
-            return;
+    private void publishCleanup(Long userId, String key) {
+        if (key != null) {
+            eventPublisher.publishEvent(new ProfileImageCleanupEvent(userId, key));
         }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void cleanupPreviousImage(ProfileImageCleanupEvent event) {
         try {
-            s3FileStorage.delete(key);
+            s3FileStorage.delete(event.key());
         } catch (RuntimeException e) {
-            log.warn("프로필 이미지 S3 객체 삭제 실패 - key={}", key, e);
+            log.error("프로필 이미지 S3 객체 삭제 실패 - userId={} (고아 객체 잔존)", event.userId(), e);
         }
+    }
+
+    private String extensionOf(MultipartFile file) {
+        String name = file.getOriginalFilename();
+        int dot = (name == null) ? -1 : name.lastIndexOf('.');
+        return (dot < 0) ? "" : name.substring(dot).toLowerCase();
     }
 }
