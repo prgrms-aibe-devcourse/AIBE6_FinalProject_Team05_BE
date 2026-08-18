@@ -14,6 +14,7 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -99,7 +100,7 @@ public class S3FileStorage {
         if (dot < 0 || dot == name.length() - 1) {
             return "";
         }
-        String ext = name.substring(dot + 1).toLowerCase();
+        String ext = name.substring(dot + 1).toLowerCase(Locale.ROOT);
         return ext.matches("[a-z0-9]{1,10}") ? "." + ext : "";
     }
 
