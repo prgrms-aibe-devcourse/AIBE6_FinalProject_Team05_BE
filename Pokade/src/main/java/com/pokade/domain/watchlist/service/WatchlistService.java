@@ -79,13 +79,17 @@ public class WatchlistService {
             // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
             if (targetReached) {
                 saved.markAsNotified();
-                cardRepository.findById(saved.getCardId())
-                        .ifPresent(card -> notificationService.createPriceTargetNotification(saved, card.getName(), reachedTargetPrice));
+                notifyIfTargetAlreadyReached(saved, reachedTargetPrice);
             }
             return WatchlistResponse.of(saved, targetReached);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
+    }
+
+    private void notifyIfTargetAlreadyReached(Watchlist saved, Integer reachedTargetPrice) {
+        cardRepository.findById(saved.getCardId())
+                .ifPresent(card -> notificationService.createPriceTargetNotification(saved, card.getName(), reachedTargetPrice));
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
