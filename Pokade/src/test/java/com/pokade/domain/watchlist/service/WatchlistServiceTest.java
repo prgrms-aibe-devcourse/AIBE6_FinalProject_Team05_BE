@@ -35,6 +35,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class WatchlistServiceTest {
@@ -465,6 +466,88 @@ class WatchlistServiceTest {
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(9000, null, null));
 
         assertThat(response.targetReached()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수정: 미도달 상태에서 가격 변경으로 새로 도달하면 isNotified=true가 되고 실제 알림이 생성된다")
+    void updateWatchlist_newlyReachedByPriceChange_marksNotifiedAndNotifies() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
+        Card card = Card.builder().id(10L).name("리자몽").build();
+        given(cardRepository.findById(10L)).willReturn(Optional.of(card));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
+
+        assertThat(response.targetReached()).isTrue();
+        assertThat(response.isNotified()).isTrue();
+        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), eq(2000));
+    }
+
+    @Test
+    @DisplayName("수정: 이미 알림이 간 상태에서 가격 변경 없이(no-op) 수정하면 도달해 있어도 다시 알리지 않는다")
+    void updateWatchlist_alreadyNotified_samePrice_doesNotReNotify() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 800, 1200)));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(1000, null, null));
+
+        assertThat(response.targetReached()).isTrue();
+        assertThat(response.isNotified()).isTrue();
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("수정: 이미 도달 범위 안인 상태에서 재알림(resend) 요청만 오면 즉시 다시 알림이 생성된다")
+    void updateWatchlist_resendWhenAlreadyInRange_notifiesImmediately() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 800, 1200)));
+        Card card = Card.builder().id(10L).name("리자몽").build();
+        given(cardRepository.findById(10L)).willReturn(Optional.of(card));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(null, null, true));
+
+        assertThat(response.isNotified()).isTrue();
+        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), eq(1000));
+    }
+
+    @Test
+    @DisplayName("수정: resend와 가격변경(신규 도달)이 동시에 와도 알림은 정확히 한 번만 생성된다")
+    void updateWatchlist_resendAndPriceChangeBothReached_notifiesOnce() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
+        Card card = Card.builder().id(10L).name("리자몽").build();
+        given(cardRepository.findById(10L)).willReturn(Optional.of(card));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, true));
+
+        assertThat(response.isNotified()).isTrue();
+        then(notificationService).should(times(1)).createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), eq(2000));
+    }
+
+    @Test
+    @DisplayName("수정: 목표가 도달했지만 카드를 찾지 못하면 알림 생성은 스킵되고 targetReached/isNotified는 정상 반영된다")
+    void updateWatchlist_targetReachedButCardNotFound_skipsNotification() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
+        given(cardRepository.findById(10L)).willReturn(Optional.empty());
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
+
+        assertThat(response.targetReached()).isTrue();
+        assertThat(response.isNotified()).isTrue();
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
     }
 
     // ===== 삭제 =====
