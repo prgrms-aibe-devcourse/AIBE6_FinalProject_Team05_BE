@@ -142,7 +142,13 @@ public class WatchlistService {
         if (resend) {
             watchlist.requestNotificationAgain();
         }
-        return WatchlistResponse.of(watchlist);
+
+        PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
+                .findPriceRangesByCardIds(List.of(watchlist.getCardId()), null, TradeStatus.COMPLETED)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        return WatchlistResponse.of(watchlist, isTargetReached(watchlist, range));
     }
 
     private void validateAtLeastOneTargetPrice(Integer targetBuyPrice, Integer targetSellPrice) {

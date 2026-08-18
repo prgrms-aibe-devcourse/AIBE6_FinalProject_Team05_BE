@@ -384,6 +384,33 @@ class WatchlistServiceTest {
         assertThat(response.isNotified()).isFalse();
     }
 
+    @Test
+    @DisplayName("수정: 변경된 목표가가 체결가 구간 안에 있으면 targetReached=true가 실제로 반영된다")
+    void updateWatchlist_targetReached_reflectsActualPriceRange() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
+
+        assertThat(response.targetBuyPrice()).isEqualTo(2000);
+        assertThat(response.targetReached()).isTrue();
+    }
+
+    @Test
+    @DisplayName("수정: 변경된 목표가가 체결가 구간 밖이면 targetReached=false로 유지된다")
+    void updateWatchlist_targetReached_falseWhenOutOfRange() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(9000, null, null));
+
+        assertThat(response.targetReached()).isFalse();
+    }
+
     // ===== 삭제 =====
     @Test
     @DisplayName("삭제: 존재하지 않으면 WATCHLIST_NOT_FOUND")

@@ -26,6 +26,10 @@ public record WatchlistResponse(
 
     /** 등록 직후 응답 - 아직 카드/현재 시세를 조회하지 않은 상태라 카드 정보·currentPrice·등락률은 없다. */
     public static WatchlistResponse of(Watchlist watchlist) {
+        return of(watchlist, false);
+    }
+
+    public static WatchlistResponse of(Watchlist watchlist, boolean targetReached) {
         return new WatchlistResponse(
                 watchlist.getId(),
                 watchlist.getCardId(),
@@ -40,7 +44,7 @@ public record WatchlistResponse(
                 watchlist.getCreatedAt(),
                 null,
                 null,
-                false
+                targetReached
         );
     }
 
