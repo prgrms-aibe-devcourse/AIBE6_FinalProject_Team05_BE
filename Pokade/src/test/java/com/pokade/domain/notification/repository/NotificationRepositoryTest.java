@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -170,6 +171,51 @@ class NotificationRepositoryTest {
         int result = notificationRepository.deleteByIdAndUserId(999_999L, userId);
 
         assertThat(result).isEqualTo(0);
+    }
+
+    @Test
+    void deleteExpiredNotifications_읽은_알림은_기준일이_지나면_삭제되고_그_전이면_유지된다() {
+        Long userId = insertUser("cleanup-read@test.com");
+        Notification oldRead = saveNotification(userId, NotificationType.PRICE_TARGET, "old-read");
+        Notification recentRead = saveNotification(userId, NotificationType.PRICE_TARGET, "recent-read");
+        notificationRepository.markAsReadIfUnread(oldRead.getId(), userId);
+        notificationRepository.markAsReadIfUnread(recentRead.getId(), userId);
+        entityManager.clear();
+        backdateCreatedAt(oldRead.getId(), LocalDateTime.now().minusDays(31));
+        backdateCreatedAt(recentRead.getId(), LocalDateTime.now().minusDays(29));
+
+        int deleted = notificationRepository.deleteExpiredNotifications(
+                LocalDateTime.now().minusDays(30), LocalDateTime.now().minusDays(180));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(notificationRepository.findById(oldRead.getId())).isEmpty();
+        assertThat(notificationRepository.findById(recentRead.getId())).isPresent();
+    }
+
+    @Test
+    void deleteExpiredNotifications_안읽은_알림은_읽은_기준일이_지나도_유지되고_더_긴_기준일이_지나야_삭제된다() {
+        Long userId = insertUser("cleanup-unread@test.com");
+        Notification oldUnread = saveNotification(userId, NotificationType.PRICE_TARGET, "old-unread");
+        // 30일(읽은 알림 기준)은 지났지만 180일(안 읽은 알림 기준)은 안 지난 케이스 - 하이브리드 정책의 핵심.
+        Notification recentUnread = saveNotification(userId, NotificationType.PRICE_TARGET, "recent-unread");
+        backdateCreatedAt(oldUnread.getId(), LocalDateTime.now().minusDays(181));
+        backdateCreatedAt(recentUnread.getId(), LocalDateTime.now().minusDays(60));
+
+        int deleted = notificationRepository.deleteExpiredNotifications(
+                LocalDateTime.now().minusDays(30), LocalDateTime.now().minusDays(180));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(notificationRepository.findById(oldUnread.getId())).isEmpty();
+        assertThat(notificationRepository.findById(recentUnread.getId())).isPresent();
+    }
+
+    private void backdateCreatedAt(Long notificationId, LocalDateTime createdAt) {
+        entityManager.createNativeQuery("UPDATE notifications SET created_at = :createdAt WHERE id = :id")
+                .setParameter("createdAt", createdAt)
+                .setParameter("id", notificationId)
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
     }
 
     private Notification saveNotification(Long userId, NotificationType type, String message) {

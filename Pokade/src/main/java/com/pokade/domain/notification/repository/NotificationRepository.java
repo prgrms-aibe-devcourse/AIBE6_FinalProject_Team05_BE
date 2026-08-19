@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,4 +36,15 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM Notification n WHERE n.id = :id AND n.userId = :userId")
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
+    // #162: 자동 정리(하이브리드 TTL) - 읽은 알림은 readCutoff보다 오래되면 삭제, 안 읽은 알림도
+    // unreadCutoff(더 긴 유예기간)보다 오래되면 삭제한다 - 안 읽은 알림이 영원히 안 지워지는 것을 방지한다.
+    @Modifying(clearAutomatically = true)
+    @Query("""
+            DELETE FROM Notification n
+            WHERE (n.isRead = true AND n.createdAt < :readCutoff)
+               OR (n.isRead = false AND n.createdAt < :unreadCutoff)
+            """)
+    int deleteExpiredNotifications(@Param("readCutoff") LocalDateTime readCutoff,
+                                    @Param("unreadCutoff") LocalDateTime unreadCutoff);
 }
