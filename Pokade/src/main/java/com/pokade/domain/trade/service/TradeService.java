@@ -1,9 +1,11 @@
 package com.pokade.domain.trade.service;
 
-import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.trade.dto.MyTradeResponse;
+import com.pokade.domain.trade.dto.MyTradeSearchCondition;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Payment;
@@ -16,10 +18,16 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -88,6 +96,28 @@ public class TradeService {
         }
 
         return toResponse(trade);
+    }
+
+    public Page<MyTradeResponse> getMyTrades(Long userId, MyTradeSearchCondition condition, Pageable pageable) {
+        Page<Trade> trades = tradeRepository.findMyTrades(
+                userId,
+                condition.includeBuy(),
+                condition.includeSell(),
+                condition.statusesOrAll(),
+                condition.fromDateTime(),
+                condition.toDateTimeExclusive(),
+                pageable);
+
+        Set<Long> cardIds = trades.getContent().stream()
+                .map(trade -> trade.getListing().getCardId())
+                .collect(Collectors.toSet());
+
+        // toResponse()처럼 건건이 조회하면 목록 크기만큼 쿼리가 나가므로 한 번에 모아 온다
+        Map<Long, Card> cards = cardRepository.findAllById(cardIds).stream()
+                .collect(Collectors.toMap(Card::getId, Function.identity()));
+
+        return trades.map(trade ->
+                MyTradeResponse.of(trade, userId, cards.get(trade.getListing().getCardId())));
     }
 
     @Transactional

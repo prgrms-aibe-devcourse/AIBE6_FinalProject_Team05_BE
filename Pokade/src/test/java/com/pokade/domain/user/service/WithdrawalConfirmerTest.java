@@ -6,6 +6,7 @@ import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.domain.user.support.AnonymizationTokenGenerator;
+import com.pokade.global.event.ProfileImageCleanupEvent;
 import com.pokade.global.event.UserWithdrawnEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.times;
 import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,6 +59,43 @@ class WithdrawalConfirmerTest {
         ArgumentCaptor<UserWithdrawnEvent> captor = ArgumentCaptor.forClass(UserWithdrawnEvent.class);
         then(eventPublisher).should().publishEvent(captor.capture());
         assertThat(captor.getValue().userId()).isEqualTo(2L); // payload userId까지 검증
+    }
+
+    @Test
+    @DisplayName("프로필 이미지가 있으면 익명화로 컬럼이 비워지기 전의 S3 key를 정리 이벤트로 넘긴다")
+    void confirm_withProfileImage_publishesCleanupEvent() {
+        User user = userWithStatus(2L, UserStatus.WITHDRAWAL_PENDING);
+        user.changeProfile("profile/old-key.png");
+        given(userRepository.findById(2L)).willReturn(Optional.of(user));
+        given(anonTokenGenerator.generate()).willReturn("a1b2c3d4e5f6");
+
+        withdrawalConfirmer.confirm(2L);
+
+        // 컬럼은 비워지지만, 그 전에 읽어둔 key가 이벤트로 전달되어야 S3 객체를 지울 수 있다
+        assertThat(user.getProfileImageUrl()).isNull();
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        then(eventPublisher).should(times(2)).publishEvent(captor.capture());
+
+        ProfileImageCleanupEvent cleanup = captor.getAllValues().stream()
+                .filter(ProfileImageCleanupEvent.class::isInstance)
+                .map(ProfileImageCleanupEvent.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("ProfileImageCleanupEvent가 발행되지 않았다"));
+        assertThat(cleanup.userId()).isEqualTo(2L);
+        assertThat(cleanup.key()).isEqualTo("profile/old-key.png");
+    }
+
+    @Test
+    @DisplayName("프로필 이미지가 없으면 정리 이벤트를 발행하지 않는다")
+    void confirm_withoutProfileImage_noCleanupEvent() {
+        User user = userWithStatus(2L, UserStatus.WITHDRAWAL_PENDING);
+        given(userRepository.findById(2L)).willReturn(Optional.of(user));
+        given(anonTokenGenerator.generate()).willReturn("a1b2c3d4e5f6");
+
+        withdrawalConfirmer.confirm(2L);
+
+        then(eventPublisher).should(never()).publishEvent(any(ProfileImageCleanupEvent.class));
     }
 
     @Test

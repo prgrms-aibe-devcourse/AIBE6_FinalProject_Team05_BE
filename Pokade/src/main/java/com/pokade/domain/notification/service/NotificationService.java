@@ -3,16 +3,24 @@ package com.pokade.domain.notification.service;
 import com.pokade.domain.notification.dto.NotificationResponse;
 import com.pokade.domain.notification.entity.Notification;
 import com.pokade.domain.notification.entity.NotificationType;
+import com.pokade.domain.notification.event.NotificationPushEvent;
 import com.pokade.domain.notification.repository.NotificationRepository;
 import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -33,6 +41,12 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final SseEmitterStore sseEmitterStore;
+    private final ApplicationEventPublisher eventPublisher;
+
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
+    // required = false: 슬라이스 테스트엔 MeterRegistry 빈이 없어 컨텍스트 로딩이 깨지는 문제(#224 유사)를 막기 위함.
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     public List<NotificationResponse> getNotifications(Long userId) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId)
@@ -73,6 +87,31 @@ public class NotificationService {
         return String.format("%s 카드가 %s 목표가 %,d원에 도달했습니다.", cardName, targetLabel, reachedTargetPrice);
     }
 
+    // 1:1 문의 처리 완료 알림 생성 - 관리자의 답변 등록, 또는 상태를 HANDLED로 변경한 경우 호출된다.
+    // 알림 저장은 호출자 트랜잭션에 그대로 포함시키되, SSE 푸시는 커밋이 실제로 성공한 뒤에만 보낸다 -
+    // 커밋 전에 푸시하면 이후 같은 트랜잭션 안에서 다른 작업이 실패해 롤백되는 경우, 유저는 이미 알림을
+    // 받았는데 문의 상태/알림 레코드는 존재하지 않는 불일치가 생긴다.
+    @Transactional
+    public void createInquiryHandledNotification(Long userId, String inquiryTitle) {
+        Notification notification = Notification.builder()
+                .userId(userId)
+                .type(NotificationType.INQUIRY_HANDLED)
+                .message(String.format("'%s' 문의가 처리 완료되었습니다.", inquiryTitle))
+                .build();
+
+        notificationRepository.save(notification);
+        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification)));
+    }
+
+    // 트랜잭션이 없는 컨텍스트(단위 테스트 등)에서도 그대로 실행되도록 fallbackExecution=true.
+    // AFTER_COMMIT 리스너는 이미 커밋되어 끝난 트랜잭션 밖에서 호출되므로, 클래스 레벨 @Transactional을
+    // 그대로 상속하면 Spring이 기동 시점에 예외를 던진다 - NOT_SUPPORTED로 명시적으로 트랜잭션을 배제한다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onNotificationPush(NotificationPushEvent event) {
+        pushToSubscribers(event.userId(), event.response());
+    }
+
     // 로그인 유저의 SSE 구독을 등록한다. 인증은 기존 JwtAuthenticationFilter가 처리하므로
     // 여기서는 이미 인증된 userId를 받아 Emitter를 저장소에 등록하는 역할만 한다.
     public SseEmitter subscribe(Long userId) {
@@ -101,16 +140,26 @@ public class NotificationService {
     @Scheduled(fixedRate = HEARTBEAT_INTERVAL_MILLIS)
     public void sendHeartbeat() {
         for (SseEmitter emitter : sseEmitterStore.findAll()) {
-            sendEvent(emitter, SseEmitter.event().comment("heartbeat"));
+            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. 하트비트 전송 실패율만 별도로 보기 위해
+            // 실패 카운터 지표명을 넘기는 오버로드를 쓴다 - 일반 알림 push(pushToSubscribers)는 대상 아님.
+            sendEvent(emitter, SseEmitter.event().comment("heartbeat"), "notification.sse.heartbeat.failure.calls");
         }
     }
 
     // 하나의 Emitter 전송 실패가 나머지 Emitter 처리를 막지 않도록 예외를 여기서 흡수한다.
     private void sendEvent(SseEmitter emitter, SseEmitter.SseEventBuilder event) {
+        sendEvent(emitter, event, null);
+    }
+
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. failureMetricName이 있을 때만 실패 카운터를 증가시킨다.
+    private void sendEvent(SseEmitter emitter, SseEmitter.SseEventBuilder event, String failureMetricName) {
         try {
             emitter.send(event);
         } catch (IOException e) {
             log.info("SSE 전송 실패로 연결을 종료합니다.", e);
+            if (failureMetricName != null) {
+                meterRegistry.counter(failureMetricName).increment();
+            }
             emitter.completeWithError(e);
         }
     }

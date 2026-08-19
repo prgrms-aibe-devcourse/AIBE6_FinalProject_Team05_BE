@@ -4,6 +4,7 @@ import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.domain.user.support.AnonymizationTokenGenerator;
+import com.pokade.global.event.ProfileImageCleanupEvent;
 import com.pokade.global.event.UserWithdrawnEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
@@ -30,10 +31,16 @@ public class WithdrawalConfirmer {
         if (user.getStatus() != UserStatus.WITHDRAWAL_PENDING) {
             return false; // 멱등 skip - 그새 철회(ACTIVE)됐거나 이미 확정 (DELETED)
         }
+
         String anonToken = anonTokenGenerator.generate();
-        user.confirmWithdrawal(LocalDateTime.now(), anonToken);
+        String previousImageKey = user.confirmWithdrawal(LocalDateTime.now(), anonToken);
         userRepository.flush();
+
         eventPublisher.publishEvent(new UserWithdrawnEvent(userId));
+        if (previousImageKey != null) {
+            eventPublisher.publishEvent(new ProfileImageCleanupEvent(userId, previousImageKey));
+        }
+
         return true;
     }
 }

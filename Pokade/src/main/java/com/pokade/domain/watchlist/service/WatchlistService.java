@@ -2,17 +2,24 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
+import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,12 +41,22 @@ public class WatchlistService {
     private final PriceService priceService;
     private final CardRepository cardRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
+    private final CardNameKoResolver cardNameKoResolver;
+    private final NotificationService notificationService;
 
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
+    // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
+    // required = false: @DataJpaTest 등 슬라이스 테스트엔 MeterRegistry 빈이 없어 NoSuchBeanDefinitionException으로
+    // 컨텍스트 로딩 자체가 깨졌다(#224). 매칭되는 빈이 없으면 Spring이 필드를 건드리지 않고 그대로 두므로
+    // 아래 기본값(SimpleMeterRegistry)이 계속 살아남아 null이 되지 않는다.
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+    @Timed(value = "watchlist.add.duration")
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
-        if (request.targetBuyPrice() == null && request.targetSellPrice() == null) {
-            throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
-        }
+        validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
 
         // 동시 등록 요청에서 "중복 체크 + 20개 제한 체크 + 저장" 구간이 원자적이도록, 같은 유저의 요청만
         // 트랜잭션 종료까지 직렬화한다(다른 유저는 영향 없음).
@@ -64,10 +81,48 @@ public class WatchlistService {
         // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
         try {
             Watchlist saved = watchlistRepository.save(watchlist);
-            return WatchlistResponse.of(saved);
+
+            PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
+                    .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+            Integer reachedTargetPrice = resolveReachedTargetPrice(saved, range);
+            boolean targetReached = reachedTargetPrice != null;
+            // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
+            // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
+            notifyIfNewlyReached(saved, reachedTargetPrice);
+            return WatchlistResponse.of(saved, targetReached);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
+    }
+
+    // 목표가에 새로 도달한 경우(아직 알림 안 간 상태에서 도달)에만 markAsNotified + 실제 알림 생성을 한다.
+    // "이미 알림 갔는지"는 메모리 값이 아니라 markAsNotifiedIfNotYet()의 원자적 조건부 UPDATE(DB 기준)로
+    // 판정한다 - 배치(WatchlistTargetPriceNoticeProcessor)가 그 사이 먼저 선점했을 수 있어서, 메모리에 로드된
+    // isNotified만 믿으면 중복 알림이 생길 수 있다. claimed>0일 때만 엔티티도 true로 맞춰서, 이 메서드가
+    // 반환하는 WatchlistResponse의 isNotified가 실제 DB 상태와 일치하게 한다(배치는 응답 DTO가 없어서 이
+    // 동기화가 필요 없었던 것과 다른 점).
+    private void notifyIfNewlyReached(Watchlist watchlist, Integer reachedTargetPrice) {
+        if (reachedTargetPrice == null) {
+            return;
+        }
+        int claimed = watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId());
+        if (claimed == 0) {
+            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+            meterRegistry.counter("watchlist.notify.already_claimed.calls").increment();
+            return;
+        }
+        // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("watchlist.notify.immediate.calls").increment();
+        watchlist.markAsNotified();
+        notifyIfTargetAlreadyReached(watchlist, reachedTargetPrice);
+    }
+
+    private void notifyIfTargetAlreadyReached(Watchlist watchlist, Integer reachedTargetPrice) {
+        cardRepository.findById(watchlist.getCardId())
+                .ifPresent(card -> notificationService.createPriceTargetNotification(watchlist, card.getName(), reachedTargetPrice));
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
@@ -92,12 +147,16 @@ public class WatchlistService {
         Map<Long, BigDecimal> changeRateByCardId = priceService.getChangeRates(cardIds);
 
         return watchlists.stream()
-                .map(watchlist -> WatchlistResponse.withPrice(
-                        watchlist,
-                        cardById.get(watchlist.getCardId()),
-                        priceByCardId.get(watchlist.getCardId()),
-                        changeRateByCardId.get(watchlist.getCardId()),
-                        isTargetReached(watchlist, rangeByCardId.get(watchlist.getCardId()))))
+                .map(watchlist -> {
+                    Card card = cardById.get(watchlist.getCardId());
+                    return WatchlistResponse.withPrice(
+                            watchlist,
+                            card,
+                            card != null ? cardNameKoResolver.resolve(card) : null,
+                            priceByCardId.get(watchlist.getCardId()),
+                            changeRateByCardId.get(watchlist.getCardId()),
+                            isTargetReached(watchlist, rangeByCardId.get(watchlist.getCardId())));
+                })
                 .toList();
     }
 
@@ -120,6 +179,41 @@ public class WatchlistService {
             return targetSellPrice;
         }
         return null;
+    }
+
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+    @Timed(value = "watchlist.update.duration")
+    @Transactional
+    public WatchlistResponse updateWatchlist(Long userId, Long watchlistId, WatchlistUpdateRequest request) {
+        boolean resend = Boolean.TRUE.equals(request.resendNotification());
+        // 재알림만 요청할 때는 가격을 안 보낼 수 있음 - 필수 검증에서 예외로 취급
+        if (!resend) {
+            validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
+        }
+
+        Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.WATCHLIST_NOT_FOUND));
+
+        watchlist.updateTargetPrices(request.targetBuyPrice(), request.targetSellPrice());
+        if (resend) {
+            watchlist.requestNotificationAgain();
+        }
+
+        PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
+                .findPriceRangesByCardIds(List.of(watchlist.getCardId()), null, TradeStatus.COMPLETED)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        Integer reachedTargetPrice = resolveReachedTargetPrice(watchlist, range);
+        boolean targetReached = reachedTargetPrice != null;
+        notifyIfNewlyReached(watchlist, reachedTargetPrice);
+        return WatchlistResponse.of(watchlist, targetReached);
+    }
+
+    private void validateAtLeastOneTargetPrice(Integer targetBuyPrice, Integer targetSellPrice) {
+        if (targetBuyPrice == null && targetSellPrice == null) {
+            throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
+        }
     }
 
     @Transactional

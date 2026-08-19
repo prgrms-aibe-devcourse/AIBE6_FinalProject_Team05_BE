@@ -1,0 +1,14 @@
+# Grafana 대시보드 provider provisioning - #258, 팀 논의 전 커밋 대상 아님.
+# 실제 대시보드 JSON은 여기가 아니라 /var/lib/grafana/dashboards(= ../../dashboards 마운트)에 둔다.
+apiVersion: 1
+
+providers:
+  - name: pokade-dashboards
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
