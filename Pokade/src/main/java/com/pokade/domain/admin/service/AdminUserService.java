@@ -1,6 +1,6 @@
 package com.pokade.domain.admin.service;
 
-import com.pokade.domain.admin.metrics.client.dto.response.AdminUserResponse;
+import com.pokade.domain.admin.dto.response.AdminUserResponse;
 import com.pokade.domain.auth.store.RefreshTokenStore;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.Role;
@@ -47,6 +47,9 @@ public class AdminUserService {
         }
         if (target.getStatus() == UserStatus.DELETED) {
             throw new BusinessException(ErrorCode.ALREADY_WITHDRAWN);
+        }
+        if (target.getStatus() != UserStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.SUSPEND_NOT_ALLOWED);
         }
         target.suspend();
         refreshTokenStore.deleteAll(targetId);

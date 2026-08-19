@@ -68,6 +68,7 @@ public enum ErrorCode {
     ALREADY_SUSPENDED(HttpStatus.BAD_REQUEST, "이미 정지된 계정입니다."),
     NOT_SUSPENDED(HttpStatus.BAD_REQUEST, "정지 상태가 아닌 계정입니다."),
     ALREADY_WITHDRAWN(HttpStatus.BAD_REQUEST, "이미 탈퇴 처리된 계정입니다."),
+    SUSPEND_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "활성 상태의 계정만 정지할 수 있습니다."),
 
     // ===== AI 등급 진단 =====
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다."),

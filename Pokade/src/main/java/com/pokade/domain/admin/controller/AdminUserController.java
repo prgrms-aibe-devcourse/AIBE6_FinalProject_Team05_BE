@@ -1,6 +1,6 @@
 package com.pokade.domain.admin.controller;
 
-import com.pokade.domain.admin.metrics.client.dto.response.AdminUserResponse;
+import com.pokade.domain.admin.dto.response.AdminUserResponse;
 import com.pokade.domain.admin.service.AdminUserService;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
@@ -8,6 +8,7 @@ import com.pokade.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -26,7 +27,8 @@ public class AdminUserController {
             @RequestParam(required = false) UserStatus status,
             @RequestParam(required = false) Role role,
             @RequestParam(required = false) String keyword,
-            @PageableDefault(size = DEFAULT_PAGE_SIZE) Pageable pageable) {
+            @PageableDefault(size = DEFAULT_PAGE_SIZE, sort = {"created_At", "id"},
+                    direction = Sort.Direction.DESC) Pageable pageable) {
         return ApiResponse.ok(adminUserService.getUsers(status, role, keyword, pageable));
     }
 

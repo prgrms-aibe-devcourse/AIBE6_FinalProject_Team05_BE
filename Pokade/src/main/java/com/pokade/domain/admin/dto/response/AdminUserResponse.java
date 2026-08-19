@@ -1,4 +1,4 @@
-package com.pokade.domain.admin.metrics.client.dto.response;
+package com.pokade.domain.admin.dto.response;
 
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.Provider;
