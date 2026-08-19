@@ -738,4 +738,42 @@ class CardRepositoryTest extends AbstractIntegrationTest {
                         tuple("Water", 1L),
                         tuple("Lightning", 1L));
     }
+
+    @Test
+    @DisplayName("t59 language를 지정하면 해당 언어 코드의 카드만 조회한다(#263)")
+    void t59() {
+        Expansion jpExpansion = persistExpansion("sv10_ja", "サンダー");
+        Card enCard = Card.builder().name("Mega Lucario ex").supertype("Pokémon")
+                .languageCode("EN").syncedAt(LocalDateTime.now()).build();
+        Card jaCard = Card.builder().name("クヌギダマ").supertype("Pokémon")
+                .expansion(jpExpansion).languageCode("JA").syncedAt(LocalDateTime.now()).build();
+        entityManager.persist(enCard);
+        entityManager.persist(jaCard);
+        entityManager.flush();
+
+        Page<Card> enResult = cardRepository.search(null, null, List.of("EN"), null, null, null, null, PageRequest.of(0, 10));
+        Page<Card> jaResult = cardRepository.search(null, null, List.of("JA"), null, null, null, null, PageRequest.of(0, 10));
+
+        // setUp()의 기존 카드들은 language_code가 전부 null이라 EN/JA 어느 쪽에도 걸리지 않는다.
+        assertThat(enResult.getContent()).extracting(Card::getName).containsExactly("Mega Lucario ex");
+        assertThat(jaResult.getContent()).extracting(Card::getName).containsExactly("クヌギダマ");
+    }
+
+    @Test
+    @DisplayName("t60 language를 여러 개 선택하면 하나라도 일치하는 카드를 OR로 조회한다(#263)")
+    void t60() {
+        Card enCard = Card.builder().name("Mega Lucario ex").supertype("Pokémon")
+                .languageCode("EN").syncedAt(LocalDateTime.now()).build();
+        Card jaCard = Card.builder().name("クヌギダマ").supertype("Pokémon")
+                .languageCode("JA").syncedAt(LocalDateTime.now()).build();
+        entityManager.persist(enCard);
+        entityManager.persist(jaCard);
+        entityManager.flush();
+
+        Page<Card> result = cardRepository.search(null, null, List.of("EN", "JA"), null, null, null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactlyInAnyOrder("Mega Lucario ex", "クヌギダマ");
+    }
 }

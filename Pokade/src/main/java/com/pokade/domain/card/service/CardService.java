@@ -78,17 +78,35 @@ public class CardService {
     @Autowired(required = false)
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
+    /**
+     * languages 없이 호출하는 기존 오버로드 - #263 이전부터 있던 호출부(테스트 다수 포함)가
+     * 인자 개수 때문에 깨지지 않도록 유지한다. 실제 검색은 8-인자 오버로드로 위임한다.
+     */
+    public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+        return search(types, rarities, null, expansionId, minPrice, maxPrice, sort, pageable);
+    }
+
     // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+    // #263: language(언어 코드, 예 EN/JA) 필터 추가 - types/rarity와 동일하게 값 화이트리스트 없이
+    // 사이즈 검증만 한다(바인드 IN절이라 애초에 인젝션 여지가 없고, DB에 실제 존재하는 값과 무관하게
+    // 빈 결과로 안전하게 좁혀지므로 신규 언어코드가 추가돼도 서비스가 깨지지 않는다).
     @Timed(value = "card.search.duration")
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+    public Page<CardResponse> search(List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
         validateFilterSize(types, "types");
         validateFilterSize(rarities, "rarity");
+        validateFilterSize(languages, "languages");
         validatePriceRange(minPrice, maxPrice);
         List<String> expandedTypes = CardTypeEnResolver.resolveOriginalValues(types);
         List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(rarities);
-        Page<Card> cards = cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable);
+        // languages가 없으면 리포지토리의 기존 7-인자 search()를 그대로 호출한다 - #263 이전부터 있던
+        // CardServiceTest의 cardRepository.search(...) 스텁(7-인자 시그니처)이 계속 매칭되게 하기 위함.
+        // 두 오버로드는 리포지토리 쪽에서 동일한 로직으로 수렴하므로(7-인자는 8-인자에 languages=null로
+        // 위임) 동작 자체는 완전히 같다 - 순전히 테스트 호환을 위한 분기다.
+        Page<Card> cards = languages == null
+                ? cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable)
+                : cardRepository.search(expandedTypes, expandedRarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
         return cards.map(card -> toCardResponse(card, gradesByCardId));
     }

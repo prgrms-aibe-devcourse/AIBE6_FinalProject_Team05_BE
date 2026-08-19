@@ -48,6 +48,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT c.* FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasLanguages = false OR c.language_code IN (:languages)) AND
             (:hasPrice = false OR EXISTS (
                 SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
                 AND (:minPrice IS NULL OR l.price >= :minPrice)
@@ -61,6 +62,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT COUNT(*) FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasLanguages = false OR c.language_code IN (:languages)) AND
             (:hasPrice = false OR EXISTS (
                 SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
                 AND (:minPrice IS NULL OR l.price >= :minPrice)
@@ -76,6 +78,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                     @Param("types") List<String> types,
                                     @Param("hasRarities") boolean hasRarities,
                                     @Param("rarities") List<String> rarities,
+                                    @Param("hasLanguages") boolean hasLanguages,
+                                    @Param("languages") List<String> languages,
                                     @Param("hasPrice") boolean hasPrice,
                                     @Param("minPrice") Integer minPrice,
                                     @Param("maxPrice") Integer maxPrice,
@@ -89,6 +93,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                   @Param("types") List<String> types,
                                   @Param("hasRarities") boolean hasRarities,
                                   @Param("rarities") List<String> rarities,
+                                  @Param("hasLanguages") boolean hasLanguages,
+                                  @Param("languages") List<String> languages,
                                   @Param("hasPrice") boolean hasPrice,
                                   @Param("minPrice") Integer minPrice,
                                   @Param("maxPrice") Integer maxPrice,
@@ -102,6 +108,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                      @Param("types") List<String> types,
                                      @Param("hasRarities") boolean hasRarities,
                                      @Param("rarities") List<String> rarities,
+                                     @Param("hasLanguages") boolean hasLanguages,
+                                     @Param("languages") List<String> languages,
                                      @Param("hasPrice") boolean hasPrice,
                                      @Param("minPrice") Integer minPrice,
                                      @Param("maxPrice") Integer maxPrice,
@@ -132,16 +140,28 @@ public interface CardRepository extends JpaRepository<Card, Long> {
         String getGrade();
     }
 
+    /**
+     * languages 없이 호출하는 기존 오버로드 - #263 이전부터 있던 호출부(테스트 다수 포함)가
+     * 인자 개수 때문에 깨지지 않도록 유지한다. 실제 language 필터는 8-인자 오버로드로 위임한다.
+     */
     default Page<Card> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+        return search(types, rarities, null, expansionId, minPrice, maxPrice, sort, pageable);
+    }
+
+    /** #263: language(언어 코드, 예 EN/JA) 필터가 추가된 검색. types/rarities와 동일한 방식(바인드 IN절, 값 화이트리스트 없음). */
+    default Page<Card> search(List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         // 빈 문자열("")이 섞여 들어오면 실제 필터 조건 없이 IN ('') 비교만 남아 매칭이 전혀 안 되므로
-        // hasTypes/hasRarities 판단 전에 제거한다.
+        // hasTypes/hasRarities/hasLanguages 판단 전에 제거한다.
         List<String> filteredTypes = types == null ? null
                 : types.stream().filter(v -> v != null && !v.isBlank()).toList();
         List<String> filteredRarities = rarities == null ? null
                 : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
+        List<String> filteredLanguages = languages == null ? null
+                : languages.stream().filter(v -> v != null && !v.isBlank()).toList();
 
         boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
         boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
+        boolean hasLanguages = filteredLanguages != null && !filteredLanguages.isEmpty();
         boolean hasPrice = minPrice != null || maxPrice != null;
         // Pageable에 담긴 Sort는 버린다: Spring의 Pageable 리졸버가 우리와 같은 "sort" 파라미터명을
         // 공유하기 때문에(예: ?sort=latest) 정렬 프로퍼티로 오인해 파싱해 넣을 수 있고, 그 값을 그대로
@@ -151,14 +171,15 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
         List<String> safeTypes = hasTypes ? filteredTypes : List.of("");
         List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
+        List<String> safeLanguages = hasLanguages ? filteredLanguages : List.of("");
 
         if (SORT_NAME.equals(resolvedSort)) {
-            return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
+            return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
         }
         if (SORT_POPULAR.equals(resolvedSort)) {
-            return searchOrderByPopular(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
+            return searchOrderByPopular(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
         }
-        return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
+        return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
     }
 
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
