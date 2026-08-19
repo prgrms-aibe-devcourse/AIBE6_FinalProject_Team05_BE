@@ -291,6 +291,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     is_read      BOOLEAN NOT NULL DEFAULT FALSE,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- 유저별 알림 목록(최신순 페이지네이션) 조회 최적화
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS chat_messages (
     id           BIGSERIAL PRIMARY KEY,
