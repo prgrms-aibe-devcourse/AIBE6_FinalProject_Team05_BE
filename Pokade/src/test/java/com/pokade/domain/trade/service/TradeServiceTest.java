@@ -18,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -308,6 +309,35 @@ class TradeServiceTest {
         assertThatThrownBy(() -> tradeService.shipTrade(100L, 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
+    }
+
+    @Test
+    void 검수_배송_대기_거래가_없으면_빈_목록을_반환한다() {
+        given(tradeRepository.findByStatusInOrderByCreatedAtAsc(
+                List.of(TradeStatus.SHIPPED_TO_PLATFORM, TradeStatus.INSPECTED)))
+                .willReturn(List.of());
+
+        List<TradeResponse> responses = tradeService.getPendingTrades();
+
+        assertThat(responses).isEmpty();
+    }
+
+    @Test
+    void 검수_배송_대기_거래_목록을_반환한다() {
+        Trade shipped = tradeOf(100L, 200L);
+        shipped.shipToPlatform();
+        Trade inspected = tradeOf(100L, 200L);
+        inspected.shipToPlatform();
+        inspected.markInspected();
+        given(tradeRepository.findByStatusInOrderByCreatedAtAsc(
+                List.of(TradeStatus.SHIPPED_TO_PLATFORM, TradeStatus.INSPECTED)))
+                .willReturn(List.of(shipped, inspected));
+
+        List<TradeResponse> responses = tradeService.getPendingTrades();
+
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).status()).isEqualTo(TradeStatus.SHIPPED_TO_PLATFORM);
+        assertThat(responses.get(1).status()).isEqualTo(TradeStatus.INSPECTED);
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Payment;
 import com.pokade.domain.trade.entity.PaymentMethod;
 import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.repository.PaymentRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.global.exception.BusinessException;
@@ -22,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -149,6 +151,15 @@ public class TradeService {
         trade.shipToPlatform();
 
         return toResponse(trade);
+    }
+
+    // 관리자 검수/배송 처리 대기 목록: 발송됨(검수 대기), 검수됨(배송 대기) 거래
+    public List<TradeResponse> getPendingTrades() {
+        return tradeRepository.findByStatusInOrderByCreatedAtAsc(
+                        List.of(TradeStatus.SHIPPED_TO_PLATFORM, TradeStatus.INSPECTED))
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     // 관리자 페이지에서 호출 — 인가(관리자 권한 확인)는 호출하는 쪽(관리자 도메인)의 책임.
