@@ -1,0 +1,114 @@
+{
+  "title": "카드 도메인 모니터링 (#217)",
+  "uid": "pokade-card-domain",
+  "tags": ["pokade", "card", "temp-217"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "카드 검색 평균 응답시간 (card.search.duration)",
+      "description": "@Timed는 count/sum/max만 노출(히스토그램 버킷 없음) - p50/p95 대신 sum/count 비율(평균)을 사용한다. CardService.search().",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(card_search_duration_seconds_sum[5m]) / rate(card_search_duration_seconds_count[5m]) * 1000",
+          "legendFormat": "avg duration (ms)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "카드 키워드 검색 평균 응답시간 (card.search.keyword.duration)",
+      "description": "@Timed는 count/sum/max만 노출(히스토그램 버킷 없음) - p50/p95 대신 sum/count 비율(평균)을 사용한다. CardService.searchByKeyword().",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(card_search_keyword_duration_seconds_sum[5m]) / rate(card_search_keyword_duration_seconds_count[5m]) * 1000",
+          "legendFormat": "avg duration (ms)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "카드 상세 조회 호출 (card.view.increment.calls)",
+      "description": "CardService.getDetail() - 상세 조회 1건당 1씩 증가(incrementViewCount() 직후).",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(card_view_increment_calls_total[5m])",
+          "legendFormat": "view calls/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "등급 배치조회 호출 - N+1 검증용 (card.grade.batch.calls)",
+      "description": "CardService.fetchGradesByCardIds() - 검색 결과 카드 수와 무관하게 요청 1건당 1씩만 증가해야 N+1이 없다는 뜻이다(2026-08-13 실측: 카드 20개 검색 시 이 카운터가 1만 증가함을 확인).",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(card_grade_batch_calls_total[5m])",
+          "legendFormat": "batch calls/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "카드 API Rate Limit 허용 (card.ratelimit.allowed)",
+      "description": "CardRateLimitFilter - IP당 분당 60회 제한 내에서 통과된 요청.",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(card_ratelimit_allowed_total[5m])",
+          "legendFormat": "allowed/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "카드 API Rate Limit 차단 (card.ratelimit.rejected)",
+      "description": "CardRateLimitFilter - 분당 60회 초과로 429 처리된 요청.",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(card_ratelimit_rejected_total[5m])",
+          "legendFormat": "rejected/s",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
