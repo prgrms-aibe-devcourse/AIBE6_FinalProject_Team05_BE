@@ -68,8 +68,11 @@ public class AdminInquiryService {
     public InquiryResponse answerInquiry(Long id, String content) {
         Inquiry inquiry = inquiryRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+        boolean isFirstAnswer = inquiry.getAnswerContent() == null;
         inquiry.answer(content);
-        notificationService.createInquiryHandledNotification(inquiry.getUserId(), inquiry.getTitle());
+        if (isFirstAnswer) {
+            notificationService.createInquiryHandledNotification(inquiry.getUserId(), inquiry.getTitle());
+        }
         List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(id).stream()
                 .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
                 .toList();

@@ -45,8 +45,12 @@ class InquiryServiceTest {
     @InjectMocks
     private InquiryService inquiryService;
 
+    private static final byte[] PNG_SIGNATURE = {(byte) 0x89, 0x50, 0x4E, 0x47};
+
     private MultipartFile png(long size) {
-        return new MockMultipartFile("images", "a.png", "image/png", new byte[(int) size]);
+        byte[] content = new byte[(int) size];
+        System.arraycopy(PNG_SIGNATURE, 0, content, 0, Math.min(PNG_SIGNATURE.length, content.length));
+        return new MockMultipartFile("images", "a.png", "image/png", content);
     }
 
     @Test
@@ -103,6 +107,35 @@ class InquiryServiceTest {
         assertThatThrownBy(() -> inquiryService.createInquiry(1L, request, images))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.FILE_TOO_LARGE);
+    }
+
+    @Test
+    @DisplayName("문의 작성: Content-Type만 image/png고 실제 내용은 이미지가 아니면 UNSUPPORTED_IMAGE_TYPE")
+    void createInquiry_spoofedContentType_rejected() {
+        InquiryCreateRequest request = new InquiryCreateRequest(InquiryCategory.ETC, "제목", "내용");
+        MultipartFile fakeImage = new MockMultipartFile("images", "a.png", "image/png", "not-an-image".getBytes());
+
+        assertThatThrownBy(() -> inquiryService.createInquiry(1L, request, List.of(fakeImage)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.UNSUPPORTED_IMAGE_TYPE);
+
+        then(inquiryRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("문의 작성: 이미지 업로드 중 하나가 실패하면 이미 올라간 S3 객체를 정리하고 예외를 전파한다")
+    void createInquiry_uploadFailsMidway_cleansUpUploadedObjects() {
+        InquiryCreateRequest request = new InquiryCreateRequest(InquiryCategory.ETC, "제목", "내용");
+        MultipartFile first = png(10);
+        MultipartFile second = png(10);
+        given(s3FileStorage.upload(first, "inquiries")).willReturn("inquiries/first.png");
+        given(s3FileStorage.upload(second, "inquiries")).willThrow(new RuntimeException("S3 장애"));
+
+        assertThatThrownBy(() -> inquiryService.createInquiry(1L, request, List.of(first, second)))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("S3 장애");
+
+        then(s3FileStorage).should().delete("inquiries/first.png");
     }
 
     @Test

@@ -173,7 +173,7 @@ class AdminInquiryServiceTest {
     }
 
     @Test
-    @DisplayName("이미 답변한 문의에 다시 답변하면 답변 내용/시각이 갱신되고 알림도 다시 보낸다")
+    @DisplayName("이미 답변한 문의를 다시 답변(수정)해도 답변 내용/시각만 갱신되고 알림은 최초 1회만 보낸다")
     void answerInquiry_updatesExistingAnswer() {
         Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
         given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
@@ -183,7 +183,7 @@ class AdminInquiryServiceTest {
         InquiryResponse response = adminInquiryService.answerInquiry(1L, "수정된 답변");
 
         assertThat(response.answerContent()).isEqualTo("수정된 답변");
-        then(notificationService).should(times(2)).createInquiryHandledNotification(1L, "제목");
+        then(notificationService).should(times(1)).createInquiryHandledNotification(1L, "제목");
     }
 
     @Test
