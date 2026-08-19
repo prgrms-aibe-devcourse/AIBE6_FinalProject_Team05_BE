@@ -15,7 +15,11 @@ import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +44,16 @@ public class WatchlistService {
     private final CardNameKoResolver cardNameKoResolver;
     private final NotificationService notificationService;
 
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
+    // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
+    // required = false: @DataJpaTest 등 슬라이스 테스트엔 MeterRegistry 빈이 없어 NoSuchBeanDefinitionException으로
+    // 컨텍스트 로딩 자체가 깨졌다(#224). 매칭되는 빈이 없으면 Spring이 필드를 건드리지 않고 그대로 두므로
+    // 아래 기본값(SimpleMeterRegistry)이 계속 살아남아 null이 되지 않는다.
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+    @Timed(value = "watchlist.add.duration")
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
         validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
@@ -96,8 +110,12 @@ public class WatchlistService {
         }
         int claimed = watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId());
         if (claimed == 0) {
+            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+            meterRegistry.counter("watchlist.notify.already_claimed.calls").increment();
             return;
         }
+        // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+        meterRegistry.counter("watchlist.notify.immediate.calls").increment();
         watchlist.markAsNotified();
         notifyIfTargetAlreadyReached(watchlist, reachedTargetPrice);
     }
@@ -163,6 +181,8 @@ public class WatchlistService {
         return null;
     }
 
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+    @Timed(value = "watchlist.update.duration")
     @Transactional
     public WatchlistResponse updateWatchlist(Long userId, Long watchlistId, WatchlistUpdateRequest request) {
         boolean resend = Boolean.TRUE.equals(request.resendNotification());
