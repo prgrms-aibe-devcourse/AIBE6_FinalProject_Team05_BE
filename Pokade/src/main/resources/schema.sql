@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS watchlist (
 CREATE TABLE IF NOT EXISTS notifications (
     id           BIGSERIAL PRIMARY KEY,
     user_id      BIGINT NOT NULL REFERENCES users(id),
-    type         VARCHAR(30) NOT NULL,                          -- PRICE_TARGET / TRADE_CONFIRMED / LISTING_STALE 등
+    type         VARCHAR(30) NOT NULL,                          -- PRICE_TARGET / TRADE_CONFIRMED / LISTING_STALE / INQUIRY_HANDLED 등
     message      VARCHAR(255),
     is_read      BOOLEAN NOT NULL DEFAULT FALSE,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -327,3 +327,30 @@ CREATE TABLE IF NOT EXISTS user_sanctions (
 
 -- 참고: Refresh Token은 Redis 기반 블랙리스트 관리로, 관계형 DB 테이블로 별도 생성하지 않음
 -- 참고: 매물 5분 임시잠금은 Redis(TTL)로 처리 권장, DB 컬럼 추가 안 함
+
+-- ---------- 7. 1:1 문의 ----------
+
+CREATE TABLE IF NOT EXISTS inquiries (
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT NOT NULL REFERENCES users(id),
+    category        VARCHAR(20) NOT NULL DEFAULT 'ETC',
+    status          VARCHAR(20) NOT NULL DEFAULT 'UNHANDLED',
+    title           VARCHAR(200) NOT NULL,
+    content         TEXT NOT NULL,
+    answer_content  TEXT,
+    answered_at     TIMESTAMP,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- inquiries가 이미 존재하는 기존 DB는 CREATE TABLE IF NOT EXISTS가 스킵되므로 신규 컬럼을 별도로 추가한다.
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS category VARCHAR(20) NOT NULL DEFAULT 'ETC';
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'UNHANDLED';
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS answer_content TEXT;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS answered_at TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS inquiry_images (
+    id           BIGSERIAL PRIMARY KEY,
+    inquiry_id   BIGINT NOT NULL REFERENCES inquiries(id),
+    image_url    VARCHAR(255) NOT NULL,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
