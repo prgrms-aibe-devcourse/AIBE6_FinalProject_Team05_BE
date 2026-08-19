@@ -48,6 +48,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT c.* FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasLanguages = false OR c.language_code IN (:languages)) AND
             (:hasPrice = false OR EXISTS (
                 SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
                 AND (:minPrice IS NULL OR l.price >= :minPrice)
@@ -61,6 +62,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             SELECT COUNT(*) FROM cards c WHERE
             (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
+            (:hasLanguages = false OR c.language_code IN (:languages)) AND
             (:hasPrice = false OR EXISTS (
                 SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
                 AND (:minPrice IS NULL OR l.price >= :minPrice)
@@ -76,6 +78,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                     @Param("types") List<String> types,
                                     @Param("hasRarities") boolean hasRarities,
                                     @Param("rarities") List<String> rarities,
+                                    @Param("hasLanguages") boolean hasLanguages,
+                                    @Param("languages") List<String> languages,
                                     @Param("hasPrice") boolean hasPrice,
                                     @Param("minPrice") Integer minPrice,
                                     @Param("maxPrice") Integer maxPrice,
@@ -89,6 +93,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                   @Param("types") List<String> types,
                                   @Param("hasRarities") boolean hasRarities,
                                   @Param("rarities") List<String> rarities,
+                                  @Param("hasLanguages") boolean hasLanguages,
+                                  @Param("languages") List<String> languages,
                                   @Param("hasPrice") boolean hasPrice,
                                   @Param("minPrice") Integer minPrice,
                                   @Param("maxPrice") Integer maxPrice,
@@ -102,6 +108,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                      @Param("types") List<String> types,
                                      @Param("hasRarities") boolean hasRarities,
                                      @Param("rarities") List<String> rarities,
+                                     @Param("hasLanguages") boolean hasLanguages,
+                                     @Param("languages") List<String> languages,
                                      @Param("hasPrice") boolean hasPrice,
                                      @Param("minPrice") Integer minPrice,
                                      @Param("maxPrice") Integer maxPrice,
@@ -132,16 +140,28 @@ public interface CardRepository extends JpaRepository<Card, Long> {
         String getGrade();
     }
 
+    /**
+     * languages 없이 호출하는 기존 오버로드 - #263 이전부터 있던 호출부(테스트 다수 포함)가
+     * 인자 개수 때문에 깨지지 않도록 유지한다. 실제 language 필터는 8-인자 오버로드로 위임한다.
+     */
     default Page<Card> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+        return search(types, rarities, null, expansionId, minPrice, maxPrice, sort, pageable);
+    }
+
+    /** #263: language(언어 코드, 예 EN/JA) 필터가 추가된 검색. types/rarities와 동일한 방식(바인드 IN절, 값 화이트리스트 없음). */
+    default Page<Card> search(List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         // 빈 문자열("")이 섞여 들어오면 실제 필터 조건 없이 IN ('') 비교만 남아 매칭이 전혀 안 되므로
-        // hasTypes/hasRarities 판단 전에 제거한다.
+        // hasTypes/hasRarities/hasLanguages 판단 전에 제거한다.
         List<String> filteredTypes = types == null ? null
                 : types.stream().filter(v -> v != null && !v.isBlank()).toList();
         List<String> filteredRarities = rarities == null ? null
                 : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
+        List<String> filteredLanguages = languages == null ? null
+                : languages.stream().filter(v -> v != null && !v.isBlank()).toList();
 
         boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
         boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
+        boolean hasLanguages = filteredLanguages != null && !filteredLanguages.isEmpty();
         boolean hasPrice = minPrice != null || maxPrice != null;
         // Pageable에 담긴 Sort는 버린다: Spring의 Pageable 리졸버가 우리와 같은 "sort" 파라미터명을
         // 공유하기 때문에(예: ?sort=latest) 정렬 프로퍼티로 오인해 파싱해 넣을 수 있고, 그 값을 그대로
@@ -151,14 +171,15 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
         List<String> safeTypes = hasTypes ? filteredTypes : List.of("");
         List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
+        List<String> safeLanguages = hasLanguages ? filteredLanguages : List.of("");
 
         if (SORT_NAME.equals(resolvedSort)) {
-            return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
+            return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
         }
         if (SORT_POPULAR.equals(resolvedSort)) {
-            return searchOrderByPopular(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
+            return searchOrderByPopular(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
         }
-        return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
+        return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
     }
 
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
@@ -185,21 +206,50 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     Optional<Card> findByExternalId(String externalId);
 
-    /** 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 타입 값 전체(원본 텍스트, 다국어 혼재)를 조회한다. */
-    @Query(value = "SELECT DISTINCT unnest(types) FROM cards ORDER BY 1", nativeQuery = true)
-    List<String> findDistinctTypes();
+    /**
+     * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 타입 값(원본 텍스트, 다국어 혼재)별로
+     * 그 타입을 가진 카드 수를 조회한다(#263). types는 배열 컬럼이라 unnest로 펼친 뒤 카드 단위로
+     * COUNT(DISTINCT card_id)해야 한다 - 같은 값이 한 카드 안에서 중복되는 경우까지 대비한 안전한 집계.
+     */
+    @Query(value = """
+            SELECT t.val AS type, COUNT(DISTINCT c.id) AS count
+            FROM cards c, unnest(c.types) AS t(val)
+            GROUP BY t.val
+            ORDER BY 1
+            """, nativeQuery = true)
+    List<CardTypeCountView> findTypeCounts();
+
+    interface CardTypeCountView {
+        String getType();
+        Long getCount();
+    }
 
     /**
-     * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 (rarity_code, rarity) 조합 전체를 조회한다.
+     * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 (rarity_code, rarity) 조합별 카드 수를 조회한다(#263).
      * CardRarityResolver.resolve()가 매핑 실패 시 원본 rarity로 폴백해야 하므로 rarity도 함께 조회하고,
      * rarity_code가 null인 카드도 원본 rarity로 폴백 노출되어야 하므로 WHERE로 제외하지 않는다.
+     * 같은 표준 레어도로 리졸브되는 조합(예: 코드는 같은데 rarity 원본 텍스트만 다국어로 다른 경우)이
+     * 여러 행으로 나뉠 수 있어, 표준 레어도 기준 합산은 서비스 레이어(CardService.getFacets())에서 한다.
      */
-    @Query(value = "SELECT DISTINCT rarity_code AS rarityCode, rarity AS rarity FROM cards ORDER BY 1", nativeQuery = true)
-    List<CardRarityView> findDistinctRarityCodes();
+    @Query(value = "SELECT rarity_code AS rarityCode, rarity AS rarity, COUNT(*) AS count FROM cards GROUP BY rarity_code, rarity ORDER BY 1", nativeQuery = true)
+    List<CardRarityView> findRarityCounts();
 
     interface CardRarityView {
         String getRarityCode();
         String getRarity();
+        Long getCount();
+    }
+
+    /**
+     * 필터 옵션(Facet) API용 - expansion_id별 카드 수를 조회한다(#263). expansion_id가 null인 카드는
+     * 어느 세트 Facet에도 속하지 않으므로 제외한다.
+     */
+    @Query(value = "SELECT expansion_id AS expansionId, COUNT(*) AS count FROM cards WHERE expansion_id IS NOT NULL GROUP BY expansion_id", nativeQuery = true)
+    List<ExpansionCardCountView> findCardCountsByExpansion();
+
+    interface ExpansionCardCountView {
+        String getExpansionId();
+        Long getCount();
     }
 
     @Query(value = """
