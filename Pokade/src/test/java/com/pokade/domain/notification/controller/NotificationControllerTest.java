@@ -140,6 +140,16 @@ class NotificationControllerTest {
     }
 
     @Test
+    void size가_상한을_초과하면_서비스의_INVALID_INPUT_예외가_400으로_응답된다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "size는 최대 100까지 요청할 수 있습니다."))
+                .given(notificationService).getNotifications(any(), any());
+
+        mockMvc.perform(get("/api/notifications?size=101").with(userId(100L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
     void 읽음_처리에_성공하면_200을_반환한다() throws Exception {
         willDoNothing().given(notificationService).markAsRead(anyLong(), anyLong());
 

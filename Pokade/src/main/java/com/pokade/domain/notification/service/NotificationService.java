@@ -9,6 +9,7 @@ import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.web.PageableValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,9 @@ public class NotificationService {
     // 보내 연결이 유휴 상태로 조기 종료되지 않도록 한다.
     private static final long HEARTBEAT_INTERVAL_MILLIS = 15_000L;
 
+    // #162: 다른 페이징 API(AiGradeService/CardQueryService/ChatService)와 동일한 상한
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final NotificationRepository notificationRepository;
     private final SseEmitterStore sseEmitterStore;
     private final ApplicationEventPublisher eventPublisher;
@@ -51,6 +55,7 @@ public class NotificationService {
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {
+        PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
         return notificationRepository.findByUserId(userId, pageable).map(NotificationResponse::of);
     }
 

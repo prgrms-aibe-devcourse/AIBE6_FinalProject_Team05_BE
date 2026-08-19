@@ -79,6 +79,18 @@ class NotificationServiceTest {
         assertThat(result.getTotalElements()).isEqualTo(2);
     }
 
+    @Test
+    @DisplayName("목록 조회: 페이지 크기가 상한(100)을 초과하면 BusinessException(INVALID_INPUT)을 던진다")
+    void getNotifications_throwsWhenPageSizeExceedsLimit() {
+        Pageable pageable = PageRequest.of(0, 101);
+
+        assertThatThrownBy(() -> notificationService.getNotifications(1L, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+
+        then(notificationRepository).should(Mockito.never()).findByUserId(Mockito.any(), Mockito.any());
+    }
+
     // ===== 읽음 처리 =====
     // markAsReadIfUnread()는 "조회 후 갱신"이 아니라 조건부 원자적 UPDATE라, 존재하지 않는 알림과
     // 이미 읽은 알림을 구분하려면 0건 갱신 시에만 findByIdAndUserId로 원인을 판별한다.
