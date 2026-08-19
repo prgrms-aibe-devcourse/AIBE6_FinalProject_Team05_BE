@@ -21,7 +21,7 @@ public class NotificationCleanupService {
 
     private final NotificationRepository notificationRepository;
 
-    @Scheduled(cron = "0 0 5 * * *")
+    @Scheduled(cron = "0 0 5 * * MON")
     @Transactional
     public void deleteExpiredNotifications() {
         LocalDateTime readCutoff = LocalDateTime.now().minusDays(READ_RETENTION_DAYS);
