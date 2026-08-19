@@ -49,6 +49,7 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -166,6 +167,26 @@ class NotificationControllerTest {
         mockMvc.perform(patch("/api/notifications/1/read").with(userId(100L)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("NOTIFICATION_ALREADY_READ"));
+    }
+
+    @Test
+    void 삭제에_성공하면_200을_반환한다() throws Exception {
+        willDoNothing().given(notificationService).deleteNotification(anyLong(), anyLong());
+
+        mockMvc.perform(delete("/api/notifications/1").with(userId(100L)))
+                .andExpect(status().isOk());
+
+        then(notificationService).should().deleteNotification(100L, 1L);
+    }
+
+    @Test
+    void 존재하지_않거나_본인_소유가_아닌_알림_삭제시_404를_반환한다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND))
+                .given(notificationService).deleteNotification(anyLong(), anyLong());
+
+        mockMvc.perform(delete("/api/notifications/999").with(userId(100L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOTIFICATION_NOT_FOUND"));
     }
 
     @Test

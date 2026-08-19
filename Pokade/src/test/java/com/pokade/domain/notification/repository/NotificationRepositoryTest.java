@@ -140,6 +140,38 @@ class NotificationRepositoryTest {
         assertThat(notificationRepository.findById(saved.getId()).orElseThrow().isRead()).isFalse();
     }
 
+    @Test
+    void deleteByIdAndUserId는_본인_소유_알림을_1건_삭제한다() {
+        Long userId = insertUser("delete-owner@test.com");
+        Notification saved = saveNotification(userId, NotificationType.PRICE_TARGET, "to-delete");
+
+        int result = notificationRepository.deleteByIdAndUserId(saved.getId(), userId);
+
+        assertThat(result).isEqualTo(1);
+        assertThat(notificationRepository.findById(saved.getId())).isEmpty();
+    }
+
+    @Test
+    void deleteByIdAndUserId는_본인_소유가_아니면_삭제하지_않는다() {
+        Long ownerId = insertUser("delete-owner2@test.com");
+        Long otherUserId = insertUser("delete-other@test.com");
+        Notification saved = saveNotification(ownerId, NotificationType.PRICE_TARGET, "owned");
+
+        int result = notificationRepository.deleteByIdAndUserId(saved.getId(), otherUserId);
+
+        assertThat(result).isEqualTo(0);
+        assertThat(notificationRepository.findById(saved.getId())).isPresent();
+    }
+
+    @Test
+    void deleteByIdAndUserId는_존재하지_않는_알림이면_0건이다() {
+        Long userId = insertUser("delete-none@test.com");
+
+        int result = notificationRepository.deleteByIdAndUserId(999_999L, userId);
+
+        assertThat(result).isEqualTo(0);
+    }
+
     private Notification saveNotification(Long userId, NotificationType type, String message) {
         Notification saved = notificationRepository.save(
                 Notification.builder()

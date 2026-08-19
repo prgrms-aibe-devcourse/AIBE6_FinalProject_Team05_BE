@@ -115,6 +115,29 @@ class NotificationServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.NOTIFICATION_ALREADY_READ);
     }
 
+    // ===== 삭제 =====
+    // deleteByIdAndUserId()도 markAsReadIfUnread()와 같은 이유로 조건부 원자적 DELETE라, 존재하지 않는
+    // 알림과 본인 소유가 아닌 알림을 구분하지 않고 0건이면 그대로 NOTIFICATION_NOT_FOUND로 처리한다.
+    @Test
+    @DisplayName("삭제: 원자적 삭제가 1건이면 정상 처리된다")
+    void deleteNotification_success() {
+        given(notificationRepository.deleteByIdAndUserId(1L, 1L)).willReturn(1);
+
+        notificationService.deleteNotification(1L, 1L);
+
+        then(notificationRepository).should(Mockito.times(1)).deleteByIdAndUserId(1L, 1L);
+    }
+
+    @Test
+    @DisplayName("삭제: 삭제 0건이면(존재하지 않거나 본인 소유가 아님) NOTIFICATION_NOT_FOUND")
+    void deleteNotification_notFound() {
+        given(notificationRepository.deleteByIdAndUserId(1L, 1L)).willReturn(0);
+
+        assertThatThrownBy(() -> notificationService.deleteNotification(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
+    }
+
     // ===== 목표가 도달 알림 생성 =====
     @Test
     @DisplayName("목표가 도달 알림 생성: notificationRepository.save가 호출된다")

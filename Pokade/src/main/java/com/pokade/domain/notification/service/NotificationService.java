@@ -68,6 +68,16 @@ public class NotificationService {
         throw new BusinessException(ErrorCode.NOTIFICATION_ALREADY_READ);
     }
 
+    // #162: 본인 소유 알림만 삭제 가능 - 조건부 원자적 DELETE(WHERE id=:id AND userId=:userId)가 0건이면
+    // 존재하지 않거나 본인 소유가 아닌 것이므로 구분 없이 NOTIFICATION_NOT_FOUND로 처리한다.
+    @Transactional
+    public void deleteNotification(Long userId, Long notificationId) {
+        int deleted = notificationRepository.deleteByIdAndUserId(notificationId, userId);
+        if (deleted == 0) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND);
+        }
+    }
+
     // 워치리스트 목표가 도달 알림 생성 (reachedTargetPrice: 도달한 것으로 판정된 목표가 - 구매/판매 목표가 중 실제로 도달한 쪽)
     @Transactional
     public void createPriceTargetNotification(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
