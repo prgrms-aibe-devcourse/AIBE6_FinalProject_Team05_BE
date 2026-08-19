@@ -9,8 +9,11 @@ import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -39,6 +42,11 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final SseEmitterStore sseEmitterStore;
     private final ApplicationEventPublisher eventPublisher;
+
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
+    // required = false: 슬라이스 테스트엔 MeterRegistry 빈이 없어 컨텍스트 로딩이 깨지는 문제(#224 유사)를 막기 위함.
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     public List<NotificationResponse> getNotifications(Long userId) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId)
@@ -132,16 +140,26 @@ public class NotificationService {
     @Scheduled(fixedRate = HEARTBEAT_INTERVAL_MILLIS)
     public void sendHeartbeat() {
         for (SseEmitter emitter : sseEmitterStore.findAll()) {
-            sendEvent(emitter, SseEmitter.event().comment("heartbeat"));
+            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. 하트비트 전송 실패율만 별도로 보기 위해
+            // 실패 카운터 지표명을 넘기는 오버로드를 쓴다 - 일반 알림 push(pushToSubscribers)는 대상 아님.
+            sendEvent(emitter, SseEmitter.event().comment("heartbeat"), "notification.sse.heartbeat.failure.calls");
         }
     }
 
     // 하나의 Emitter 전송 실패가 나머지 Emitter 처리를 막지 않도록 예외를 여기서 흡수한다.
     private void sendEvent(SseEmitter emitter, SseEmitter.SseEventBuilder event) {
+        sendEvent(emitter, event, null);
+    }
+
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. failureMetricName이 있을 때만 실패 카운터를 증가시킨다.
+    private void sendEvent(SseEmitter emitter, SseEmitter.SseEventBuilder event, String failureMetricName) {
         try {
             emitter.send(event);
         } catch (IOException e) {
             log.info("SSE 전송 실패로 연결을 종료합니다.", e);
+            if (failureMetricName != null) {
+                meterRegistry.counter(failureMetricName).increment();
+            }
             emitter.completeWithError(e);
         }
     }
