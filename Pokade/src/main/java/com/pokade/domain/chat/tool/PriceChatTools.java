@@ -2,7 +2,7 @@ package com.pokade.domain.chat.tool;
 
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.service.CardService;
-import com.pokade.domain.price.dto.PriceRankingResponse;
+import com.pokade.domain.chat.support.RankingAnswerFormatter;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
@@ -109,21 +109,9 @@ public class PriceChatTools {
     public String getRanking(@ToolParam(description = "rise 또는 fall") String type) {
         PRICE_TOOL_INVOKED.set(true);
         try {
-            var ranking = priceService.getRanking(type);
-            if (ranking.isEmpty()) {
-                return "현재 등락률을 계산할 수 있는 카드가 없습니다.";
-            }
-            return ranking.stream()
-                    .map(this::formatRankingEntry)
-                    .collect(Collectors.joining("\n"));
+            return RankingAnswerFormatter.format(priceService.getRanking(type));
         } catch (BusinessException e) {
-            return "잘못된 랭킹 타입입니다. rise 또는 fall만 가능합니다.";
+            return RankingAnswerFormatter.INVALID_TYPE_MESSAGE;
         }
-    }
-
-    // 카드명/가격/변동률/변동액만 노출 - cardId, imageUrl은 챗봇 답변에 불필요해서 제외(LLM이 마크다운 이미지를 붙이는 걸 원천적으로 막는 효과도 있음)
-    private String formatRankingEntry(PriceRankingResponse r) {
-        return "카드명=%s, 가격=%d원, 변동률=%s%%, 변동액=%d원".formatted(
-                r.cardName(), r.price(), r.changeRate(), r.changeAmount());
     }
 }
