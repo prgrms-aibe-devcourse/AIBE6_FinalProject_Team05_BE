@@ -11,7 +11,11 @@ import java.util.stream.Collectors;
 public final class RankingAnswerFormatter {
 
     public static final String EMPTY_MESSAGE = "현재 등락률을 계산할 수 있는 카드가 없습니다.";
+    // PriceChatTools(LLM tool 경로)에서만 쓴다 - LLM이 tool 파라미터로 잘못된 type을 넘길 수 있는 경로라 실제로 유효한 메시지다.
     public static final String INVALID_TYPE_MESSAGE = "잘못된 랭킹 타입입니다. rise 또는 fall만 가능합니다.";
+    // ChatService의 프리셋 경로(rankingType이 QuickQuestion enum에서 고정된 값)에서 쓴다 - 여기선 "잘못된 타입"일 수가
+    // 없으므로, getRanking()이 그래도 예외를 던졌다면 원인 불명의 조회 실패로 보고 이 메시지를 쓴다.
+    public static final String LOOKUP_FAILED_MESSAGE = "지금은 랭킹 정보를 불러올 수 없어요. 잠시 후 다시 시도해주세요.";
 
     private RankingAnswerFormatter() {
     }

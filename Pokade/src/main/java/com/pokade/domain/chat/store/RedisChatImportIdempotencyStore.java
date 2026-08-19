@@ -25,4 +25,9 @@ public class RedisChatImportIdempotencyStore implements ChatImportIdempotencySto
         Boolean success = redisTemplate.opsForValue().setIfAbsent(KEY_PREFIX + key, "1", TTL);
         return Boolean.TRUE.equals(success);
     }
+
+    @Override
+    public void release(String key) {
+        redisTemplate.delete(KEY_PREFIX + key);
+    }
 }
