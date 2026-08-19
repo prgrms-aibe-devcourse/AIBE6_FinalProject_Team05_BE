@@ -37,4 +37,9 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
             + "WHERE (t.buyerId = :userId OR l.sellerId = :userId) AND t.status = :status")
     long countByParticipantIdAndStatus(@Param("userId") Long userId,
                                        @Param("status") TradeStatus status);
+
+    // 관리자 검수/배송 처리 대기 목록: SHIPPED_TO_PLATFORM(검수 대기), INSPECTED(배송 대기) 거래
+    @Query("SELECT t FROM Trade t JOIN FETCH t.listing l "
+            + "WHERE t.status IN :statuses ORDER BY t.createdAt ASC")
+    List<Trade> findByStatusInOrderByCreatedAtAsc(@Param("statuses") List<TradeStatus> statuses);
 }
