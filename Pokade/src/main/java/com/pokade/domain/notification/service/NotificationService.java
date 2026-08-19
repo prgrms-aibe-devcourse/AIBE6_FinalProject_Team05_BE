@@ -3,6 +3,7 @@ package com.pokade.domain.notification.service;
 import com.pokade.domain.notification.dto.NotificationResponse;
 import com.pokade.domain.notification.entity.Notification;
 import com.pokade.domain.notification.entity.NotificationType;
+import com.pokade.domain.notification.event.NotificationPushEvent;
 import com.pokade.domain.notification.repository.NotificationRepository;
 import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
@@ -10,9 +11,13 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -33,6 +38,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final SseEmitterStore sseEmitterStore;
+    private final ApplicationEventPublisher eventPublisher;
 
     public List<NotificationResponse> getNotifications(Long userId) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId)
@@ -71,6 +77,31 @@ public class NotificationService {
     private String buildPriceTargetMessage(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
         String targetLabel = reachedTargetPrice.equals(watchlist.getTargetBuyPrice()) ? "구매" : "판매";
         return String.format("%s 카드가 %s 목표가 %,d원에 도달했습니다.", cardName, targetLabel, reachedTargetPrice);
+    }
+
+    // 1:1 문의 처리 완료 알림 생성 - 관리자의 답변 등록, 또는 상태를 HANDLED로 변경한 경우 호출된다.
+    // 알림 저장은 호출자 트랜잭션에 그대로 포함시키되, SSE 푸시는 커밋이 실제로 성공한 뒤에만 보낸다 -
+    // 커밋 전에 푸시하면 이후 같은 트랜잭션 안에서 다른 작업이 실패해 롤백되는 경우, 유저는 이미 알림을
+    // 받았는데 문의 상태/알림 레코드는 존재하지 않는 불일치가 생긴다.
+    @Transactional
+    public void createInquiryHandledNotification(Long userId, String inquiryTitle) {
+        Notification notification = Notification.builder()
+                .userId(userId)
+                .type(NotificationType.INQUIRY_HANDLED)
+                .message(String.format("'%s' 문의가 처리 완료되었습니다.", inquiryTitle))
+                .build();
+
+        notificationRepository.save(notification);
+        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification)));
+    }
+
+    // 트랜잭션이 없는 컨텍스트(단위 테스트 등)에서도 그대로 실행되도록 fallbackExecution=true.
+    // AFTER_COMMIT 리스너는 이미 커밋되어 끝난 트랜잭션 밖에서 호출되므로, 클래스 레벨 @Transactional을
+    // 그대로 상속하면 Spring이 기동 시점에 예외를 던진다 - NOT_SUPPORTED로 명시적으로 트랜잭션을 배제한다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onNotificationPush(NotificationPushEvent event) {
+        pushToSubscribers(event.userId(), event.response());
     }
 
     // 로그인 유저의 SSE 구독을 등록한다. 인증은 기존 JwtAuthenticationFilter가 처리하므로

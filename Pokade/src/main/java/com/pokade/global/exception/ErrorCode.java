@@ -27,6 +27,8 @@ public enum ErrorCode {
     PRIMARY_VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "대표 변형이 지정되지 않은 카드입니다."),
     WATCHLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "워치리스트 항목을 찾을 수 없습니다."),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
+    INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
+    INQUIRY_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "첨부 이미지는 최대 3장까지 가능합니다."),
 
     DUPLICATE_LISTING(HttpStatus.CONFLICT, "이미 등록된 매물입니다."),
     TRADE_CONFLICT(HttpStatus.CONFLICT, "이미 처리 중인 거래입니다."),

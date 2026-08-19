@@ -32,7 +32,7 @@ class NotificationSseFlowTest {
     @Test
     @DisplayName("subscribe 후 같은 유저에게 createPriceTargetNotification이 발생하면 연결이 끊기지 않고 유지된다")
     void subscribe_then_notify_keeps_connection_alive() {
-        notificationService = new NotificationService(notificationRepository, sseEmitterStore);
+        notificationService = new NotificationService(notificationRepository, sseEmitterStore, event -> { });
         Long userId = 1L;
         Watchlist watchlist = Watchlist.builder().userId(userId).cardId(10L).targetBuyPrice(100000).build();
 
@@ -51,7 +51,7 @@ class NotificationSseFlowTest {
     @Test
     @DisplayName("다른 유저를 구독 중인 Emitter는 대상 유저에게 온 알림의 영향을 받지 않는다")
     void notification_for_one_user_does_not_touch_another_subscriber() {
-        notificationService = new NotificationService(notificationRepository, sseEmitterStore);
+        notificationService = new NotificationService(notificationRepository, sseEmitterStore, event -> { });
         Long targetUserId = 1L;
         Long otherUserId = 2L;
         Watchlist watchlist = Watchlist.builder().userId(targetUserId).cardId(10L).targetBuyPrice(100000).build();
