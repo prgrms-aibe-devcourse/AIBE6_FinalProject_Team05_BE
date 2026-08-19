@@ -112,6 +112,15 @@ class MyTradeControllerTest {
     }
 
     @Test
+    void to가_조회_상한을_넘으면_400_INVALID_PERIOD를_반환한다() throws Exception {
+        mockMvc.perform(get("/api/users/me/trades")
+                        .param("to", "+999999999-12-31")
+                        .with(userId(USER_ID)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PERIOD"));
+    }
+
+    @Test
     void 요청_파라미터가_조회_조건으로_그대로_전달된다() throws Exception {
         given(tradeService.getMyTrades(any(), any(), any())).willReturn(Page.empty());
 

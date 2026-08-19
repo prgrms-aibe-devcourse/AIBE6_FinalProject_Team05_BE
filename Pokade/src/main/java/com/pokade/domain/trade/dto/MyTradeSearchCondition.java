@@ -22,6 +22,9 @@ public record MyTradeSearchCondition(
         if (from != null && to != null && from.isAfter(to)) {
             throw new BusinessException(ErrorCode.INVALID_PERIOD);
         }
+        if (to != null && to.isAfter(MAX_DATE)) {
+            throw new BusinessException(ErrorCode.INVALID_PERIOD);
+        }
     }
 
     public boolean includeBuy() {
