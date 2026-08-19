@@ -1,27 +1,30 @@
 package com.pokade.domain.trade.repository;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.trade.dto.MyTradeSearchCondition;
+import com.pokade.domain.trade.dto.TradeRole;
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.user.entity.User;
+import com.pokade.support.AbstractIntegrationTest;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
-import com.pokade.domain.card.entity.Card;
-import com.pokade.domain.listing.entity.Listing;
-import com.pokade.domain.listing.entity.ListingGrade;
-import com.pokade.domain.listing.repository.ListingRepository;
-import com.pokade.domain.trade.entity.Trade;
-import com.pokade.domain.trade.entity.TradeStatus;
-import com.pokade.domain.user.entity.User;
-import com.pokade.support.AbstractIntegrationTest;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 
-import jakarta.persistence.EntityManager;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 class TradeRepositoryTest extends AbstractIntegrationTest {
@@ -79,6 +82,42 @@ class TradeRepositoryTest extends AbstractIntegrationTest {
                 .executeUpdate();
         entityManager.clear();
         return trade;
+    }
+
+    private Long sellerId() {
+        return ((Number) entityManager.createNativeQuery(
+                "SELECT id FROM users WHERE email = 'trade-seller@test.com'").getSingleResult()).longValue();
+    }
+
+    private Trade persistTrade(Listing listing, Long tradeBuyerId) {
+        return tradeRepository.save(
+                Trade.builder()
+                        .listing(listing)
+                        .buyerId(tradeBuyerId)
+                        .price(listing.getPrice())
+                        .build()
+        );
+    }
+
+    // created_at은 @CreationTimestamp라 지정할 수 없어, 기간 경계 검증을 위해 직접 덮어씀
+    private void overrideCreatedAt(Long tradeId, LocalDateTime createdAt) {
+        entityManager.flush();
+        entityManager.createNativeQuery("UPDATE trades SET created_at = :createdAt WHERE id = :id")
+                .setParameter("createdAt", createdAt)
+                .setParameter("id", tradeId)
+                .executeUpdate();
+        entityManager.clear();
+    }
+
+    private Page<Trade> findMine(Long userId, MyTradeSearchCondition condition, int size) {
+        return tradeRepository.findMyTrades(
+                userId,
+                condition.includeBuy(),
+                condition.includeSell(),
+                condition.statusesOrAll(),
+                condition.fromDateTime(),
+                condition.toDateTimeExclusive(),
+                PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "createdAt")));
     }
 
     @Test
@@ -201,5 +240,115 @@ class TradeRepositoryTest extends AbstractIntegrationTest {
                 cardId, TradeStatus.COMPLETED, LocalDateTime.now().minusDays(30));
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("t8 role 미지정이면 구매·판매 거래가 모두 조회된다")
+    void t8() {
+        Long otherId = sellerId();
+        persistTrade(persistListing(otherId, 1000, ListingGrade.A), buyerId);   // 내가 구매자
+        persistTrade(persistListing(buyerId, 2000, ListingGrade.B), otherId);   // 내가 판매자
+
+        Page<Trade> result = findMine(buyerId,
+                new MyTradeSearchCondition(null, null, null, null), 20);
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("t9 role=BUY면 내가 구매자인 거래만 조회된다")
+    void t9() {
+        Long otherId = sellerId();
+        persistTrade(persistListing(otherId, 1000, ListingGrade.A), buyerId);
+        persistTrade(persistListing(buyerId, 2000, ListingGrade.B), otherId);
+
+        Page<Trade> result = findMine(buyerId,
+                new MyTradeSearchCondition(TradeRole.BUY, null, null, null), 20);
+
+        assertThat(result.getContent())
+                .singleElement()
+                .satisfies(t -> assertThat(t.getBuyerId()).isEqualTo(buyerId));
+    }
+
+    @Test
+    @DisplayName("t10 role=SELL이면 내가 판매자인 거래만 조회된다")
+    void t10() {
+        Long otherId = sellerId();
+        persistTrade(persistListing(otherId, 1000, ListingGrade.A), buyerId);
+        persistTrade(persistListing(buyerId, 2000, ListingGrade.B), otherId);
+
+        Page<Trade> result = findMine(buyerId,
+                new MyTradeSearchCondition(TradeRole.SELL, null, null, null), 20);
+
+        assertThat(result.getContent())
+                .singleElement()
+                .satisfies(t -> assertThat(t.getListing().getSellerId()).isEqualTo(buyerId));
+    }
+
+    @Test
+    @DisplayName("t11 status를 지정하면 해당 상태의 거래만 조회된다")
+    void t11() {
+        Long otherId = sellerId();
+        persistTrade(persistListing(otherId, 1000, ListingGrade.A), buyerId);   // PENDING
+        Trade cancelled = persistTrade(persistListing(otherId, 2000, ListingGrade.B), buyerId);
+        cancelled.cancel();
+        entityManager.flush();
+
+        Page<Trade> result = findMine(buyerId,
+                new MyTradeSearchCondition(null, List.of(TradeStatus.CANCELLED), null, null), 20);
+
+        assertThat(result.getContent())
+                .extracting(Trade::getStatus)
+                .containsExactly(TradeStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("t12 to에 지정한 날의 거래는 그날 늦은 시각이어도 포함되고, 다음 날은 제외된다")
+    void t12() {
+        Long otherId = sellerId();
+        LocalDate targetDay = LocalDate.of(2026, 5, 10);
+
+        Trade lastMinute = persistTrade(persistListing(otherId, 1000, ListingGrade.A), buyerId);
+        overrideCreatedAt(lastMinute.getId(), targetDay.atTime(23, 30));
+
+        Trade nextDay = persistTrade(persistListing(otherId, 2000, ListingGrade.B), buyerId);
+        overrideCreatedAt(nextDay.getId(), targetDay.plusDays(1).atTime(0, 30));
+
+        Page<Trade> result = findMine(buyerId,
+                new MyTradeSearchCondition(null, null, targetDay, targetDay), 20);
+
+        assertThat(result.getContent())
+                .extracting(Trade::getId)
+                .containsExactly(lastMinute.getId());
+    }
+
+    @Test
+    @DisplayName("t13 내가 참여하지 않은 거래는 조회되지 않는다")
+    void t13() {
+        User outsider = User.createLocalUser("trade-outsider@test.com", "hashed", "outsider");
+        entityManager.persist(outsider);
+        entityManager.flush();
+
+        persistTrade(persistListing(sellerId(), 1000, ListingGrade.A), outsider.getId());
+
+        Page<Trade> result = findMine(buyerId,
+                new MyTradeSearchCondition(null, null, null, null), 20);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("t14 페이지 크기를 넘겨도 totalElements는 전체 건수를 센다")
+    void t14() {
+        Long otherId = sellerId();
+        persistTrade(persistListing(otherId, 1000, ListingGrade.A), buyerId);
+        persistTrade(persistListing(otherId, 2000, ListingGrade.B), buyerId);
+        persistTrade(persistListing(otherId, 3000, ListingGrade.S), buyerId);
+
+        Page<Trade> result = findMine(buyerId,
+                new MyTradeSearchCondition(null, null, null, null), 2);
+
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(3);
     }
 }
