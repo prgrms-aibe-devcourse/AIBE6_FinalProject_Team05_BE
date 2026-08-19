@@ -1,6 +1,8 @@
 package com.pokade.domain.notification.repository;
 
 import com.pokade.domain.notification.entity.Notification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +14,10 @@ import java.util.Optional;
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
     List<Notification> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    // #162: 목록 조회 페이지네이션용. 위 findByUserIdOrderByCreatedAtDesc()는 워치리스트 알림 테스트
+    // (WatchlistTargetPriceNoticeConcurrencyTest 등)가 검증/정리 용도로 그대로 쓰고 있어 건드리지 않는다.
+    Page<Notification> findByUserId(Long userId, Pageable pageable);
 
     Optional<Notification> findByIdAndUserId(Long id, Long userId);
 

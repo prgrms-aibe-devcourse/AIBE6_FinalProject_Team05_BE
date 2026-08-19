@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.util.List;
 import java.util.Optional;
@@ -48,6 +51,51 @@ class NotificationRepositoryTest {
 
         assertThat(found).hasSize(1);
         assertThat(found.get(0).getUserId()).isEqualTo(userId);
+    }
+
+    @Test
+    void findByUserId_페이징은_같은_유저의_알림을_요청한_정렬로_페이지_단위로_조회한다() {
+        Long userId = insertUser("paging@test.com");
+        Notification first = saveNotification(userId, NotificationType.PRICE_TARGET, "first");
+        Notification second = saveNotification(userId, NotificationType.TRADE_CONFIRMED, "second");
+        Notification third = saveNotification(userId, NotificationType.LISTING_STALE, "third");
+
+        Page<Notification> firstPage = notificationRepository.findByUserId(
+                userId, PageRequest.of(0, 2, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        assertThat(firstPage.getContent()).extracting(Notification::getId)
+                .containsExactly(third.getId(), second.getId());
+        assertThat(firstPage.getTotalElements()).isEqualTo(3);
+        assertThat(firstPage.getTotalPages()).isEqualTo(2);
+
+        Page<Notification> secondPage = notificationRepository.findByUserId(
+                userId, PageRequest.of(1, 2, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        assertThat(secondPage.getContent()).extracting(Notification::getId)
+                .containsExactly(first.getId());
+    }
+
+    @Test
+    void findByUserId_페이징은_다른_유저의_알림과_섞이지_않는다() {
+        Long userId = insertUser("paging-mine@test.com");
+        Long otherUserId = insertUser("paging-other@test.com");
+        saveNotification(userId, NotificationType.PRICE_TARGET, "mine");
+        saveNotification(otherUserId, NotificationType.PRICE_TARGET, "other");
+
+        Page<Notification> found = notificationRepository.findByUserId(userId, PageRequest.of(0, 20));
+
+        assertThat(found.getContent()).hasSize(1);
+        assertThat(found.getContent().get(0).getUserId()).isEqualTo(userId);
+    }
+
+    @Test
+    void findByUserId_페이징은_알림이_없으면_빈_페이지를_반환한다() {
+        Long userId = insertUser("paging-empty@test.com");
+
+        Page<Notification> found = notificationRepository.findByUserId(userId, PageRequest.of(0, 20));
+
+        assertThat(found.getContent()).isEmpty();
+        assertThat(found.getTotalElements()).isZero();
     }
 
     @Test

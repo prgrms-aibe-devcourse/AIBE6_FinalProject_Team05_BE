@@ -18,6 +18,10 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -51,24 +55,28 @@ class NotificationServiceTest {
 
     // ===== 목록 조회 =====
     @Test
-    @DisplayName("목록 조회: 알림이 없으면 빈 리스트 반환")
+    @DisplayName("목록 조회: 알림이 없으면 빈 페이지 반환")
     void getNotifications_empty() {
-        given(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L)).willReturn(List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        given(notificationRepository.findByUserId(1L, pageable)).willReturn(Page.empty(pageable));
 
-        List<NotificationResponse> result = notificationService.getNotifications(1L);
+        Page<NotificationResponse> result = notificationService.getNotifications(1L, pageable);
 
-        assertThat(result).isEmpty();
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
     }
 
     @Test
-    @DisplayName("목록 조회: 알림 개수만큼 NotificationResponse 리스트 반환")
+    @DisplayName("목록 조회: 알림 개수만큼 NotificationResponse 페이지 반환")
     void getNotifications_success() {
-        given(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L))
-                .willReturn(List.of(notification(1L), notification(1L)));
+        Pageable pageable = PageRequest.of(0, 20);
+        given(notificationRepository.findByUserId(1L, pageable))
+                .willReturn(new PageImpl<>(List.of(notification(1L), notification(1L)), pageable, 2));
 
-        List<NotificationResponse> result = notificationService.getNotifications(1L);
+        Page<NotificationResponse> result = notificationService.getNotifications(1L, pageable);
 
-        assertThat(result).hasSize(2);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
     }
 
     // ===== 읽음 처리 =====

@@ -15,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -48,11 +50,8 @@ public class NotificationService {
     @Autowired(required = false)
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
-    public List<NotificationResponse> getNotifications(Long userId) {
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId)
-                .stream()
-                .map(NotificationResponse::of)
-                .toList();
+    public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {
+        return notificationRepository.findByUserId(userId, pageable).map(NotificationResponse::of);
     }
 
     @Transactional
