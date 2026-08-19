@@ -1,5 +1,7 @@
 package com.pokade.domain.chat.controller;
 
+import com.pokade.domain.chat.dto.ChatHistoryImportRequest;
+import com.pokade.domain.chat.dto.ChatHistoryImportResponse;
 import com.pokade.domain.chat.dto.ChatHistoryResponse;
 import com.pokade.domain.chat.dto.ChatQueryRequest;
 import com.pokade.domain.chat.dto.ChatQueryResponse;
@@ -64,6 +66,23 @@ public class ChatController {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
         Page<ChatHistoryResponse> response = chatService.getHistory(sessionId, principalUserId, pageable);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "비로그인 히스토리 이관",
+            description = "비로그인 상태로 localStorage에 쌓아둔 프리셋(급등/급락) 클릭 기록을 로그인/회원가입 직후 서버로 보내 "
+                    + "채팅 히스토리에 반영합니다. 로그인이 필요하며, 답변 내용은 서버가 이 시점 기준으로 다시 계산합니다."
+    )
+    @PostMapping("/history/import")
+    public ResponseEntity<ChatHistoryImportResponse> importHistory(
+            @Valid @RequestBody ChatHistoryImportRequest request,
+            @AuthenticationPrincipal Long principalUserId
+    ) {
+        if (principalUserId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+        ChatHistoryImportResponse response = chatService.importHistory(request, principalUserId);
         return ResponseEntity.ok(response);
     }
 

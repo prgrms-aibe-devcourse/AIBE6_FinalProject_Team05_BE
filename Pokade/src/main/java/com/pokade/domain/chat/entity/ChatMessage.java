@@ -47,6 +47,17 @@ public class ChatMessage {
         this.createdAt = LocalDateTime.now();
     }
 
+    // 비로그인 히스토리 이관(ChatService.importHistory) 전용 - 실제 저장 시각이 아니라 클라이언트가 그 프리셋을
+    // 눌렀던 시각(askedAt)을 createdAt으로 남겨야 히스토리 정렬이 실제 대화 순서와 맞는다.
+    @Builder(builderMethodName = "importedBuilder")
+    public ChatMessage(String sessionId, Long userId, ChatRole role, String content, LocalDateTime createdAt) {
+        this.sessionId = sessionId;
+        this.userId = userId;
+        this.role = role.name();
+        this.content = content;
+        this.createdAt = createdAt;
+    }
+
     public ChatRole getRoleEnum() {
         return ChatRole.valueOf(role);
     }

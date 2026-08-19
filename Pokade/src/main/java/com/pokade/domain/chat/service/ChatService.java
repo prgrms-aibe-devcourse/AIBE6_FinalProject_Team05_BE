@@ -1,14 +1,20 @@
 package com.pokade.domain.chat.service;
 
+import com.pokade.domain.chat.dto.ChatHistoryImportRequest;
+import com.pokade.domain.chat.dto.ChatHistoryImportResponse;
 import com.pokade.domain.chat.dto.ChatHistoryResponse;
 import com.pokade.domain.chat.dto.ChatQueryRequest;
 import com.pokade.domain.chat.dto.ChatQueryResponse;
+import com.pokade.domain.chat.dto.ChatRankingItemResponse;
 import com.pokade.domain.chat.entity.ChatMessage;
 import com.pokade.domain.chat.entity.ChatRole;
 import com.pokade.domain.chat.repository.ChatMessageRepository;
+import com.pokade.domain.chat.store.ChatImportIdempotencyStore;
 import com.pokade.domain.chat.store.ChatRateLimitStore;
 import com.pokade.domain.chat.support.QuickQuestion;
+import com.pokade.domain.chat.support.RankingAnswerFormatter;
 import com.pokade.domain.chat.tool.PriceChatTools;
+import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.web.PageableValidator;
@@ -18,8 +24,14 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -116,10 +128,22 @@ public class ChatService {
     // 같은 세션에서 동일한 메시지가 이 횟수 이상 연속되면 60초간 잠금(RedisChatRateLimitStore 참고)
     private static final int REPEAT_LOCK_THRESHOLD = 3;
 
+    // 히스토리 이관(importHistory) 전용 rate-limit - ChatRateLimitStore를 재사용하되 키/임계값은 분리한다.
+    private static final String IMPORT_RATE_LIMIT_KEY_PREFIX = "chat-import:";
+    private static final String IMPORT_RATE_LIMIT_MARKER = "import";
+    private static final int IMPORT_RATE_LIMIT_THRESHOLD = 5;
+
+    // 이 시간을 넘긴 askedAt은 이관하지 않는다 - 클라이언트(localStorage)도 같은 기준으로 스스로 정리하지만,
+    // 클라이언트 시계 조작/버그에 대비해 서버도 독립적으로 같은 기준을 검증한다.
+    private static final long IMPORT_WINDOW_HOURS = 24;
+
     private final ChatClient chatClient;
     private final PriceChatTools priceChatTools;
+    private final PriceService priceService;
     private final ChatMessageRepository chatMessageRepository;
+    private final ChatImportIdempotencyStore chatImportIdempotencyStore;
     private final ChatRateLimitStore chatRateLimitStore;
+    private final PlatformTransactionManager transactionManager;
 
     // 클래스/메서드 레벨 @Transactional을 걸지 않는다 - LLM 호출(수 초 이상 걸릴 수 있는 외부 I/O)이 이 메서드
     // 안에 있는데, 트랜잭션으로 감싸면 그 시간 내내 DB 커넥션을 점유해 동시 요청이 몰릴 때 커넥션 풀이
@@ -147,16 +171,23 @@ public class ChatService {
             throw new BusinessException(ErrorCode.CHAT_RATE_LIMIT_EXCEEDED);
         }
 
+        // 급등/급락 랭킹 프리셋은 파라미터 해석이 필요 없는 고정 DB 조회 하나로 답이 정해지므로,
+        // LLM을 거치지 않고 PriceService를 직접 호출해 응답한다(토큰 소모 없음).
+        Optional<String> rankingType = QuickQuestion.rankingTypeFor(message);
+        if (rankingType.isPresent()) {
+            return answerRankingPreset(sessionId, principalUserId, message, rankingType.get());
+        }
+
         if (INJECTION_PATTERN.matcher(message).find()) {
             log.info("챗봇 프롬프트 인젝션 패턴 탐지 - LLM 호출 생략, 이력 미저장: sessionId={}", sessionId);
-            return new ChatQueryResponse(sessionId, INJECTION_BLOCKED_MESSAGE, null);
+            return new ChatQueryResponse(sessionId, INJECTION_BLOCKED_MESSAGE, null, null);
         }
 
         if (SUPPORT_ESCALATION_PATTERN.matcher(message).find()) {
             log.info("챗봇 고객센터 이관 키워드 탐지 - LLM 호출 생략: sessionId={}", sessionId);
             saveMessage(sessionId, principalUserId, ChatRole.USER, message);
             saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, SUPPORT_ESCALATION_MESSAGE);
-            return new ChatQueryResponse(sessionId, SUPPORT_ESCALATION_MESSAGE, null);
+            return new ChatQueryResponse(sessionId, SUPPORT_ESCALATION_MESSAGE, null, null);
         }
 
         boolean isInvestmentQuestion = INVESTMENT_PATTERN.matcher(message).find();
@@ -186,7 +217,7 @@ public class ChatService {
         saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, answer);
 
         String disclaimer = isInvestmentQuestion ? INVESTMENT_DISCLAIMER : null;
-        return new ChatQueryResponse(sessionId, answer, disclaimer);
+        return new ChatQueryResponse(sessionId, answer, disclaimer, null);
     }
 
     @Transactional(readOnly = true)
@@ -194,6 +225,105 @@ public class ChatService {
         PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
         return chatMessageRepository.findBySessionIdAndUserIdOrderByCreatedAtAsc(sessionId, userId, pageable)
                 .map(ChatHistoryResponse::from);
+    }
+
+    // 비로그인 상태에서 localStorage에 쌓아둔 프리셋 클릭 기록(포인터)을 로그인 후 히스토리로 이관한다.
+    // 답변 내용은 클라이언트가 보낸 걸 신뢰하지 않고 항상 이 시점 기준으로 서버가 다시 계산한다 -
+    // presetId(어떤 프리셋인지)만 클라이언트를 신뢰하고, 나머지는 전부 서버가 새로 만들어내므로
+    // "챗봇이 실제로 한 적 없는 답변을 조작해서 우기는" 위조가 원천적으로 불가능하다.
+    public ChatHistoryImportResponse importHistory(ChatHistoryImportRequest request, Long principalUserId) {
+        if (principalUserId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+
+        String rateLimitKey = IMPORT_RATE_LIMIT_KEY_PREFIX + principalUserId;
+        if (chatRateLimitStore.isLocked(rateLimitKey)) {
+            throw new BusinessException(ErrorCode.CHAT_RATE_LIMIT_EXCEEDED);
+        }
+        if (chatRateLimitStore.recordAndCount(rateLimitKey, IMPORT_RATE_LIMIT_MARKER) >= IMPORT_RATE_LIMIT_THRESHOLD) {
+            chatRateLimitStore.lock(rateLimitKey);
+            log.info("챗봇 히스토리 이관 반복 호출 탐지 - 잠금: userId={}", principalUserId);
+            throw new BusinessException(ErrorCode.CHAT_RATE_LIMIT_EXCEEDED);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime earliestAllowed = now.minusHours(IMPORT_WINDOW_HOURS);
+
+        int imported = 0;
+        int skipped = 0;
+        for (ChatHistoryImportRequest.Entry entry : request.entries()) {
+            LocalDateTime askedAt = LocalDateTime.ofInstant(entry.askedAt(), ZoneId.systemDefault());
+            Optional<QuickQuestion> preset = QuickQuestion.findRankingPresetById(entry.presetId());
+
+            if (preset.isEmpty() || askedAt.isBefore(earliestAllowed) || askedAt.isAfter(now)) {
+                skipped++;
+                continue;
+            }
+
+            if (importEntry(request.sessionId(), principalUserId, preset.get(), askedAt)) {
+                imported++;
+            } else {
+                skipped++;
+            }
+        }
+
+        log.info("챗봇 히스토리 이관 완료: userId={}, imported={}, skipped={}", principalUserId, imported, skipped);
+        return new ChatHistoryImportResponse(imported, skipped);
+    }
+
+    // 멱등성 마커를 Redis TTL 키로 먼저 마킹해 이미 이관된 항목이면 조용히 skip한다. 이관 대상 자체가
+    // askedAt 기준 24시간 이내로만 허용되므로, 멱등성 마커도 그 이상 오래 보관할 필요가 없다(RedisChatImportIdempotencyStore 참고).
+    // 마킹 이후 랭킹 조회나 메시지 저장이 실패하면 마킹을 즉시 해제한다 - 그래야 TTL(48시간)이 끝나기 전에도
+    // 재시도가 "이미 이관됨"으로 오판되지 않고 다시 시도할 수 있다(PR 리뷰로 발견된 갭 - 마킹만 남고
+    // 메시지는 저장 안 되는 상태를 방지). USER/ASSISTANT 메시지 저장은 하나의 트랜잭션으로 묶어
+    // 둘 중 하나만 저장되는 반쪽 상태도 방지한다.
+    private boolean importEntry(String sessionId, Long userId, QuickQuestion preset, LocalDateTime askedAt) {
+        String idempotencyKey = userId + ":" + sessionId + ":" + preset.id() + ":" + askedAt;
+        if (!chatImportIdempotencyStore.markIfAbsent(idempotencyKey)) {
+            log.info("챗봇 히스토리 이관 - 이미 이관된 항목 skip: userId={}, presetId={}, askedAt={}", userId, preset.id(), askedAt);
+            return false;
+        }
+
+        try {
+            String answer = RankingAnswerFormatter.format(priceService.getRanking(preset.rankingType()));
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                chatMessageRepository.save(ChatMessage.importedBuilder()
+                        .sessionId(sessionId).userId(userId).role(ChatRole.USER).content(preset.question()).createdAt(askedAt)
+                        .build());
+                chatMessageRepository.save(ChatMessage.importedBuilder()
+                        .sessionId(sessionId).userId(userId).role(ChatRole.ASSISTANT).content(answer).createdAt(askedAt)
+                        .build());
+            });
+            return true;
+        } catch (Exception e) {
+            chatImportIdempotencyStore.release(idempotencyKey);
+            log.warn("챗봇 히스토리 이관 실패 - 재시도 가능하도록 멱등성 마커 해제: userId={}, presetId={}", userId, preset.id(), e);
+            return false;
+        }
+    }
+
+    // 랭킹 프리셋 응답 - LLM 호출 없이 PriceService를 직접 호출한다(토큰 소모 없음).
+    // 성공: answer=null + rankingItems=목록 (프론트가 구조화된 데이터로 렌더링)
+    // 실패: answer=오류문구 + rankingItems=null (프론트가 텍스트로 렌더링)
+    // DB 이력은 항상 RankingAnswerFormatter 포맷 텍스트로 저장한다.
+    private ChatQueryResponse answerRankingPreset(String sessionId, Long principalUserId, String message, String rankingType) {
+        log.info("챗봇 랭킹 프리셋 - LLM 호출 생략(DB 직접 조회): sessionId={}, rankingType={}", sessionId, rankingType);
+        try {
+            var ranking = priceService.getRanking(rankingType);
+            List<ChatRankingItemResponse> rankingItems = ranking.stream().map(ChatRankingItemResponse::from).toList();
+            String historyText = RankingAnswerFormatter.format(ranking);
+            saveMessage(sessionId, principalUserId, ChatRole.USER, message);
+            saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, historyText);
+            return new ChatQueryResponse(sessionId, null, null, rankingItems);
+        } catch (BusinessException e) {
+            // rankingType은 QuickQuestion enum에서 고정된 값이라 "잘못된 타입"일 수 없다 - 그래도 예외가 났다면
+            // 원인 불명의 조회 실패이므로, LLM tool 경로용 문구(INVALID_TYPE_MESSAGE)를 재사용하지 않는다.
+            log.warn("챗봇 랭킹 프리셋 - 조회 실패: sessionId={}, rankingType={}", sessionId, rankingType, e);
+            String errorAnswer = RankingAnswerFormatter.LOOKUP_FAILED_MESSAGE;
+            saveMessage(sessionId, principalUserId, ChatRole.USER, message);
+            saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, errorAnswer);
+            return new ChatQueryResponse(sessionId, errorAnswer, null, null);
+        }
     }
 
     private void saveMessage(String sessionId, Long userId, ChatRole role, String content) {
