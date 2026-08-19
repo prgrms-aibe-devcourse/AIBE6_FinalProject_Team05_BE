@@ -2,10 +2,9 @@ package com.pokade.domain.chat.service;
 
 import com.pokade.domain.chat.dto.ChatHistoryImportRequest;
 import com.pokade.domain.chat.dto.ChatHistoryImportResponse;
-import com.pokade.domain.chat.entity.ChatImportRecord;
 import com.pokade.domain.chat.entity.ChatMessage;
-import com.pokade.domain.chat.repository.ChatImportRecordRepository;
 import com.pokade.domain.chat.repository.ChatMessageRepository;
+import com.pokade.domain.chat.store.ChatImportIdempotencyStore;
 import com.pokade.domain.chat.store.ChatRateLimitStore;
 import com.pokade.domain.chat.tool.PriceChatTools;
 import com.pokade.domain.price.dto.PriceRankingResponse;
@@ -19,7 +18,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -57,7 +55,7 @@ class ChatServiceTest {
     private ChatMessageRepository chatMessageRepository;
 
     @Mock
-    private ChatImportRecordRepository chatImportRecordRepository;
+    private ChatImportIdempotencyStore chatImportIdempotencyStore;
 
     @Mock
     private ChatRateLimitStore chatRateLimitStore;
@@ -82,6 +80,11 @@ class ChatServiceTest {
         given(chatRateLimitStore.recordAndCount(RATE_LIMIT_KEY, "import")).willReturn(1L);
     }
 
+    // Mockito의 boolean mock 기본값은 false라, "처음 보는 항목"으로 취급되려면 markIfAbsent를 true로 명시해야 한다.
+    private void allowIdempotency() {
+        given(chatImportIdempotencyStore.markIfAbsent(anyString())).willReturn(true);
+    }
+
     @Test
     @DisplayName("t1 비로그인이면 UNAUTHORIZED 예외가 발생하고 아무 저장소도 조회하지 않는다")
     void t1() {
@@ -91,7 +94,7 @@ class ChatServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.UNAUTHORIZED);
-        verifyNoInteractions(chatRateLimitStore, chatImportRecordRepository, chatMessageRepository, priceService);
+        verifyNoInteractions(chatRateLimitStore, chatImportIdempotencyStore, chatMessageRepository, priceService);
     }
 
     @Test
@@ -104,7 +107,7 @@ class ChatServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CHAT_RATE_LIMIT_EXCEEDED);
-        verifyNoInteractions(chatImportRecordRepository, chatMessageRepository, priceService);
+        verifyNoInteractions(chatImportIdempotencyStore, chatMessageRepository, priceService);
     }
 
     @Test
@@ -119,13 +122,14 @@ class ChatServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CHAT_RATE_LIMIT_EXCEEDED);
         verify(chatRateLimitStore).lock(RATE_LIMIT_KEY);
-        verifyNoInteractions(chatImportRecordRepository, chatMessageRepository, priceService);
+        verifyNoInteractions(chatImportIdempotencyStore, chatMessageRepository, priceService);
     }
 
     @Test
     @DisplayName("t4 유효한 랭킹 프리셋 1건은 이관에 성공하고 USER/ASSISTANT 메시지가 각각 저장된다")
     void t4() {
         allowRateLimit();
+        allowIdempotency();
         given(priceService.getRanking("rise")).willReturn(List.of(ranking("피카츄")));
         ChatHistoryImportRequest request = requestOf(entry("top-gainers", Instant.now().minus(1, ChronoUnit.HOURS)));
 
@@ -133,7 +137,7 @@ class ChatServiceTest {
 
         assertThat(response.imported()).isEqualTo(1);
         assertThat(response.skipped()).isEqualTo(0);
-        verify(chatImportRecordRepository).saveAndFlush(any(ChatImportRecord.class));
+        verify(chatImportIdempotencyStore).markIfAbsent(anyString());
         verify(chatMessageRepository, times(2)).save(any(ChatMessage.class));
     }
 
@@ -147,7 +151,7 @@ class ChatServiceTest {
 
         assertThat(response.imported()).isEqualTo(0);
         assertThat(response.skipped()).isEqualTo(1);
-        verifyNoInteractions(chatImportRecordRepository, chatMessageRepository, priceService);
+        verifyNoInteractions(chatImportIdempotencyStore, chatMessageRepository, priceService);
     }
 
     @Test
@@ -160,7 +164,7 @@ class ChatServiceTest {
 
         assertThat(response.imported()).isEqualTo(0);
         assertThat(response.skipped()).isEqualTo(1);
-        verifyNoInteractions(chatImportRecordRepository, chatMessageRepository, priceService);
+        verifyNoInteractions(chatImportIdempotencyStore, chatMessageRepository, priceService);
     }
 
     @Test
@@ -173,7 +177,7 @@ class ChatServiceTest {
 
         assertThat(response.imported()).isEqualTo(0);
         assertThat(response.skipped()).isEqualTo(1);
-        verifyNoInteractions(chatImportRecordRepository, chatMessageRepository, priceService);
+        verifyNoInteractions(chatImportIdempotencyStore, chatMessageRepository, priceService);
     }
 
     @Test
@@ -186,15 +190,14 @@ class ChatServiceTest {
 
         assertThat(response.imported()).isEqualTo(0);
         assertThat(response.skipped()).isEqualTo(1);
-        verifyNoInteractions(chatImportRecordRepository, chatMessageRepository, priceService);
+        verifyNoInteractions(chatImportIdempotencyStore, chatMessageRepository, priceService);
     }
 
     @Test
     @DisplayName("t9 이미 이관된 항목(멱등성 위반)은 skip되고 답변을 재계산하거나 메시지를 저장하지 않는다")
     void t9() {
         allowRateLimit();
-        given(chatImportRecordRepository.saveAndFlush(any(ChatImportRecord.class)))
-                .willThrow(new DataIntegrityViolationException("duplicate"));
+        given(chatImportIdempotencyStore.markIfAbsent(anyString())).willReturn(false);
         ChatHistoryImportRequest request = requestOf(entry("top-gainers", Instant.now().minus(1, ChronoUnit.HOURS)));
 
         ChatHistoryImportResponse response = chatService.importHistory(request, USER_ID);
@@ -209,6 +212,7 @@ class ChatServiceTest {
     @DisplayName("t10 여러 건 중 일부만 유효하면 유효한 것만 이관되고 나머지는 skip되는 부분 성공을 허용한다")
     void t10() {
         allowRateLimit();
+        allowIdempotency();
         given(priceService.getRanking("rise")).willReturn(List.of(ranking("피카츄")));
         ChatHistoryImportRequest request = requestOf(
                 entry("top-gainers", Instant.now().minus(1, ChronoUnit.HOURS)),
@@ -220,7 +224,7 @@ class ChatServiceTest {
 
         assertThat(response.imported()).isEqualTo(1);
         assertThat(response.skipped()).isEqualTo(2);
-        verify(chatImportRecordRepository, times(1)).saveAndFlush(any(ChatImportRecord.class));
+        verify(chatImportIdempotencyStore, times(1)).markIfAbsent(anyString());
         verify(chatMessageRepository, times(2)).save(any(ChatMessage.class));
     }
 
@@ -228,6 +232,7 @@ class ChatServiceTest {
     @DisplayName("t11 랭킹 조회가 실패해도 그 entry만 skip되고 예외가 전체 이관을 중단시키지 않는다")
     void t11() {
         allowRateLimit();
+        allowIdempotency();
         given(priceService.getRanking(eq("fall"))).willThrow(new BusinessException(ErrorCode.CARD_NOT_FOUND));
         ChatHistoryImportRequest request = requestOf(entry("top-losers", Instant.now().minus(1, ChronoUnit.HOURS)));
 
