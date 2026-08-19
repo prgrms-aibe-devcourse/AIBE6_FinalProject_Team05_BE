@@ -4,5 +4,6 @@ package com.pokade.domain.notification.entity;
 public enum NotificationType {
     PRICE_TARGET,
     TRADE_CONFIRMED,
-    LISTING_STALE
+    LISTING_STALE,
+    INQUIRY_HANDLED
 }
