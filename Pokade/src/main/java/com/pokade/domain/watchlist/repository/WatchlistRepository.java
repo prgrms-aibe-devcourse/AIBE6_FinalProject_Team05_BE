@@ -28,7 +28,12 @@ public interface WatchlistRepository extends JpaRepository<Watchlist, Long> {
 
     // 알림 생성 "권한"을 조건부 원자적 UPDATE로 선점한다. is_notified=false인 행만 갱신되므로,
     // 삭제됐거나 다른 트랜잭션/인스턴스가 이미 선점한 경우 0을 반환해 중복/유령 알림 생성을 막는다.
-    @Modifying
+    // flushAutomatically=true가 필요한 이유: 이 bulk UPDATE는 Hibernate dirty-checking을 거치지 않고 DB의
+    // 현재 커밋 상태만 보는데, 호출 전에 같은 트랜잭션에서 isNotified를 바꾼(예: requestNotificationAgain())
+    // 아직 flush 안 된 변경이 있으면 그걸 못 보고 WHERE 조건이 틀리게 평가된다 - 먼저 flush해서 최신 상태로
+    // 판정하게 한다. clearAutomatically는 절대 켜지 않는다 - 켜면 영속성 컨텍스트가 비워져서 이후 호출부의
+    // watchlist.markAsNotified()가 detached 엔티티에 적용돼 추적되지 않는다.
+    @Modifying(flushAutomatically = true)
     @Query("UPDATE Watchlist w SET w.isNotified = true WHERE w.id = :id AND w.isNotified = false")
     int markAsNotifiedIfNotYet(@Param("id") Long id);
 }

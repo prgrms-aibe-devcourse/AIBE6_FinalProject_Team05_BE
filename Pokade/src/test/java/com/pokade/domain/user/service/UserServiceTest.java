@@ -49,7 +49,7 @@ class UserServiceTest {
                 .nickname("지우")
                 .role(Role.USER)
                 .status(UserStatus.ACTIVE)
-                .profileImageUrl("https://img/x.png")
+                .profileImageUrl("profile/9f3c2a.png")
                 .pointBalance(30)
                 .build();
     }
@@ -90,7 +90,7 @@ class UserServiceTest {
         assertThat(res.nickname()).isEqualTo("지우");
         assertThat(res.role()).isEqualTo(Role.USER);
         assertThat(res.status()).isEqualTo(UserStatus.ACTIVE);
-        assertThat(res.profileImageUrl()).isEqualTo("https://img/x.png");
+        assertThat(res.profileImageUrl()).isEqualTo("/api/users/1/profile/image");
         assertThat(res.pointBalance()).isEqualTo(30);
     }
 
