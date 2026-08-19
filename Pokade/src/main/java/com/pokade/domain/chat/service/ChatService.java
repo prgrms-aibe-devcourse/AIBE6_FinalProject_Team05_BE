@@ -6,11 +6,10 @@ import com.pokade.domain.chat.dto.ChatHistoryResponse;
 import com.pokade.domain.chat.dto.ChatQueryRequest;
 import com.pokade.domain.chat.dto.ChatQueryResponse;
 import com.pokade.domain.chat.dto.ChatRankingItemResponse;
-import com.pokade.domain.chat.entity.ChatImportRecord;
 import com.pokade.domain.chat.entity.ChatMessage;
 import com.pokade.domain.chat.entity.ChatRole;
-import com.pokade.domain.chat.repository.ChatImportRecordRepository;
 import com.pokade.domain.chat.repository.ChatMessageRepository;
+import com.pokade.domain.chat.store.ChatImportIdempotencyStore;
 import com.pokade.domain.chat.store.ChatRateLimitStore;
 import com.pokade.domain.chat.support.QuickQuestion;
 import com.pokade.domain.chat.support.RankingAnswerFormatter;
@@ -22,7 +21,6 @@ import com.pokade.global.web.PageableValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -141,7 +139,7 @@ public class ChatService {
     private final PriceChatTools priceChatTools;
     private final PriceService priceService;
     private final ChatMessageRepository chatMessageRepository;
-    private final ChatImportRecordRepository chatImportRecordRepository;
+    private final ChatImportIdempotencyStore chatImportIdempotencyStore;
     private final ChatRateLimitStore chatRateLimitStore;
 
     // 클래스/메서드 레벨 @Transactional을 걸지 않는다 - LLM 호출(수 초 이상 걸릴 수 있는 외부 I/O)이 이 메서드
@@ -270,19 +268,13 @@ public class ChatService {
         return new ChatHistoryImportResponse(imported, skipped);
     }
 
-    // 멱등성 마커(ChatImportRecord)를 먼저 저장해 이미 이관된 항목이면 유니크 제약 위반으로 조용히 skip한다.
-    // saveAndFlush로 즉시 flush해야 이 시점에 제약 위반이 터져서 개별 entry 단위로 잡아낼 수 있다.
+    // 멱등성 마커를 Redis TTL 키로 먼저 마킹해 이미 이관된 항목이면 조용히 skip한다. 이관 대상 자체가
+    // askedAt 기준 24시간 이내로만 허용되므로, 멱등성 마커도 그 이상 오래 보관할 필요가 없다(RedisChatImportIdempotencyStore 참고).
     // getRanking()의 BusinessException도 이 entry만 skip하도록 잡는다 - 그래야 한 entry의 문제가
     // importHistory 전체(부분 성공 계약)를 깨뜨리지 않는다.
     private boolean importEntry(String sessionId, Long userId, QuickQuestion preset, LocalDateTime askedAt) {
-        try {
-            chatImportRecordRepository.saveAndFlush(ChatImportRecord.builder()
-                    .userId(userId)
-                    .sessionId(sessionId)
-                    .presetId(preset.id())
-                    .askedAt(askedAt)
-                    .build());
-        } catch (DataIntegrityViolationException e) {
+        String idempotencyKey = userId + ":" + sessionId + ":" + preset.id() + ":" + askedAt;
+        if (!chatImportIdempotencyStore.markIfAbsent(idempotencyKey)) {
             log.info("챗봇 히스토리 이관 - 이미 이관된 항목 skip: userId={}, presetId={}, askedAt={}", userId, preset.id(), askedAt);
             return false;
         }
