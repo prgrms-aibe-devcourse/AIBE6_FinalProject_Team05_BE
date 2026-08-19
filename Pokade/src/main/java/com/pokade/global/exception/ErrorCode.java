@@ -63,6 +63,11 @@ public enum ErrorCode {
     // ===== 회원 정지 =====
     ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 계정입니다. 고객센터에 문의해주세요."),
     ACCOUNT_NOT_ACTIVE(HttpStatus.FORBIDDEN, "현재 계정 상태에서는 이용할 수 없는 기능입니다."),
+    ADMIN_CANNOT_TARGET_SELF(HttpStatus.BAD_REQUEST, "본인 계정에는 수행할 수 없습니다."),
+    ADMIN_CANNOT_TARGET_ADMIN(HttpStatus.BAD_REQUEST, "관리자 계정에는 수행할 수 없습니다."),
+    ALREADY_SUSPENDED(HttpStatus.BAD_REQUEST, "이미 정지된 계정입니다."),
+    NOT_SUSPENDED(HttpStatus.BAD_REQUEST, "정지 상태가 아닌 계정입니다."),
+    ALREADY_WITHDRAWN(HttpStatus.BAD_REQUEST, "이미 탈퇴 처리된 계정입니다."),
 
     // ===== AI 등급 진단 =====
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 등급 진단 서비스에 일시적인 오류가 발생했습니다."),
