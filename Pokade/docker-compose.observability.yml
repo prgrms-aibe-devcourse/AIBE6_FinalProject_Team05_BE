@@ -13,6 +13,8 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # named volume - 컨테이너 재생성에도 TSDB 데이터가 남도록(기존엔 볼륨 미지정으로 익명 볼륨에 저장돼 있었음)
+      - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
 
@@ -22,7 +24,18 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}"
+    volumes:
+      # named volume - 기존엔 볼륨 자체가 없어 컨테이너가 재생성될 때마다 데이터소스/대시보드가 통째로 사라졌음
+      - grafana-data:/var/lib/grafana
+      # 데이터소스/대시보드 provider 설정 - UI 수동 생성 대신 코드로 관리
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      # 실제 대시보드 JSON 파일 - 위 provisioning/dashboards의 provider가 이 경로를 바라본다
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "127.0.0.1:3001:3000"
     depends_on:
       - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:
