@@ -7,6 +7,7 @@ import com.pokade.domain.inquiry.entity.InquiryImage;
 import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
@@ -28,6 +29,7 @@ public class AdminInquiryService {
     private final InquiryRepository inquiryRepository;
     private final InquiryImageRepository inquiryImageRepository;
     private final S3FileStorage s3FileStorage;
+    private final NotificationService notificationService;
 
     public Page<InquiryResponse> getInquiries(InquiryCategory category, Pageable pageable) {
         Page<Inquiry> inquiries = category != null
@@ -51,7 +53,11 @@ public class AdminInquiryService {
     public InquiryResponse updateStatus(Long id, InquiryStatus status) {
         Inquiry inquiry = inquiryRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+        InquiryStatus previousStatus = inquiry.getStatus();
         inquiry.changeStatus(status);
+        if (previousStatus != InquiryStatus.HANDLED && status == InquiryStatus.HANDLED) {
+            notificationService.createInquiryHandledNotification(inquiry.getUserId(), inquiry.getTitle());
+        }
         List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(id).stream()
                 .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
                 .toList();
@@ -63,6 +69,7 @@ public class AdminInquiryService {
         Inquiry inquiry = inquiryRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
         inquiry.answer(content);
+        notificationService.createInquiryHandledNotification(inquiry.getUserId(), inquiry.getTitle());
         List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(id).stream()
                 .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
                 .toList();

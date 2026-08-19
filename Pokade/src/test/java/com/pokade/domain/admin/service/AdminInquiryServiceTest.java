@@ -7,6 +7,7 @@ import com.pokade.domain.inquiry.entity.InquiryImage;
 import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
@@ -30,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.never;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class AdminInquiryServiceTest {
@@ -40,6 +42,8 @@ class AdminInquiryServiceTest {
     private InquiryImageRepository inquiryImageRepository;
     @Mock
     private S3FileStorage s3FileStorage;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private AdminInquiryService adminInquiryService;
@@ -112,6 +116,34 @@ class AdminInquiryServiceTest {
 
         assertThat(response.status()).isEqualTo(InquiryStatus.HANDLED);
         assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.HANDLED);
+        then(notificationService).should().createInquiryHandledNotification(1L, "제목");
+    }
+
+    @Test
+    @DisplayName("이미 HANDLED인 문의를 다시 HANDLED로 바꿔도 중복 알림을 보내지 않는다")
+    void updateStatus_alreadyHandled_doesNotNotifyAgain() {
+        Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        inquiry.changeStatus(InquiryStatus.HANDLED);
+        given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
+        given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(1L)).willReturn(List.of());
+
+        adminInquiryService.updateStatus(1L, InquiryStatus.HANDLED);
+
+        then(notificationService).should(never()).createInquiryHandledNotification(any(), any());
+    }
+
+    @Test
+    @DisplayName("HANDLED를 UNHANDLED로 되돌릴 때는 알림을 보내지 않는다")
+    void updateStatus_toUnhandled_doesNotNotify() {
+        Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        inquiry.changeStatus(InquiryStatus.HANDLED);
+        given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
+        given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(1L)).willReturn(List.of());
+
+        InquiryResponse response = adminInquiryService.updateStatus(1L, InquiryStatus.UNHANDLED);
+
+        assertThat(response.status()).isEqualTo(InquiryStatus.UNHANDLED);
+        then(notificationService).should(never()).createInquiryHandledNotification(any(), any());
     }
 
     @Test
@@ -137,10 +169,11 @@ class AdminInquiryServiceTest {
         assertThat(response.answeredAt()).isNotNull();
         assertThat(response.status()).isEqualTo(InquiryStatus.HANDLED);
         assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.HANDLED);
+        then(notificationService).should().createInquiryHandledNotification(1L, "제목");
     }
 
     @Test
-    @DisplayName("이미 답변한 문의에 다시 답변하면 답변 내용/시각이 갱신된다")
+    @DisplayName("이미 답변한 문의에 다시 답변하면 답변 내용/시각이 갱신되고 알림도 다시 보낸다")
     void answerInquiry_updatesExistingAnswer() {
         Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
         given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
@@ -150,6 +183,7 @@ class AdminInquiryServiceTest {
         InquiryResponse response = adminInquiryService.answerInquiry(1L, "수정된 답변");
 
         assertThat(response.answerContent()).isEqualTo("수정된 답변");
+        then(notificationService).should(times(2)).createInquiryHandledNotification(1L, "제목");
     }
 
     @Test

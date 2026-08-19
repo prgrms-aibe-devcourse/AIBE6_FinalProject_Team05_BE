@@ -73,6 +73,19 @@ public class NotificationService {
         return String.format("%s 카드가 %s 목표가 %,d원에 도달했습니다.", cardName, targetLabel, reachedTargetPrice);
     }
 
+    // 1:1 문의 처리 완료 알림 생성 - 관리자의 답변 등록, 또는 상태를 HANDLED로 변경한 경우 호출된다.
+    @Transactional
+    public void createInquiryHandledNotification(Long userId, String inquiryTitle) {
+        Notification notification = Notification.builder()
+                .userId(userId)
+                .type(NotificationType.INQUIRY_HANDLED)
+                .message(String.format("'%s' 문의가 처리 완료되었습니다.", inquiryTitle))
+                .build();
+
+        notificationRepository.save(notification);
+        pushToSubscribers(userId, NotificationResponse.of(notification));
+    }
+
     // 로그인 유저의 SSE 구독을 등록한다. 인증은 기존 JwtAuthenticationFilter가 처리하므로
     // 여기서는 이미 인증된 userId를 받아 Emitter를 저장소에 등록하는 역할만 한다.
     public SseEmitter subscribe(Long userId) {

@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS watchlist (
 CREATE TABLE IF NOT EXISTS notifications (
     id           BIGSERIAL PRIMARY KEY,
     user_id      BIGINT NOT NULL REFERENCES users(id),
-    type         VARCHAR(30) NOT NULL,                          -- PRICE_TARGET / TRADE_CONFIRMED / LISTING_STALE 등
+    type         VARCHAR(30) NOT NULL,                          -- PRICE_TARGET / TRADE_CONFIRMED / LISTING_STALE / INQUIRY_HANDLED 등
     message      VARCHAR(255),
     is_read      BOOLEAN NOT NULL DEFAULT FALSE,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
