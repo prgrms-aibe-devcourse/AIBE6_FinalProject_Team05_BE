@@ -15,7 +15,9 @@ public record InquiryResponse(
         String title,
         String content,
         List<String> imageUrls,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String answerContent,
+        LocalDateTime answeredAt
 ) {
 
     public static InquiryResponse of(Inquiry inquiry, List<String> imageUrls) {
@@ -27,7 +29,9 @@ public record InquiryResponse(
                 inquiry.getTitle(),
                 inquiry.getContent(),
                 imageUrls,
-                inquiry.getCreatedAt()
+                inquiry.getCreatedAt(),
+                inquiry.getAnswerContent(),
+                inquiry.getAnsweredAt()
         );
     }
 }

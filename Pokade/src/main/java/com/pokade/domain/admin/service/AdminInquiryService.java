@@ -58,6 +58,17 @@ public class AdminInquiryService {
         return InquiryResponse.of(inquiry, imageUrls);
     }
 
+    @Transactional
+    public InquiryResponse answerInquiry(Long id, String content) {
+        Inquiry inquiry = inquiryRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+        inquiry.answer(content);
+        List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(id).stream()
+                .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
+                .toList();
+        return InquiryResponse.of(inquiry, imageUrls);
+    }
+
     private Map<Long, List<String>> loadImageUrls(List<Inquiry> inquiries) {
         if (inquiries.isEmpty()) {
             return Map.of();

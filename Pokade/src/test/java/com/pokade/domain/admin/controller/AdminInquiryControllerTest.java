@@ -86,7 +86,7 @@ class AdminInquiryControllerTest {
     }
 
     private InquiryResponse response() {
-        return new InquiryResponse(1L, 100L, InquiryCategory.INFO, InquiryStatus.UNHANDLED, "제목", "내용", List.of(), LocalDateTime.now());
+        return new InquiryResponse(1L, 100L, InquiryCategory.INFO, InquiryStatus.UNHANDLED, "제목", "내용", List.of(), LocalDateTime.now(), null, null);
     }
 
     @Test
@@ -137,7 +137,7 @@ class AdminInquiryControllerTest {
 
     @Test
     void 관리자가_상태를_변경하면_200과_변경된_상태를_반환한다() throws Exception {
-        InquiryResponse handled = new InquiryResponse(1L, 100L, InquiryCategory.INFO, InquiryStatus.HANDLED, "제목", "내용", List.of(), LocalDateTime.now());
+        InquiryResponse handled = new InquiryResponse(1L, 100L, InquiryCategory.INFO, InquiryStatus.HANDLED, "제목", "내용", List.of(), LocalDateTime.now(), null, null);
         given(adminInquiryService.updateStatus(1L, InquiryStatus.HANDLED)).willReturn(handled);
 
         mockMvc.perform(patch("/api/admin/inquiries/{id}/status", 1L)
@@ -166,6 +166,51 @@ class AdminInquiryControllerTest {
                         .with(admin())
                         .contentType("application/json")
                         .content("{\"status\":\"HANDLED\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("INQUIRY_NOT_FOUND"));
+    }
+
+    @Test
+    void 관리자가_답변을_등록하면_200과_HANDLED_상태의_답변을_반환한다() throws Exception {
+        InquiryResponse answered = new InquiryResponse(1L, 100L, InquiryCategory.INFO, InquiryStatus.HANDLED, "제목", "내용", List.of(), LocalDateTime.now(), "답변 내용입니다.", LocalDateTime.now());
+        given(adminInquiryService.answerInquiry(1L, "답변 내용입니다.")).willReturn(answered);
+
+        mockMvc.perform(patch("/api/admin/inquiries/{id}/answer", 1L)
+                        .with(admin())
+                        .contentType("application/json")
+                        .content("{\"content\":\"답변 내용입니다.\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.answerContent").value("답변 내용입니다."))
+                .andExpect(jsonPath("$.data.status").value("HANDLED"));
+    }
+
+    @Test
+    void 답변_내용이_비어있으면_400을_반환한다() throws Exception {
+        mockMvc.perform(patch("/api/admin/inquiries/{id}/answer", 1L)
+                        .with(admin())
+                        .contentType("application/json")
+                        .content("{\"content\":\"\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 관리자가_아니면_답변_등록시_403을_반환한다() throws Exception {
+        mockMvc.perform(patch("/api/admin/inquiries/{id}/answer", 1L)
+                        .with(user())
+                        .contentType("application/json")
+                        .content("{\"content\":\"답변 내용입니다.\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 존재하지_않는_문의에_답변시_404를_반환한다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.INQUIRY_NOT_FOUND))
+                .given(adminInquiryService).answerInquiry(999L, "답변 내용입니다.");
+
+        mockMvc.perform(patch("/api/admin/inquiries/{id}/answer", 999L)
+                        .with(admin())
+                        .contentType("application/json")
+                        .content("{\"content\":\"답변 내용입니다.\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("INQUIRY_NOT_FOUND"));
     }

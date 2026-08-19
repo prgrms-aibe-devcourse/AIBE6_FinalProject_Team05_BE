@@ -1,5 +1,6 @@
 package com.pokade.domain.admin.controller;
 
+import com.pokade.domain.admin.dto.request.InquiryAnswerRequest;
 import com.pokade.domain.admin.dto.request.InquiryStatusUpdateRequest;
 import com.pokade.domain.admin.service.AdminInquiryService;
 import com.pokade.domain.inquiry.dto.response.InquiryResponse;
@@ -44,5 +45,12 @@ public class AdminInquiryController {
             @PathVariable Long id,
             @Valid @RequestBody InquiryStatusUpdateRequest request) {
         return ApiResponse.ok(adminInquiryService.updateStatus(id, request.status()));
+    }
+
+    @PatchMapping("/{id}/answer")
+    public ApiResponse<InquiryResponse> answerInquiry(
+            @PathVariable Long id,
+            @Valid @RequestBody InquiryAnswerRequest request) {
+        return ApiResponse.ok("답변이 등록되었습니다.", adminInquiryService.answerInquiry(id, request.content()));
     }
 }

@@ -123,4 +123,42 @@ class AdminInquiryServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INQUIRY_NOT_FOUND);
     }
+
+    @Test
+    @DisplayName("답변을 등록하면 답변 내용/시각이 저장되고 상태가 HANDLED로 전환된다")
+    void answerInquiry_savesAnswerAndMarksHandled() {
+        Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
+        given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(1L)).willReturn(List.of());
+
+        InquiryResponse response = adminInquiryService.answerInquiry(1L, "답변 내용입니다.");
+
+        assertThat(response.answerContent()).isEqualTo("답변 내용입니다.");
+        assertThat(response.answeredAt()).isNotNull();
+        assertThat(response.status()).isEqualTo(InquiryStatus.HANDLED);
+        assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.HANDLED);
+    }
+
+    @Test
+    @DisplayName("이미 답변한 문의에 다시 답변하면 답변 내용/시각이 갱신된다")
+    void answerInquiry_updatesExistingAnswer() {
+        Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
+        given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(1L)).willReturn(List.of());
+        adminInquiryService.answerInquiry(1L, "첫 답변");
+
+        InquiryResponse response = adminInquiryService.answerInquiry(1L, "수정된 답변");
+
+        assertThat(response.answerContent()).isEqualTo("수정된 답변");
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 문의에 답변하려 하면 BusinessException(INQUIRY_NOT_FOUND)을 던진다")
+    void answerInquiry_notFound_throws() {
+        given(inquiryRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminInquiryService.answerInquiry(999L, "답변 내용입니다."))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INQUIRY_NOT_FOUND);
+    }
 }

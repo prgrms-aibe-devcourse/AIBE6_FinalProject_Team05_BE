@@ -44,6 +44,12 @@ public class Inquiry {
     @Column(nullable = false, length = 20)
     private InquiryStatus status;
 
+    @Column(name = "answer_content", columnDefinition = "TEXT")
+    private String answerContent;
+
+    @Column(name = "answered_at")
+    private LocalDateTime answeredAt;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -59,5 +65,11 @@ public class Inquiry {
 
     public void changeStatus(InquiryStatus status) {
         this.status = status;
+    }
+
+    public void answer(String answerContent) {
+        this.answerContent = answerContent;
+        this.answeredAt = LocalDateTime.now();
+        this.status = InquiryStatus.HANDLED;
     }
 }

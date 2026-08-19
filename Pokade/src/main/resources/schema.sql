@@ -331,18 +331,22 @@ CREATE TABLE IF NOT EXISTS user_sanctions (
 -- ---------- 7. 1:1 문의 ----------
 
 CREATE TABLE IF NOT EXISTS inquiries (
-    id           BIGSERIAL PRIMARY KEY,
-    user_id      BIGINT NOT NULL REFERENCES users(id),
-    category     VARCHAR(20) NOT NULL DEFAULT 'ETC',
-    status       VARCHAR(20) NOT NULL DEFAULT 'UNHANDLED',
-    title        VARCHAR(200) NOT NULL,
-    content      TEXT NOT NULL,
-    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT NOT NULL REFERENCES users(id),
+    category        VARCHAR(20) NOT NULL DEFAULT 'ETC',
+    status          VARCHAR(20) NOT NULL DEFAULT 'UNHANDLED',
+    title           VARCHAR(200) NOT NULL,
+    content         TEXT NOT NULL,
+    answer_content  TEXT,
+    answered_at     TIMESTAMP,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- inquiries가 이미 존재하는 기존 DB는 CREATE TABLE IF NOT EXISTS가 스킵되므로 category/status 컬럼을 별도로 추가한다.
+-- inquiries가 이미 존재하는 기존 DB는 CREATE TABLE IF NOT EXISTS가 스킵되므로 신규 컬럼을 별도로 추가한다.
 ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS category VARCHAR(20) NOT NULL DEFAULT 'ETC';
 ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'UNHANDLED';
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS answer_content TEXT;
+ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS answered_at TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS inquiry_images (
     id           BIGSERIAL PRIMARY KEY,
