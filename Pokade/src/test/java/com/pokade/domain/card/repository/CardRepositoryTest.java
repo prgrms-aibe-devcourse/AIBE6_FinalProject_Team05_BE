@@ -2,6 +2,7 @@ package com.pokade.domain.card.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -696,7 +697,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("t57 rarity_code와 rarity가 둘 다 null인 카드도 findDistinctRarityCodes() 결과에 (null, null) 조합으로 포함된다")
+    @DisplayName("t57 rarity_code와 rarity가 둘 다 null인 카드도 findRarityCounts() 결과에 (null, null) 조합으로 포함된다")
     void t57() {
         Expansion expansion = persistExpansion("null-rarity-set", "Null Rarity Set");
         Card mysteryCard = Card.builder()
@@ -710,23 +711,31 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         entityManager.persist(mysteryCard);
         entityManager.flush();
 
-        List<CardRepository.CardRarityView> result = cardRepository.findDistinctRarityCodes();
+        List<CardRepository.CardRarityView> result = cardRepository.findRarityCounts();
 
         // CardService.getFacets()에서 이 (null, null) 조합이 실제로 NPE 없이 걸러지는지는
         // CardServiceTest(t52)가 서비스 레벨에서 검증하고, 여기서는 리포지토리 쿼리 자체가
         // 실제 Postgres에서 이 조합을 WHERE로 걸러내지 않고 그대로 돌려주는지만 확인한다.
-        assertThat(result).anyMatch(v -> v.getRarityCode() == null && v.getRarity() == null);
+        // (null, null) 그룹은 setUp()의 트레이너 카드 2장(Professor's Research, Quick Ball) +
+        // 이 테스트가 추가한 Mystery Card까지 총 3장이어야 한다(#263 카운트 집계 검증).
+        assertThat(result).anyMatch(v -> v.getRarityCode() == null && v.getRarity() == null && v.getCount() == 3L);
         // setUp()의 기존 카드들(rarity_code는 항상 null, rarity는 값이 있음)도 여전히 섞여 나온다.
-        assertThat(result).anyMatch(v -> v.getRarityCode() == null && "Rare Holo".equals(v.getRarity()));
+        // Charizard/Blastoise 둘 다 rarity="Rare Holo"라 count=2여야 한다(#263 카운트 집계 검증).
+        assertThat(result).anyMatch(v -> v.getRarityCode() == null && "Rare Holo".equals(v.getRarity()) && v.getCount() == 2L);
     }
 
     @Test
-    @DisplayName("t58 findDistinctTypes()는 실제 저장된 카드들의 type을 중복 없이 전부 반환한다")
+    @DisplayName("t58 findTypeCounts()는 실제 저장된 카드들의 type별 카드 수를 중복 없이 전부 반환한다(#263)")
     void t58() {
-        List<String> result = cardRepository.findDistinctTypes();
+        List<CardRepository.CardTypeCountView> result = cardRepository.findTypeCounts();
 
-        // setUp()에서 Fire(Charizard/Charizard ex 중복)/Water/Lightning을 심어뒀다 - 중복 제거되고
-        // 트레이너 카드(types 없음)는 섞이지 않는지 함께 확인한다.
-        assertThat(result).containsExactlyInAnyOrder("Fire", "Water", "Lightning");
+        // setUp()에서 Fire(Charizard/Charizard ex 2장)/Water(1장)/Lightning(1장)을 심어뒀다 -
+        // 값별로 합쳐지고, 트레이너 카드(types 없음)는 섞이지 않는지 함께 확인한다.
+        assertThat(result)
+                .extracting(CardRepository.CardTypeCountView::getType, CardRepository.CardTypeCountView::getCount)
+                .containsExactlyInAnyOrder(
+                        tuple("Fire", 2L),
+                        tuple("Water", 1L),
+                        tuple("Lightning", 1L));
     }
 }

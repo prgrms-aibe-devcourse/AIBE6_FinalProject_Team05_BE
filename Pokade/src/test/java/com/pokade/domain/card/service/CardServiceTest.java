@@ -675,33 +675,37 @@ class CardServiceTest {
     @Test
     @DisplayName("t48 매핑에 없는 rarity_code는 원본 rarity 텍스트로 폴백해서 노출된다")
     void t48() {
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of(rarityView("ZZ", "Special Art Rare")));
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of(rarityView("ZZ", "Special Art Rare")));
         given(expansionRepository.findAll()).willReturn(List.of());
 
         CardFacetsResponse result = cardService.getFacets();
 
-        assertThat(result.rarities()).containsExactly("Special Art Rare");
+        assertThat(result.rarities())
+                .extracting(CardFacetsResponse.FacetOption::value)
+                .containsExactly("Special Art Rare");
     }
 
     @Test
     @DisplayName("t49 rarity_code가 null인 카드도 원본 rarity 텍스트로 Facet에 노출된다")
     void t49() {
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of(rarityView(null, "プロモ")));
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of(rarityView(null, "プロモ")));
         given(expansionRepository.findAll()).willReturn(List.of());
 
         CardFacetsResponse result = cardService.getFacets();
 
-        assertThat(result.rarities()).containsExactly("プロモ");
+        assertThat(result.rarities())
+                .extracting(CardFacetsResponse.FacetOption::value)
+                .containsExactly("プロモ");
     }
 
     @Test
     @DisplayName("t50 name이 null인 expansion이 있어도 NPE 없이 빈 문자열로 노출된다")
     void t50() {
         Expansion expansion = Expansion.builder().id("legacy1").name(null).syncedAt(LocalDateTime.now()).build();
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of());
         given(expansionRepository.findAll()).willReturn(List.of(expansion));
 
         CardFacetsResponse result = cardService.getFacets();
@@ -717,8 +721,8 @@ class CardServiceTest {
         Expansion legacy = Expansion.builder().id("legacy1").name(null).syncedAt(LocalDateTime.now()).build();
         Expansion base = Expansion.builder().id("base1").name("Base").syncedAt(LocalDateTime.now()).build();
         Expansion swsh = Expansion.builder().id("swsh1").name("Sword & Shield").syncedAt(LocalDateTime.now()).build();
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of());
         given(expansionRepository.findAll()).willReturn(List.of(swsh, legacy, base));
 
         CardFacetsResponse result = cardService.getFacets();
@@ -731,8 +735,8 @@ class CardServiceTest {
     @Test
     @DisplayName("t52 rarity_code와 rarity가 둘 다 null인 카드가 섞여 있어도 NPE 없이 나머지 rarity는 정상 노출된다")
     void t52() {
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of(
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of(
                 rarityView(null, null),
                 rarityView("C", "Common"),
                 rarityView(null, "프로모")));
@@ -740,7 +744,28 @@ class CardServiceTest {
 
         CardFacetsResponse result = cardService.getFacets();
 
-        assertThat(result.rarities()).containsExactlyInAnyOrder("Common", "프로모");
+        assertThat(result.rarities())
+                .extracting(CardFacetsResponse.FacetOption::value)
+                .containsExactlyInAnyOrder("Common", "프로모");
+    }
+
+    @Test
+    @DisplayName("t59 서로 다른 원본 값이 같은 표준 레어도/타입으로 리졸브되면 카드 수가 합산된다(#263)")
+    void t59() {
+        given(cardRepository.findTypeCounts()).willReturn(List.of(
+                typeCountView("草", 2L),
+                typeCountView("Grass", 3L)));
+        given(cardRepository.findRarityCounts()).willReturn(List.of(
+                rarityView("●", "Common", 4L),
+                rarityView("●", "通常", 6L)));
+        given(expansionRepository.findAll()).willReturn(List.of());
+
+        CardFacetsResponse result = cardService.getFacets();
+
+        assertThat(result.types())
+                .containsExactly(new CardFacetsResponse.FacetOption("Grass", 5L));
+        assertThat(result.rarities())
+                .containsExactly(new CardFacetsResponse.FacetOption("Common", 10L));
     }
 
     @Test
@@ -748,8 +773,8 @@ class CardServiceTest {
     void t53() {
         Expansion expansion = Expansion.builder().id("sv3pt5").name("151")
                 .series("Scarlet & Violet").syncedAt(LocalDateTime.now()).build();
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of());
         given(expansionRepository.findAll()).willReturn(List.of(expansion));
 
         CardFacetsResponse result = cardService.getFacets();
@@ -762,8 +787,8 @@ class CardServiceTest {
     void t54() {
         Expansion expansion = Expansion.builder().id("legacy1").name("Legacy")
                 .series(null).syncedAt(LocalDateTime.now()).build();
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of());
         given(expansionRepository.findAll()).willReturn(List.of(expansion));
 
         CardFacetsResponse result = cardService.getFacets();
@@ -782,8 +807,8 @@ class CardServiceTest {
                 .series("Old Series").releaseDate(LocalDate.of(2015, 1, 1)).syncedAt(LocalDateTime.now()).build();
         Expansion newSeries = Expansion.builder().id("new1").name("New A")
                 .series("New Series").releaseDate(LocalDate.of(2020, 1, 1)).syncedAt(LocalDateTime.now()).build();
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of());
         given(expansionRepository.findAll()).willReturn(List.of(oldSeriesNewer, oldSeriesOlder, newSeries));
 
         CardFacetsResponse result = cardService.getFacets();
@@ -800,8 +825,8 @@ class CardServiceTest {
                 .series("Unknown Timing").syncedAt(LocalDateTime.now()).build();
         Expansion datedSeries = Expansion.builder().id("dated1").name("Dated")
                 .series("Dated Series").releaseDate(LocalDate.of(1999, 1, 1)).syncedAt(LocalDateTime.now()).build();
-        given(cardRepository.findDistinctTypes()).willReturn(List.of());
-        given(cardRepository.findDistinctRarityCodes()).willReturn(List.of());
+        given(cardRepository.findTypeCounts()).willReturn(List.of());
+        given(cardRepository.findRarityCounts()).willReturn(List.of());
         given(expansionRepository.findAll()).willReturn(List.of(noDateSeries, datedSeries));
 
         CardFacetsResponse result = cardService.getFacets();
@@ -812,6 +837,10 @@ class CardServiceTest {
     }
 
     private CardRepository.CardRarityView rarityView(String rarityCode, String rarity) {
+        return rarityView(rarityCode, rarity, 1L);
+    }
+
+    private CardRepository.CardRarityView rarityView(String rarityCode, String rarity, long count) {
         return new CardRepository.CardRarityView() {
             @Override
             public String getRarityCode() {
@@ -821,6 +850,25 @@ class CardServiceTest {
             @Override
             public String getRarity() {
                 return rarity;
+            }
+
+            @Override
+            public Long getCount() {
+                return count;
+            }
+        };
+    }
+
+    private CardRepository.CardTypeCountView typeCountView(String type, long count) {
+        return new CardRepository.CardTypeCountView() {
+            @Override
+            public String getType() {
+                return type;
+            }
+
+            @Override
+            public Long getCount() {
+                return count;
             }
         };
     }
