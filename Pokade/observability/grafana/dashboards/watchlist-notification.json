@@ -1,0 +1,114 @@
+{
+  "title": "워치리스트/알림 모니터링 (#258)",
+  "uid": "pokade-watchlist-notification",
+  "tags": ["pokade", "watchlist", "notification", "temp-258"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "워치리스트 등록 평균 응답시간 (watchlist.add.duration)",
+      "description": "@Timed는 count/sum/max만 노출(히스토그램 버킷 없음) - p50/p95 대신 sum/count 비율(평균)을 사용한다.",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(watchlist_add_duration_seconds_sum[5m]) / rate(watchlist_add_duration_seconds_count[5m]) * 1000",
+          "legendFormat": "avg duration (ms)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "워치리스트 수정 평균 응답시간 (watchlist.update.duration)",
+      "description": "@Timed는 count/sum/max만 노출(히스토그램 버킷 없음) - p50/p95 대신 sum/count 비율(평균)을 사용한다.",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(watchlist_update_duration_seconds_sum[5m]) / rate(watchlist_update_duration_seconds_count[5m]) * 1000",
+          "legendFormat": "avg duration (ms)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "워치리스트 알림 즉시 생성 (watchlist.notify.immediate.calls)",
+      "description": "claimed>0 - 등록/수정 요청 자체가 목표가 도달을 감지해 즉시 알림을 만든 비율.",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(watchlist_notify_immediate_calls_total[5m])",
+          "legendFormat": "immediate calls/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "워치리스트 알림 - 배치(Batch)가 이미 선점함 (watchlist.notify.already_claimed.calls)",
+      "description": "claimed==0 - 즉시 알림 경로가 markAsNotifiedIfNotYet()을 호출했을 때, 배치(WatchlistTargetPriceNoticeProcessor)가 그 전에 이미 알림을 선점 처리해 스킵한 비율.",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(watchlist_notify_already_claimed_calls_total[5m])",
+          "legendFormat": "already claimed by batch/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "SSE 활성 연결 수 (notification.sse.active.connections)",
+      "description": "SseEmitterStore에 현재 등록된 Emitter 총 개수(Gauge, 실시간 값).",
+      "gridPos": { "x": 0, "y": 16, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "notification_sse_active_connections",
+          "legendFormat": "active connections",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "SSE 하트비트 전송 실패율 (notification.sse.heartbeat.failure.calls)",
+      "description": "sendHeartbeat()에서만 집계 - 일반 알림 push(pushToSubscribers) 실패는 포함하지 않는다.",
+      "gridPos": { "x": 8, "y": 16, "w": 16, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(notification_sse_heartbeat_failure_calls_total[5m])",
+          "legendFormat": "heartbeat failures/s",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

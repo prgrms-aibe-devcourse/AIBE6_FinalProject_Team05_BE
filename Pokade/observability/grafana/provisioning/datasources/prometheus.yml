@@ -1,0 +1,12 @@
+# Grafana Prometheus 데이터소스 provisioning - #258, 팀 논의 전 커밋 대상 아님.
+# UI에서 수동으로 만들지 않고 코드로 관리한다. url은 compose 네트워크(pokade_default) 기준 컨테이너명.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://pokade-prometheus:9090
+    isDefault: true
+    editable: false
