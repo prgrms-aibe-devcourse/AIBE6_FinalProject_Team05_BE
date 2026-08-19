@@ -185,21 +185,50 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     Optional<Card> findByExternalId(String externalId);
 
-    /** 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 타입 값 전체(원본 텍스트, 다국어 혼재)를 조회한다. */
-    @Query(value = "SELECT DISTINCT unnest(types) FROM cards ORDER BY 1", nativeQuery = true)
-    List<String> findDistinctTypes();
+    /**
+     * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 타입 값(원본 텍스트, 다국어 혼재)별로
+     * 그 타입을 가진 카드 수를 조회한다(#263). types는 배열 컬럼이라 unnest로 펼친 뒤 카드 단위로
+     * COUNT(DISTINCT card_id)해야 한다 - 같은 값이 한 카드 안에서 중복되는 경우까지 대비한 안전한 집계.
+     */
+    @Query(value = """
+            SELECT t.val AS type, COUNT(DISTINCT c.id) AS count
+            FROM cards c, unnest(c.types) AS t(val)
+            GROUP BY t.val
+            ORDER BY 1
+            """, nativeQuery = true)
+    List<CardTypeCountView> findTypeCounts();
+
+    interface CardTypeCountView {
+        String getType();
+        Long getCount();
+    }
 
     /**
-     * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 (rarity_code, rarity) 조합 전체를 조회한다.
+     * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 (rarity_code, rarity) 조합별 카드 수를 조회한다(#263).
      * CardRarityResolver.resolve()가 매핑 실패 시 원본 rarity로 폴백해야 하므로 rarity도 함께 조회하고,
      * rarity_code가 null인 카드도 원본 rarity로 폴백 노출되어야 하므로 WHERE로 제외하지 않는다.
+     * 같은 표준 레어도로 리졸브되는 조합(예: 코드는 같은데 rarity 원본 텍스트만 다국어로 다른 경우)이
+     * 여러 행으로 나뉠 수 있어, 표준 레어도 기준 합산은 서비스 레이어(CardService.getFacets())에서 한다.
      */
-    @Query(value = "SELECT DISTINCT rarity_code AS rarityCode, rarity AS rarity FROM cards ORDER BY 1", nativeQuery = true)
-    List<CardRarityView> findDistinctRarityCodes();
+    @Query(value = "SELECT rarity_code AS rarityCode, rarity AS rarity, COUNT(*) AS count FROM cards GROUP BY rarity_code, rarity ORDER BY 1", nativeQuery = true)
+    List<CardRarityView> findRarityCounts();
 
     interface CardRarityView {
         String getRarityCode();
         String getRarity();
+        Long getCount();
+    }
+
+    /**
+     * 필터 옵션(Facet) API용 - expansion_id별 카드 수를 조회한다(#263). expansion_id가 null인 카드는
+     * 어느 세트 Facet에도 속하지 않으므로 제외한다.
+     */
+    @Query(value = "SELECT expansion_id AS expansionId, COUNT(*) AS count FROM cards WHERE expansion_id IS NOT NULL GROUP BY expansion_id", nativeQuery = true)
+    List<ExpansionCardCountView> findCardCountsByExpansion();
+
+    interface ExpansionCardCountView {
+        String getExpansionId();
+        Long getCount();
     }
 
     @Query(value = """

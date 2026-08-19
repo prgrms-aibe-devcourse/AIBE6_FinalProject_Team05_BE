@@ -38,7 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -180,29 +180,48 @@ public class CardService {
     private static final String UNKNOWN_SERIES_LABEL = "기타";
 
     /**
-     * 카드 필터 옵션(타입/레어도/세트)을 DB에 실제로 존재하는 값 기준으로 조회한다.
-     * types/rarity_code는 원본이 다국어로 혼재돼 있어 리졸버 적용 후 표준명 기준으로 중복 제거한다
-     * (예: 일본어 "草"와 영문 "Grass"가 함께 있으면 리졸버를 거쳐 "Grass" 하나로 합쳐짐).
-     * 세트명은 아직 언어별 표준화가 없어 원본 그대로 반환한다.
+     * 카드 필터 옵션(타입/레어도/세트)을 DB에 실제로 존재하는 값과 그 값을 가진 카드 수 기준으로 조회한다(#263).
+     * types/rarity_code는 원본이 다국어로 혼재돼 있어, 리졸버로 표준명으로 합친 뒤 표준명 기준으로 카드 수를
+     * 합산한다(예: 일본어 "草" 카운트와 영문 "Grass" 카운트가 함께 있으면 리졸버를 거쳐 "Grass" 하나로
+     * 합산됨). 세트명은 아직 언어별 표준화가 없어 원본 그대로 반환한다.
      *
-     * 동기화 완료를 알리는 이벤트/훅이 없어 캐시 무효화를 값 변경 시점에 걸 수 없으므로,
-     * TTL 1시간(CacheConfig의 "cardFacets" 캐시 설정) 기반으로 캐싱한다.
+     * 개수는 "다른 필터를 적용하지 않은 전체 기준 고정 개수"다 - 예를 들어 특정 세트를 이미 선택한 상태에서
+     * 레어도별 개수가 그 세트 내로 좁혀지는 동적 집계(선택 조합별 계산)는 캐싱이 불가능해지고 쿼리도
+     * 훨씬 복잡해져 별도 이슈로 분리한다. 이 전체 기준 집계는 세트/타입/레어도 조합과 무관하게 하나의
+     * 스냅샷으로 캐싱 가능하므로 기존 TTL 1시간(CacheConfig의 "cardFacets" 캐시 설정) 전략을 그대로 유지한다.
      */
     @Cacheable(cacheNames = "cardFacets")
     @Transactional(readOnly = true)
     public CardFacetsResponse getFacets() {
-        Set<String> types = new TreeSet<>(CardTypeEnResolver.resolve(cardRepository.findDistinctTypes()));
-        Set<String> rarities = new TreeSet<>();
-        for (CardRepository.CardRarityView view : cardRepository.findDistinctRarityCodes()) {
+        Map<String, Long> typeCounts = new TreeMap<>();
+        for (CardRepository.CardTypeCountView view : cardRepository.findTypeCounts()) {
+            if (view.getType() == null) {
+                continue;
+            }
+            String resolvedType = CardTypeEnResolver.resolve(List.of(view.getType())).get(0);
+            typeCounts.merge(resolvedType, view.getCount(), Long::sum);
+        }
+
+        Map<String, Long> rarityCounts = new TreeMap<>();
+        for (CardRepository.CardRarityView view : cardRepository.findRarityCounts()) {
             // rarity_code와 rarity가 둘 다 null인 카드가 있으면 resolve()가 null을 반환하는데,
-            // TreeSet.add(null)은 자연순서 비교 시 NullPointerException을 던지므로 여기서 걸러낸다.
+            // TreeMap 키로 null을 넣으면 자연순서 비교 시 NullPointerException을 던지므로 여기서 걸러낸다.
             String resolvedRarity = CardRarityResolver.resolve(view.getRarityCode(), view.getRarity());
             if (resolvedRarity != null) {
-                rarities.add(resolvedRarity);
+                rarityCounts.merge(resolvedRarity, view.getCount(), Long::sum);
             }
         }
+
+        List<CardFacetsResponse.FacetOption> types = toFacetOptions(typeCounts);
+        List<CardFacetsResponse.FacetOption> rarities = toFacetOptions(rarityCounts);
         List<CardFacetsResponse.ExpansionFacet> expansions = buildExpansionFacets();
-        return CardFacetsResponse.of(List.copyOf(types), List.copyOf(rarities), expansions);
+        return CardFacetsResponse.of(types, rarities, expansions);
+    }
+
+    private List<CardFacetsResponse.FacetOption> toFacetOptions(Map<String, Long> countsByValue) {
+        return countsByValue.entrySet().stream()
+                .map(entry -> new CardFacetsResponse.FacetOption(entry.getKey(), entry.getValue()))
+                .toList();
     }
 
     // expansions.name/series가 NULL인 레거시/수동 적재 데이터가 있을 수 있어, FE 응답 스키마(non-null)를
@@ -212,6 +231,8 @@ public class CardService {
     // release_date가 전부 NULL인 series는 가장 오래된 것으로 취급해 뒤로 보낸다).
     private List<CardFacetsResponse.ExpansionFacet> buildExpansionFacets() {
         List<Expansion> allExpansions = expansionRepository.findAll();
+        Map<String, Long> cardCountByExpansionId = cardRepository.findCardCountsByExpansion().stream()
+                .collect(Collectors.toMap(CardRepository.ExpansionCardCountView::getExpansionId, CardRepository.ExpansionCardCountView::getCount));
 
         Map<String, LocalDate> latestReleaseBySeries = allExpansions.stream()
                 .collect(Collectors.groupingBy(
@@ -226,7 +247,8 @@ public class CardService {
                 .map(expansion -> new CardFacetsResponse.ExpansionFacet(
                         expansion.getId(),
                         Objects.requireNonNullElse(expansion.getName(), ""),
-                        Objects.requireNonNullElse(expansion.getSeries(), UNKNOWN_SERIES_LABEL)))
+                        Objects.requireNonNullElse(expansion.getSeries(), UNKNOWN_SERIES_LABEL),
+                        cardCountByExpansionId.getOrDefault(expansion.getId(), 0L)))
                 .sorted(Comparator
                         .comparing((CardFacetsResponse.ExpansionFacet facet) -> latestReleaseBySeries.get(facet.series()))
                         .reversed()
