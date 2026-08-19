@@ -25,8 +25,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -82,6 +84,9 @@ public class WatchlistService {
         try {
             Watchlist saved = watchlistRepository.save(watchlist);
 
+            // TODO(#275): updateWatchlist()/getWatchlist()와 같은 원인(전체 기간 range 사용)을 공유하지만,
+            // "등록 시점에 이미 도달이면 배치를 기다리지 않고 즉시 알림"이라는 의도된 최적화(아래 주석)와
+            // 상충할 수 있어 이번엔 범위에서 제외함 - 등록 이후 스코프로 바꿀지는 별도 논의 필요.
             PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
                     .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
                     .stream()
@@ -122,7 +127,15 @@ public class WatchlistService {
 
     private void notifyIfTargetAlreadyReached(Watchlist watchlist, Integer reachedTargetPrice) {
         cardRepository.findById(watchlist.getCardId())
-                .ifPresent(card -> notificationService.createPriceTargetNotification(watchlist, card.getName(), reachedTargetPrice));
+                .ifPresent(card -> notificationService.createPriceTargetNotification(watchlist, resolveCardDisplayName(card), reachedTargetPrice));
+    }
+
+    // 알림 문구에 쓸 카드 표시명(#275) - 한글명이 있으면 한글명, 없으면(도감번호 없음/매핑 실패 등) 영문 원본으로
+    // 폴백한다. getWatchlist()가 이미 같은 리졸버를 쓰고 있어 그 패턴을 재사용 가능한 형태로 뽑았다 -
+    // WatchlistTargetPriceNoticeProcessor(배치 알림 경로)도 이 메서드로 위임해서 즉시/배치 두 경로가
+    // 항상 같은 표시명을 쓰도록 한다.
+    String resolveCardDisplayName(Card card) {
+        return Objects.requireNonNullElse(cardNameKoResolver.resolve(card), card.getName());
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
@@ -139,8 +152,15 @@ public class WatchlistService {
                 .stream()
                 .collect(Collectors.toMap(Card::getId, Function.identity()));
 
+        // #275: 카드마다 "이 워치리스트가 등록된 시점(createdAt) 이후" 체결분만으로 도달을 판정해야 한다
+        // (전체 기간으로 보면 과거 어느 시점에 목표가 범위를 스쳤다는 이유만으로 잘못 판정될 수 있음 - 배치
+        // 판정 경로(WatchlistTargetPriceNoticeProcessor)와 동일한 스코프로 통일). 한 유저는 같은 카드를
+        // 중복 등록할 수 없어(cardId 유니크) cardIds와 sinceList를 같은 순서로 안전하게 페어링할 수 있다.
+        Map<Long, LocalDateTime> createdAtByCardId = watchlists.stream()
+                .collect(Collectors.toMap(Watchlist::getCardId, this::resolveWatchScopeStart, (a, b) -> a));
+        List<LocalDateTime> sinceList = cardIds.stream().map(createdAtByCardId::get).toList();
         Map<Long, PriceTradeStatsRepository.CardPriceRangeView> rangeByCardId =
-                priceTradeStatsRepository.findPriceRangesByCardIds(cardIds, null, TradeStatus.COMPLETED)
+                priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(cardIds, sinceList, null, TradeStatus.COMPLETED)
                         .stream()
                         .collect(Collectors.toMap(PriceTradeStatsRepository.CardPriceRangeView::getCardId, Function.identity()));
         // "등락" 배지용 - 최근 7일 vs 이전 7일 S등급 평균 체결가 비교(%). getStats()/getRanking()과 같은 기준.
@@ -162,6 +182,13 @@ public class WatchlistService {
 
     private boolean isTargetReached(Watchlist watchlist, PriceTradeStatsRepository.CardPriceRangeView range) {
         return resolveReachedTargetPrice(watchlist, range) != null;
+    }
+
+    // createdAt은 @CreationTimestamp라 DB에 영속화된 행이면 항상 채워지지만(방금 조회한 워치리스트가
+    // null일 일은 실제로는 없음), 순수 빌더로 만든 인스턴스(단위 테스트 등)나 예상 못한 레거시 데이터에
+    // 대비해 방어적으로 LocalDateTime.MIN(사실상 전체 기간)으로 폴백한다.
+    private LocalDateTime resolveWatchScopeStart(Watchlist watchlist) {
+        return Objects.requireNonNullElse(watchlist.getCreatedAt(), LocalDateTime.MIN);
     }
 
     // 목표가(구매/판매) 도달 판정 - 도달한 목표가 값을 반환(없으면 null).
@@ -199,8 +226,12 @@ public class WatchlistService {
             watchlist.requestNotificationAgain();
         }
 
+        // #275: 전체 기간이 아니라 "이 워치리스트 등록 시점 이후" 체결분만으로 재판정한다 - 목표가를
+        // 수정해도 과거(등록 훨씬 전) 한때 그 가격대였다는 이유만으로 즉시 "도달"로 오판정되던 버그 수정.
+        // getWatchlist()/배치(WatchlistTargetPriceNoticeProcessor)와 동일한 스코프로 통일.
         PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
-                .findPriceRangesByCardIds(List.of(watchlist.getCardId()), null, TradeStatus.COMPLETED)
+                .findPriceRangesByCardIdsSincePerCard(
+                        List.of(watchlist.getCardId()), List.of(resolveWatchScopeStart(watchlist)), null, TradeStatus.COMPLETED)
                 .stream()
                 .findFirst()
                 .orElse(null);
