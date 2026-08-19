@@ -24,7 +24,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -141,6 +143,7 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatImportIdempotencyStore chatImportIdempotencyStore;
     private final ChatRateLimitStore chatRateLimitStore;
+    private final PlatformTransactionManager transactionManager;
 
     // 클래스/메서드 레벨 @Transactional을 걸지 않는다 - LLM 호출(수 초 이상 걸릴 수 있는 외부 I/O)이 이 메서드
     // 안에 있는데, 트랜잭션으로 감싸면 그 시간 내내 DB 커넥션을 점유해 동시 요청이 몰릴 때 커넥션 풀이
@@ -270,8 +273,10 @@ public class ChatService {
 
     // 멱등성 마커를 Redis TTL 키로 먼저 마킹해 이미 이관된 항목이면 조용히 skip한다. 이관 대상 자체가
     // askedAt 기준 24시간 이내로만 허용되므로, 멱등성 마커도 그 이상 오래 보관할 필요가 없다(RedisChatImportIdempotencyStore 참고).
-    // getRanking()의 BusinessException도 이 entry만 skip하도록 잡는다 - 그래야 한 entry의 문제가
-    // importHistory 전체(부분 성공 계약)를 깨뜨리지 않는다.
+    // 마킹 이후 랭킹 조회나 메시지 저장이 실패하면 마킹을 즉시 해제한다 - 그래야 TTL(48시간)이 끝나기 전에도
+    // 재시도가 "이미 이관됨"으로 오판되지 않고 다시 시도할 수 있다(PR 리뷰로 발견된 갭 - 마킹만 남고
+    // 메시지는 저장 안 되는 상태를 방지). USER/ASSISTANT 메시지 저장은 하나의 트랜잭션으로 묶어
+    // 둘 중 하나만 저장되는 반쪽 상태도 방지한다.
     private boolean importEntry(String sessionId, Long userId, QuickQuestion preset, LocalDateTime askedAt) {
         String idempotencyKey = userId + ":" + sessionId + ":" + preset.id() + ":" + askedAt;
         if (!chatImportIdempotencyStore.markIfAbsent(idempotencyKey)) {
@@ -279,20 +284,22 @@ public class ChatService {
             return false;
         }
 
-        String answer;
         try {
-            answer = RankingAnswerFormatter.format(priceService.getRanking(preset.rankingType()));
-        } catch (BusinessException e) {
-            log.warn("챗봇 히스토리 이관 - 랭킹 조회 실패로 skip: userId={}, presetId={}", userId, preset.id(), e);
+            String answer = RankingAnswerFormatter.format(priceService.getRanking(preset.rankingType()));
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                chatMessageRepository.save(ChatMessage.importedBuilder()
+                        .sessionId(sessionId).userId(userId).role(ChatRole.USER).content(preset.question()).createdAt(askedAt)
+                        .build());
+                chatMessageRepository.save(ChatMessage.importedBuilder()
+                        .sessionId(sessionId).userId(userId).role(ChatRole.ASSISTANT).content(answer).createdAt(askedAt)
+                        .build());
+            });
+            return true;
+        } catch (Exception e) {
+            chatImportIdempotencyStore.release(idempotencyKey);
+            log.warn("챗봇 히스토리 이관 실패 - 재시도 가능하도록 멱등성 마커 해제: userId={}, presetId={}", userId, preset.id(), e);
             return false;
         }
-        chatMessageRepository.save(ChatMessage.importedBuilder()
-                .sessionId(sessionId).userId(userId).role(ChatRole.USER).content(preset.question()).createdAt(askedAt)
-                .build());
-        chatMessageRepository.save(ChatMessage.importedBuilder()
-                .sessionId(sessionId).userId(userId).role(ChatRole.ASSISTANT).content(answer).createdAt(askedAt)
-                .build());
-        return true;
     }
 
     // 랭킹 프리셋 응답 - LLM 호출 없이 PriceService를 직접 호출한다(토큰 소모 없음).
@@ -309,7 +316,10 @@ public class ChatService {
             saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, historyText);
             return new ChatQueryResponse(sessionId, null, null, rankingItems);
         } catch (BusinessException e) {
-            String errorAnswer = RankingAnswerFormatter.INVALID_TYPE_MESSAGE;
+            // rankingType은 QuickQuestion enum에서 고정된 값이라 "잘못된 타입"일 수 없다 - 그래도 예외가 났다면
+            // 원인 불명의 조회 실패이므로, LLM tool 경로용 문구(INVALID_TYPE_MESSAGE)를 재사용하지 않는다.
+            log.warn("챗봇 랭킹 프리셋 - 조회 실패: sessionId={}, rankingType={}", sessionId, rankingType, e);
+            String errorAnswer = RankingAnswerFormatter.LOOKUP_FAILED_MESSAGE;
             saveMessage(sessionId, principalUserId, ChatRole.USER, message);
             saveMessage(sessionId, principalUserId, ChatRole.ASSISTANT, errorAnswer);
             return new ChatQueryResponse(sessionId, errorAnswer, null, null);
