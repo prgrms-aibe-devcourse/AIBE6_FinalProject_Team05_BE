@@ -18,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -59,6 +60,9 @@ class ChatServiceTest {
 
     @Mock
     private ChatRateLimitStore chatRateLimitStore;
+
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private ChatService chatService;
@@ -229,7 +233,7 @@ class ChatServiceTest {
     }
 
     @Test
-    @DisplayName("t11 랭킹 조회가 실패해도 그 entry만 skip되고 예외가 전체 이관을 중단시키지 않는다")
+    @DisplayName("t11 랭킹 조회가 실패해도 그 entry만 skip되고 예외가 전체 이관을 중단시키지 않으며, 재시도 가능하도록 멱등성 마커를 해제한다")
     void t11() {
         allowRateLimit();
         allowIdempotency();
@@ -241,5 +245,28 @@ class ChatServiceTest {
         assertThat(response.imported()).isEqualTo(0);
         assertThat(response.skipped()).isEqualTo(1);
         verifyNoInteractions(chatMessageRepository);
+        verify(chatImportIdempotencyStore).release(anyString());
+    }
+
+    @Test
+    @DisplayName("t12 메시지 저장이 실패하면 멱등성 마커를 해제하고, 이후 재시도(재로그인)하면 정상적으로 이관된다")
+    void t12() {
+        allowRateLimit();
+        allowIdempotency();
+        given(priceService.getRanking("rise")).willReturn(List.of(ranking("피카츄")));
+        // 첫 저장 시도(USER 메시지)에서 실패, 재시도부터는 정상 저장.
+        given(chatMessageRepository.save(any(ChatMessage.class)))
+                .willThrow(new RuntimeException("DB 저장 실패"))
+                .willReturn(null);
+        ChatHistoryImportRequest request = requestOf(entry("top-gainers", Instant.now().minus(1, ChronoUnit.HOURS)));
+
+        ChatHistoryImportResponse first = chatService.importHistory(request, USER_ID);
+        assertThat(first.imported()).isEqualTo(0);
+        assertThat(first.skipped()).isEqualTo(1);
+        verify(chatImportIdempotencyStore).release(anyString());
+
+        ChatHistoryImportResponse retry = chatService.importHistory(request, USER_ID);
+        assertThat(retry.imported()).isEqualTo(1);
+        assertThat(retry.skipped()).isEqualTo(0);
     }
 }
