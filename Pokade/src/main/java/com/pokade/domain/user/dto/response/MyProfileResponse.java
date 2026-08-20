@@ -12,16 +12,18 @@ public record MyProfileResponse(
         Provider provider,
         boolean socialLinked,
         LocalDateTime joinedAt,
-        LocalDate birthDate
+        LocalDate birthDate,
+        boolean marketingAgreed
 ) {
-    public static MyProfileResponse from(User user) {
+    public static MyProfileResponse of(User user, boolean marketingAgreed) {
         return new MyProfileResponse(
                 user.getEmail(),
                 user.getPhoneNumber(),
                 user.getProvider(),
                 !user.isLocalUser(),
                 user.getCreated_At(),
-                user.getBirthDate()
+                user.getBirthDate(),
+                marketingAgreed
         );
     }
 }

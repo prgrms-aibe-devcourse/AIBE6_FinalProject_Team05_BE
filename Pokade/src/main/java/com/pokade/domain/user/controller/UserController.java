@@ -1,15 +1,13 @@
 package com.pokade.domain.user.controller;
 
+import com.pokade.domain.user.dto.request.MarketingAgreementRequest;
 import com.pokade.domain.user.dto.request.NicknameUpdateRequest;
 import com.pokade.domain.user.dto.request.PasswordUpdateRequest;
 import com.pokade.domain.user.dto.request.WithdrawalRequest;
 import com.pokade.domain.user.dto.response.MyProfileResponse;
 import com.pokade.domain.user.dto.response.PublicProfileResponse;
 import com.pokade.domain.user.dto.response.UserResponse;
-import com.pokade.domain.user.service.ProfileImageService;
-import com.pokade.domain.user.service.ProfileService;
-import com.pokade.domain.user.service.UserService;
-import com.pokade.domain.user.service.WithdrawalService;
+import com.pokade.domain.user.service.*;
 import com.pokade.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +24,7 @@ public class UserController {
     private final WithdrawalService withdrawalService;
     private final ProfileService profileService;
     private final ProfileImageService profileImageService;
+    private final UserAgreementService userAgreementService;
 
     @GetMapping("/me")
     public ApiResponse<UserResponse> getMyInfo(@AuthenticationPrincipal Long userId) {
@@ -54,6 +53,13 @@ public class UserController {
                                             @Valid @RequestBody PasswordUpdateRequest request) {
         userService.changePassword(userId, request.currentPassword(), request.newPassword());
         return ApiResponse.ok("비밀번호가 변경되었습니다.");
+    }
+
+    @PatchMapping("/me/agreements/marketing")
+    public ApiResponse<Void> changeMarketingAgreement(@AuthenticationPrincipal Long userId,
+                                                      @Valid @RequestBody MarketingAgreementRequest request) {
+        userAgreementService.changeMarketing(userId, request.agreed());
+        return ApiResponse.ok(request.agreed() ? "마케팅 수신에 동의했습니다." : "마케팅 수신 동의를 해제했습니다.");
     }
 
     @DeleteMapping("/me")

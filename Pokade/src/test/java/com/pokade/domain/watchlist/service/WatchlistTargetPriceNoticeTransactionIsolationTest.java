@@ -38,7 +38,7 @@ import static org.mockito.BDDMockito.given;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({WatchlistTargetPriceNoticeService.class, WatchlistTargetPriceNoticeProcessor.class,
-        WatchlistService.class, com.pokade.domain.notification.service.NotificationService.class,
+        WatchlistService.class, WatchlistTargetPriceEvaluator.class, com.pokade.domain.notification.service.NotificationService.class,
         com.pokade.domain.notification.store.SseEmitterStore.class})
 class WatchlistTargetPriceNoticeTransactionIsolationTest {
 
@@ -147,8 +147,8 @@ class WatchlistTargetPriceNoticeTransactionIsolationTest {
 
     private Long insertUser(String email) {
         return ((Number) entityManager.createNativeQuery(
-                        "INSERT INTO users (email, nickname, provider, role, status, terms_agreed_at) "
-                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE', now()) RETURNING id")
+                        "INSERT INTO users (email, nickname, provider, role, status) "
+                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE') RETURNING id")
                 .setParameter("email", email)
                 .setParameter("nickname", email.substring(0, email.indexOf('@')))
                 .getSingleResult()).longValue();

@@ -57,12 +57,6 @@ public class User {
     @Column(name = "phone_number", length = 20)
     private String phoneNumber;
 
-    @Column(name = "terms_agreed_at", nullable = false)
-    private LocalDateTime termsAgreedAt;
-
-    @Column(name = "marketing_opt_in", nullable = false)
-    private boolean marketingOptIn;
-
     @Column(name = "point_balance", nullable = false)
     private Integer pointBalance;
 
@@ -92,8 +86,6 @@ public class User {
                 .provider(Provider.LOCAL)
                 .role(Role.USER)
                 .status(UserStatus.PENDING)
-                .termsAgreedAt(LocalDateTime.now())
-                .marketingOptIn(false)
                 .pointBalance(0)
                 .build();
     }
@@ -105,8 +97,6 @@ public class User {
                 .provider(provider)
                 .role(Role.USER)
                 .status(UserStatus.ACTIVE)
-                .termsAgreedAt(LocalDateTime.now())
-                .marketingOptIn(false)
                 .pointBalance(0)
                 .build();
     }

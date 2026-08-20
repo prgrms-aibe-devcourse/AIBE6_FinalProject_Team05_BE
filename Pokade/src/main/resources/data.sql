@@ -1,9 +1,7 @@
 -- =========================================================
 -- 카드 관련 시딩 데이터 (expansions / cards / card_variants / card_prices)
--- 나머지 16개 테이블은 schema.sql로 생성만 하고 데이터는 넣지 않음
+-- 나머지 16개 테이블은 Flyway 마이그레이션으로 생성만 하고 데이터는 넣지 않음
 -- =========================================================
-ALTER TABLE users ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS withdrawal_requested_at TIMESTAMP;
 
 -- ---------- expansions ----------
 INSERT INTO expansions (id, name, series, code, total, language_code, release_date, logo, symbol, synced_at) VALUES ('base1', 'Base', 'Base', NULL, 102, 'EN', '1999-01-09', NULL, NULL, now()) ON CONFLICT (id) DO NOTHING;
@@ -118,12 +116,12 @@ DELETE FROM buy_offers;
 DELETE FROM listings;
 
 -- ---------- users (테스트 유저 2명) ----------
-INSERT INTO users (email, password, nickname, provider, role, status, terms_agreed_at, created_at, updated_at)
-VALUES ('seller1@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '민준테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now(), now())
+INSERT INTO users (email, password, nickname, provider, role, status, created_at, updated_at)
+VALUES ('seller1@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '민준테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now())
     ON CONFLICT (email) DO NOTHING;
 
-INSERT INTO users (email, password, nickname, provider, role, status, terms_agreed_at, created_at, updated_at)
-VALUES ('seller2@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '지호테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now(), now())
+INSERT INTO users (email, password, nickname, provider, role, status, created_at, updated_at)
+VALUES ('seller2@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '지호테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now())
     ON CONFLICT (email) DO NOTHING;
 
 -- ---------- listings (매도호가) ----------

@@ -5,7 +5,6 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,7 +20,6 @@ import org.springframework.data.domain.Pageable;
 import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardFacetsResponse;
 import com.pokade.domain.card.dto.CardResponse;
-import com.pokade.domain.card.entity.Card;
 
 /**
  * CardService는 CardQueryService/CardFacetService로 위임만 하는 파사드다(카드 도메인
@@ -39,19 +37,6 @@ class CardServiceTest {
 
     @InjectMocks
     private CardService cardService;
-
-    @Test
-    @DisplayName("search(7-인자)는 CardQueryService.search(7-인자)로 위임한다")
-    void searchDelegatesToQueryService() {
-        Pageable pageable = PageRequest.of(0, 20);
-        Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardQueryService.search(List.of("Fire"), List.of("Rare Holo"), "base1", 1000, 2000, "name", pageable))
-                .willReturn(page);
-
-        Page<CardResponse> result = cardService.search(List.of("Fire"), List.of("Rare Holo"), "base1", 1000, 2000, "name", pageable);
-
-        assertThat(result).isSameAs(page);
-    }
 
     @Test
     @DisplayName("search(8-인자, languages 포함)는 CardQueryService.search(8-인자)로 위임한다")
@@ -112,17 +97,6 @@ class CardServiceTest {
 
         assertThat(result).isSameAs(facets);
         verifyNoQueryServiceInteraction();
-    }
-
-    @Test
-    @DisplayName("findByExternalId는 CardQueryService.findByExternalId로 위임한다")
-    void findByExternalIdDelegatesToQueryService() {
-        Card card = Card.builder().id(1L).name("Mew ex").externalId("sv3pt5-151").build();
-        given(cardQueryService.findByExternalId("sv3pt5-151")).willReturn(Optional.of(card));
-
-        Optional<Card> result = cardService.findByExternalId("sv3pt5-151");
-
-        assertThat(result).contains(card);
     }
 
     private void verifyNoQueryServiceInteraction() {

@@ -2,6 +2,10 @@
 -- 팀 ERD 기준 전체 스키마 (20개 테이블)
 -- 생성 순서: FK 의존성 고려 (참조 대상 테이블을 먼저 생성)
 -- =========================================================
+-- Flyway 도입 이전까지 schema.sql로 손으로 관리하던 전체 스키마를 그대로 옮긴 baseline이다.
+-- 이 시점의 프로덕션 DB는 이미 이 파일과 동일한 스키마를 갖고 있어(flyway.baseline-version=1로
+-- 실행 없이 "이미 적용됨"으로만 기록됨), 이후 스키마 변경은 이 파일을 고치지 말고
+-- V2__설명.sql 형태의 새 파일을 추가한다.
 
 -- ---------- 1. Scrydex 연동 카드 도메인 ----------
 
@@ -139,8 +143,6 @@ CREATE TABLE IF NOT EXISTS users (
     profile_image_url     VARCHAR(255),
     birth_date            DATE,
     phone_number          VARCHAR(20),
-    terms_agreed_at       TIMESTAMP NOT NULL,                  -- 필수약관 동의 시각
-    marketing_opt_in      BOOLEAN NOT NULL DEFAULT FALSE,      -- 선택 동의(마케팅 수신)
     point_balance         INTEGER NOT NULL DEFAULT 0,
     deleted_at            TIMESTAMP,
     withdrawal_requested_at TIMESTAMP,
@@ -319,6 +321,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     user_id      BIGINT NOT NULL REFERENCES users(id),
     type         VARCHAR(30) NOT NULL,                          -- PRICE_TARGET / TRADE_CONFIRMED / LISTING_STALE / INQUIRY_HANDLED 등
     message      VARCHAR(255),
+    card_id      BIGINT REFERENCES cards(id),                   -- 알림 클릭 시 카드 상세 이동용; 카드와 무관한 알림(문의 처리 등)은 NULL
     is_read      BOOLEAN NOT NULL DEFAULT FALSE,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -387,3 +390,16 @@ CREATE TABLE IF NOT EXISTS inquiry_images (
     image_url    VARCHAR(255) NOT NULL,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 회원 약관 동의 이력. 항목별 최신 행이 현재 상태이고, 철회도 agreed=false인 새 행으로 남긴다.
+CREATE TABLE IF NOT EXISTS user_agreements (
+                                               id        BIGSERIAL PRIMARY KEY,
+                                               user_id   BIGINT      NOT NULL REFERENCES users(id),
+                                               type      VARCHAR(30) NOT NULL,                  -- TERMS_OF_SERVICE / PRIVACY_POLICY / THIRD_PARTY_SHARING / MARKETING
+                                               agreed    BOOLEAN     NOT NULL,
+                                               agreed_at TIMESTAMP   NOT NULL,
+                                               version   VARCHAR(20) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_agreements_user_type
+    ON user_agreements (user_id, type, agreed_at DESC);

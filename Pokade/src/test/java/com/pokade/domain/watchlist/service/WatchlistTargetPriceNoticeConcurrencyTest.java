@@ -8,7 +8,6 @@ import com.pokade.domain.notification.repository.NotificationRepository;
 import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
-import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import jakarta.persistence.EntityManager;
@@ -104,12 +103,11 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
         given(priceTradeStatsRepository.findPriceRangesByCardIds(any(), any(), any())).willReturn(List.of(range));
         given(priceTradeStatsRepository.findPriceRangesByCardIdsSince(any(), any(), any(), any())).willReturn(List.of(range));
 
-        NotificationService notificationService = new NotificationService(notificationRepository, new SseEmitterStore(), event -> { });
-        WatchlistService watchlistService = new WatchlistService(watchlistRepository,
-                mock(PriceService.class), cardRepository, priceTradeStatsRepository, mock(CardNameKoResolver.class),
-                notificationService);
+        NotificationService notificationService = new NotificationService(notificationRepository, cardRepository, new SseEmitterStore(), event -> { });
+        WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator = new WatchlistTargetPriceEvaluator(
+                watchlistRepository, cardRepository, notificationService, mock(CardNameKoResolver.class));
         WatchlistTargetPriceNoticeProcessor processor = new WatchlistTargetPriceNoticeProcessor(
-                watchlistRepository, priceTradeStatsRepository, notificationService, watchlistService);
+                watchlistRepository, priceTradeStatsRepository, notificationService, watchlistTargetPriceEvaluator);
 
         return new WatchlistTargetPriceNoticeService(watchlistRepository, cardRepository,
                 priceTradeStatsRepository, processor);
@@ -157,8 +155,8 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
 
     private Long insertUser(String email) {
         return ((Number) entityManager.createNativeQuery(
-                        "INSERT INTO users (email, nickname, provider, role, status, terms_agreed_at) "
-                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE', now()) RETURNING id")
+                        "INSERT INTO users (email, nickname, provider, role, status) "
+                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE') RETURNING id")
                 .setParameter("email", email)
                 .setParameter("nickname", email.substring(0, email.indexOf('@')))
                 .getSingleResult()).longValue();
