@@ -54,11 +54,11 @@ class CardControllerTest {
     @Test
     @DisplayName("t1 쿼리 파라미터로 카드를 검색하면 200과 페이지 결과를 반환한다")
     void t1() {
-        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), eq("base1"), isNull(), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), isNull(), eq("base1"), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         var result = mockMvcTester.get()
@@ -70,12 +70,30 @@ class CardControllerTest {
     }
 
     @Test
+    @DisplayName("t27 languages 쿼리 파라미터를 서비스에 그대로 위임한다(#263)")
+    void t27() {
+        CardResponse card = new CardResponse(1L, "sv10_ja-1", "クヌギダマ", "피콘", "JA", "サンダー", "Common", "Pokémon",
+                List.of("Grass"), null, null, "sv10_ja", List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
+        given(cardService.search(isNull(), isNull(), eq(List.of("EN", "JA")), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .willReturn(page);
+
+        mockMvcTester.get()
+                .uri("/api/cards?languages=EN,JA")
+                .assertThat()
+                .hasStatusOk()
+                .bodyJson()
+                .extractingPath("$.data.content[0].languageCode").isEqualTo("JA");
+    }
+
+    @Test
     @DisplayName("t11 types를 콤마로, rarity를 반복 파라미터로 넘기면 둘 다 다중 값 목록으로 위임한다")
     void t11() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
         given(cardService.search(
-                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -89,7 +107,7 @@ class CardControllerTest {
     void t2() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -101,11 +119,11 @@ class CardControllerTest {
     @Test
     @DisplayName("t12 sort 쿼리 파라미터를 서비스에 그대로 위임한다")
     void t12() {
-        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -120,7 +138,7 @@ class CardControllerTest {
     @DisplayName("t15 size가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t15() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "size는 최대 100까지 요청할 수 있습니다."))
-                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
 
         mockMvcTester.get()
                 .uri("/api/cards?size=101")
@@ -134,7 +152,7 @@ class CardControllerTest {
     @DisplayName("t16 types 개수가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t16() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "types는 최대 20개까지 지정할 수 있습니다."))
-                .given(cardService).search(any(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                .given(cardService).search(any(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
 
         String query = java.util.stream.IntStream.range(0, 21)
                 .mapToObj(i -> "types=type" + i)
@@ -152,11 +170,11 @@ class CardControllerTest {
     @Test
     @DisplayName("t20 minPrice/maxPrice 쿼리 파라미터를 서비스에 그대로 위임한다")
     void t20() {
-        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(isNull(), isNull(), isNull(), eq(10000), eq(50000), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), eq(10000), eq(50000), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -171,7 +189,7 @@ class CardControllerTest {
     @DisplayName("t21 minPrice가 maxPrice보다 크면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t21() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "minPrice는 maxPrice보다 클 수 없습니다."))
-                .given(cardService).search(isNull(), isNull(), isNull(), eq(50000), eq(10000), isNull(), any(Pageable.class));
+                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), eq(50000), eq(10000), isNull(), any(Pageable.class));
 
         mockMvcTester.get()
                 .uri("/api/cards?minPrice=50000&maxPrice=10000")
@@ -204,7 +222,7 @@ class CardControllerTest {
         CardDetailResponse.VariantSummary variant = new CardDetailResponse.VariantSummary(
                 1L, "unlimitedHolofoil", true, null, null, List.of("S", "A"));
         CardDetailResponse detail = new CardDetailResponse(
-                1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
+                1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
                 expansion, List.of(variant));
         given(cardService.getDetail(1L)).willReturn(detail);
@@ -225,7 +243,7 @@ class CardControllerTest {
         CardDetailResponse.ExpansionSummary expansion = new CardDetailResponse.ExpansionSummary(
                 "base1", "Base", "Base", "BS", 102, LocalDate.of(1999, 1, 9), null, null);
         CardDetailResponse detail = new CardDetailResponse(
-                1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
+                1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
                 expansion, List.of());
         given(cardService.getDetail(1L)).willReturn(detail);
@@ -256,7 +274,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t6 검색어로 카드 이름 키워드 검색을 하면 200과 페이지 결과를 반환한다")
     void t6() {
-        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "Base", "Rare Holo", "Pokémon",
+        CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
                 List.of("Fire"), null, null, "base1", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
@@ -287,7 +305,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t8 존재하는 카드 id로 유사 카드를 조회하면 200과 목록을 반환한다")
     void t8() {
-        CardResponse related = new CardResponse(2L, "sv3pt5-6", "Charizard ex", null, "151", "Double Rare", "Pokémon",
+        CardResponse related = new CardResponse(2L, "sv3pt5-6", "Charizard ex", null, "EN", "151", "Double Rare", "Pokémon",
                 List.of("Fire"), null, null, "sv3pt5", List.of());
         given(cardService.getRelated(1L)).willReturn(List.of(related));
 
@@ -351,7 +369,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t24 한글 검색어로 요청하면 서비스에 그대로 위임하고 200과 페이지 결과를 반환한다")
     void t24() {
-        CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", null, "151", "Common", "Pokémon",
+        CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", null, "JA", "151", "Common", "Pokémon",
                 List.of("Lightning"), null, null, "sv3pt5", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
@@ -369,7 +387,7 @@ class CardControllerTest {
     @Test
     @DisplayName("t25 초성 검색어도 판별 없이 서비스에 그대로 위임한다")
     void t25() {
-        CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", null, "151", "Common", "Pokémon",
+        CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", null, "JA", "151", "Common", "Pokémon",
                 List.of("Lightning"), null, null, "sv3pt5", List.of());
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);

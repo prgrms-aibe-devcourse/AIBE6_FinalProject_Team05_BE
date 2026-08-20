@@ -190,4 +190,14 @@ public class User {
         }
         this.pointBalance -= amount;
     }
+
+    // 계정을 정지한다 (관리자 제재)
+    public void suspend() {
+        this.status = UserStatus.SUSPENDED;
+    }
+
+    // 정지를 해제한다 (활성 상태로 복구)
+    public void unsuspend() {
+        this.status = UserStatus.ACTIVE;
+    }
 }

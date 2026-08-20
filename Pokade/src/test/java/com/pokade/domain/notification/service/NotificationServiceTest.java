@@ -18,6 +18,10 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -51,24 +55,40 @@ class NotificationServiceTest {
 
     // ===== 목록 조회 =====
     @Test
-    @DisplayName("목록 조회: 알림이 없으면 빈 리스트 반환")
+    @DisplayName("목록 조회: 알림이 없으면 빈 페이지 반환")
     void getNotifications_empty() {
-        given(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L)).willReturn(List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        given(notificationRepository.findByUserId(1L, pageable)).willReturn(Page.empty(pageable));
 
-        List<NotificationResponse> result = notificationService.getNotifications(1L);
+        Page<NotificationResponse> result = notificationService.getNotifications(1L, pageable);
 
-        assertThat(result).isEmpty();
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
     }
 
     @Test
-    @DisplayName("목록 조회: 알림 개수만큼 NotificationResponse 리스트 반환")
+    @DisplayName("목록 조회: 알림 개수만큼 NotificationResponse 페이지 반환")
     void getNotifications_success() {
-        given(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L))
-                .willReturn(List.of(notification(1L), notification(1L)));
+        Pageable pageable = PageRequest.of(0, 20);
+        given(notificationRepository.findByUserId(1L, pageable))
+                .willReturn(new PageImpl<>(List.of(notification(1L), notification(1L)), pageable, 2));
 
-        List<NotificationResponse> result = notificationService.getNotifications(1L);
+        Page<NotificationResponse> result = notificationService.getNotifications(1L, pageable);
 
-        assertThat(result).hasSize(2);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("목록 조회: 페이지 크기가 상한(100)을 초과하면 BusinessException(INVALID_INPUT)을 던진다")
+    void getNotifications_throwsWhenPageSizeExceedsLimit() {
+        Pageable pageable = PageRequest.of(0, 101);
+
+        assertThatThrownBy(() -> notificationService.getNotifications(1L, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+
+        then(notificationRepository).should(Mockito.never()).findByUserId(Mockito.any(), Mockito.any());
     }
 
     // ===== 읽음 처리 =====
@@ -105,6 +125,29 @@ class NotificationServiceTest {
         assertThatThrownBy(() -> notificationService.markAsRead(1L, 1L))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.NOTIFICATION_ALREADY_READ);
+    }
+
+    // ===== 삭제 =====
+    // deleteByIdAndUserId()도 markAsReadIfUnread()와 같은 이유로 조건부 원자적 DELETE라, 존재하지 않는
+    // 알림과 본인 소유가 아닌 알림을 구분하지 않고 0건이면 그대로 NOTIFICATION_NOT_FOUND로 처리한다.
+    @Test
+    @DisplayName("삭제: 원자적 삭제가 1건이면 정상 처리된다")
+    void deleteNotification_success() {
+        given(notificationRepository.deleteByIdAndUserId(1L, 1L)).willReturn(1);
+
+        notificationService.deleteNotification(1L, 1L);
+
+        then(notificationRepository).should(Mockito.times(1)).deleteByIdAndUserId(1L, 1L);
+    }
+
+    @Test
+    @DisplayName("삭제: 삭제 0건이면(존재하지 않거나 본인 소유가 아님) NOTIFICATION_NOT_FOUND")
+    void deleteNotification_notFound() {
+        given(notificationRepository.deleteByIdAndUserId(1L, 1L)).willReturn(0);
+
+        assertThatThrownBy(() -> notificationService.deleteNotification(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
     }
 
     // ===== 목표가 도달 알림 생성 =====

@@ -207,4 +207,64 @@ class PriceTradeStatsRepositoryTest extends AbstractIntegrationTest {
                 .extracting(PriceTradeStatsRepository.CardPriceRangeView::getMinPrice)
                 .containsExactly(5000000);
     }
+
+    @Test
+    @DisplayName("t8 findPriceRangesByCardIdsSincePerCard()는 카드별로 서로 다른 등록 시점(since)을 정확히 페어링해서 적용한다(#275)")
+    void t8() {
+        Card secondCard = Card.builder().name("Blastoise").build();
+        entityManager.persist(secondCard);
+        Long secondCardId = secondCard.getId();
+
+        // 카드1: registeredAt1 이전/이후 체결 섞임 - registeredAt1 이후만 잡혀야 함(2000000 제외, 3000000만)
+        LocalDateTime registeredAt1 = LocalDateTime.now().minusDays(5);
+        Listing card1Before = persistListing(2000000, ListingGrade.S);
+        Listing card1After = persistListing(3000000, ListingGrade.S);
+        persistCompletedTrade(card1Before, registeredAt1.minusDays(1));
+        persistCompletedTrade(card1After, registeredAt1.plusDays(1));
+
+        // 카드2: registeredAt2(카드1과 다른 시점) 기준 - registeredAt2 이전 체결(4000000)은 제외, 이후(5000000)만 포함
+        LocalDateTime registeredAt2 = LocalDateTime.now().minusDays(20);
+        Listing card2Before = Listing.builder().cardId(secondCardId).sellerId(sellerId).price(4000000).grade(ListingGrade.S).build();
+        Listing card2After = Listing.builder().cardId(secondCardId).sellerId(sellerId).price(5000000).grade(ListingGrade.S).build();
+        listingRepository.save(card2Before);
+        listingRepository.save(card2After);
+        persistCompletedTrade(card2Before, registeredAt2.minusDays(1));
+        persistCompletedTrade(card2After, registeredAt2.plusDays(1));
+
+        var ranges = priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(
+                List.of(cardId, secondCardId),
+                List.of(registeredAt1, registeredAt2),
+                null,
+                TradeStatus.COMPLETED);
+
+        assertThat(ranges).hasSize(2);
+        assertThat(ranges).filteredOn(r -> r.getCardId().equals(cardId))
+                .extracting(PriceTradeStatsRepository.CardPriceRangeView::getMinPrice,
+                        PriceTradeStatsRepository.CardPriceRangeView::getMaxPrice)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(3000000, 3000000));
+        assertThat(ranges).filteredOn(r -> r.getCardId().equals(secondCardId))
+                .extracting(PriceTradeStatsRepository.CardPriceRangeView::getMinPrice,
+                        PriceTradeStatsRepository.CardPriceRangeView::getMaxPrice)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(5000000, 5000000));
+    }
+
+    @Test
+    @DisplayName("t9 findPriceRangesByCardIdsSincePerCard()는 grade를 지정하면 해당 등급 체결만 반영한다(#275)")
+    void t9() {
+        LocalDateTime registeredAt = LocalDateTime.now().minusDays(5);
+        Listing sGrade = persistListing(3000000, ListingGrade.S);
+        Listing otherGrade = persistListing(9000000, ListingGrade.PSA10);
+        persistCompletedTrade(sGrade, registeredAt.plusDays(1));
+        persistCompletedTrade(otherGrade, registeredAt.plusDays(1));
+
+        var ranges = priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(
+                List.of(cardId),
+                List.of(registeredAt),
+                ListingGrade.S,
+                TradeStatus.COMPLETED);
+
+        assertThat(ranges).hasSize(1);
+        assertThat(ranges.get(0).getMinPrice()).isEqualTo(3000000);
+        assertThat(ranges.get(0).getMaxPrice()).isEqualTo(3000000);
+    }
 }
