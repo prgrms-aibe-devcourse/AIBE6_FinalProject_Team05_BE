@@ -35,7 +35,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -124,18 +123,20 @@ class UserControllerTest {
     @DisplayName("인증된 사용자가 내 프로필 상세를 조회하면 200과 상세 필드를 반환한다")
     void getMyProfile_success() throws Exception {
         MyProfileResponse res = new MyProfileResponse(
-                "user@pokade.com", "010-1234-5678", Provider.GOOGLE, true,
-                LocalDateTime.of(2026, 1, 2, 3, 4), LocalDate.of(1998, 7, 15), true);
+                "user@pokade.com", Provider.GOOGLE, true,
+                LocalDateTime.of(2026, 1, 2, 3, 4), true);
         given(profileService.getMyProfile(1L)).willReturn(res);
 
         mockMvc.perform(get("/api/users/me/profile").with(userId(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.email").value("user@pokade.com"))
-                .andExpect(jsonPath("$.data.phoneNumber").value("010-1234-5678"))
                 .andExpect(jsonPath("$.data.provider").value("GOOGLE"))
                 .andExpect(jsonPath("$.data.socialLinked").value(true))
-                .andExpect(jsonPath("$.data.birthDate").value("1998-07-15"))
-                .andExpect(jsonPath("$.data.marketingAgreed").value(true));
+                .andExpect(jsonPath("$.data.marketingAgreed").value(true))
+                // 응답 필드 수를 잠가 둔다 - 고지되지 않은 PII(연락처·생년월일)가 다시 실려 나가는 것을 막는다.
+                // doesNotExist()는 값이 null인 필드를 부재로 판정해 이 회귀를 잡지 못한다.
+                // 필드를 정당하게 추가할 때는 이 숫자도 함께 올린다.
+                .andExpect(jsonPath("$.data.length()").value(5));
 
         then(profileService).should().getMyProfile(1L);
     }
