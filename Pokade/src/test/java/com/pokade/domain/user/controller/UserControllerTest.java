@@ -8,6 +8,7 @@ import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.service.ProfileImageService;
 import com.pokade.domain.user.service.ProfileService;
+import com.pokade.domain.user.service.UserAgreementService;
 import com.pokade.domain.user.service.UserService;
 import com.pokade.domain.user.service.WithdrawalService;
 import com.pokade.global.config.SecurityConfig;
@@ -72,6 +73,8 @@ class UserControllerTest {
     @MockitoBean
     private ProfileImageService profileImageService;                 // UserController가 요구
     @MockitoBean
+    private UserAgreementService userAgreementService;                // UserController가 요구
+    @MockitoBean
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;      // SecurityConfig가 요구
     @MockitoBean
     private OAuth2LoginFailureHandler oAuth2LoginFailureHandler;      // SecurityConfig가 요구
@@ -122,7 +125,7 @@ class UserControllerTest {
     void getMyProfile_success() throws Exception {
         MyProfileResponse res = new MyProfileResponse(
                 "user@pokade.com", "010-1234-5678", Provider.GOOGLE, true,
-                LocalDateTime.of(2026, 1, 2, 3, 4), LocalDate.of(1998, 7, 15));
+                LocalDateTime.of(2026, 1, 2, 3, 4), LocalDate.of(1998, 7, 15), true);
         given(profileService.getMyProfile(1L)).willReturn(res);
 
         mockMvc.perform(get("/api/users/me/profile").with(userId(1L)))
@@ -131,7 +134,8 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.phoneNumber").value("010-1234-5678"))
                 .andExpect(jsonPath("$.data.provider").value("GOOGLE"))
                 .andExpect(jsonPath("$.data.socialLinked").value(true))
-                .andExpect(jsonPath("$.data.birthDate").value("1998-07-15"));
+                .andExpect(jsonPath("$.data.birthDate").value("1998-07-15"))
+                .andExpect(jsonPath("$.data.marketingAgreed").value(true));
 
         then(profileService).should().getMyProfile(1L);
     }

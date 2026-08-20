@@ -155,8 +155,8 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
 
     private Long insertUser(String email) {
         return ((Number) entityManager.createNativeQuery(
-                        "INSERT INTO users (email, nickname, provider, role, status, terms_agreed_at) "
-                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE', now()) RETURNING id")
+                        "INSERT INTO users (email, nickname, provider, role, status) "
+                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE') RETURNING id")
                 .setParameter("email", email)
                 .setParameter("nickname", email.substring(0, email.indexOf('@')))
                 .getSingleResult()).longValue();
