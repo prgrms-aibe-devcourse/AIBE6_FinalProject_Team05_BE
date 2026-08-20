@@ -14,6 +14,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -133,6 +134,29 @@ class WatchlistRepositoryTest {
         assertThat(resetCount).isEqualTo(1);
         assertThat(noopCount).isEqualTo(0);
         assertThat(watchlistRepository.findById(notified.getId()).orElseThrow().isListingNotified()).isFalse();
+    }
+
+    @Test
+    void countGroupedByCardIdIn은_카드별_등록수를_한번의_쿼리로_묶어서_반환한다() {
+        Long userA = insertUser("count-grouped-a@test.com");
+        Long userB = insertUser("count-grouped-b@test.com");
+        Long userC = insertUser("count-grouped-c@test.com");
+        Long cardWithTwo = insertCard("watch-grouped-two");
+        Long cardWithOne = insertCard("watch-grouped-one");
+        Long cardWithNone = insertCard("watch-grouped-none");
+        saveWatchlist(userA, cardWithTwo, 1000, null);
+        saveWatchlist(userB, cardWithTwo, 1000, null);
+        saveWatchlist(userC, cardWithOne, 1000, null);
+
+        List<WatchlistRepository.WatchlistCardCountView> counts =
+                watchlistRepository.countGroupedByCardIdIn(List.of(cardWithTwo, cardWithOne, cardWithNone));
+
+        // 등록이 없는 카드(cardWithNone)는 GROUP BY 결과에 행 자체가 생기지 않는다 - 0으로 채우는 건 서비스 계층 책임.
+        assertThat(counts).extracting(WatchlistRepository.WatchlistCardCountView::getCardId,
+                        WatchlistRepository.WatchlistCardCountView::getCount)
+                .containsExactlyInAnyOrder(
+                        tuple(cardWithTwo, 2L),
+                        tuple(cardWithOne, 1L));
     }
 
     @Test

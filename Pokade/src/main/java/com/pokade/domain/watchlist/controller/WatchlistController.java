@@ -1,5 +1,6 @@
 package com.pokade.domain.watchlist.controller;
 
+import com.pokade.domain.watchlist.dto.WatchlistCountResponse;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -37,6 +39,11 @@ public class WatchlistController {
     @GetMapping
     public ApiResponse<List<WatchlistResponse>> getWatchlist(@AuthenticationPrincipal Long userId) {
         return ApiResponse.ok(watchlistService.getWatchlist(userId));
+    }
+
+    @GetMapping("/counts")
+    public ApiResponse<List<WatchlistCountResponse>> getWatchlistCounts(@RequestParam List<Long> cardIds) {
+        return ApiResponse.ok(watchlistService.getWatchlistCounts(cardIds));
     }
 
     @PatchMapping("/{id}")
