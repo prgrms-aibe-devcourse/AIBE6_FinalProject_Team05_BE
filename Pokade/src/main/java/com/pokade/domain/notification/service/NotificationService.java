@@ -90,6 +90,7 @@ public class NotificationService {
                 .userId(watchlist.getUserId())
                 .type(NotificationType.PRICE_TARGET)
                 .message(buildPriceTargetMessage(watchlist, cardName, reachedTargetPrice))
+                .cardId(watchlist.getCardId())
                 .build();
 
         notificationRepository.save(notification);

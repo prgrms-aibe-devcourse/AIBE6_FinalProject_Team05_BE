@@ -9,6 +9,7 @@ public record NotificationResponse(
         Long id,
         NotificationType type,
         String message,
+        Long cardId,
         boolean isRead,
         LocalDateTime createdAt
 ) {
@@ -18,6 +19,7 @@ public record NotificationResponse(
                 notification.getId(),
                 notification.getType(),
                 notification.getMessage(),
+                notification.getCardId(),
                 notification.isRead(),
                 notification.getCreatedAt()
         );

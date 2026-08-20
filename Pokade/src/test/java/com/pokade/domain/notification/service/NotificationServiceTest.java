@@ -162,7 +162,7 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("목표가 도달 알림 생성: PRICE_TARGET 타입과 워치리스트의 userId로 저장된다")
+    @DisplayName("목표가 도달 알림 생성: PRICE_TARGET 타입과 워치리스트의 userId/cardId로 저장된다")
     void createPriceTargetNotification_type() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
 
@@ -173,6 +173,7 @@ class NotificationServiceTest {
         Notification saved = captor.getValue();
         assertThat(saved.getUserId()).isEqualTo(1L);
         assertThat(saved.getType()).isEqualTo(NotificationType.PRICE_TARGET);
+        assertThat(saved.getCardId()).isEqualTo(10L);
     }
 
     @Test
@@ -252,6 +253,7 @@ class NotificationServiceTest {
         assertThat(saved.getUserId()).isEqualTo(1L);
         assertThat(saved.getType()).isEqualTo(NotificationType.INQUIRY_HANDLED);
         assertThat(saved.getMessage()).contains("결제 문의");
+        assertThat(saved.getCardId()).isNull();
 
         ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
         then(eventPublisher).should().publishEvent(eventCaptor.capture());
@@ -266,7 +268,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 있으면 notification 이벤트를 전송한다")
     void onNotificationPush_pushes_to_subscriber() throws Exception {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", false, null);
+        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, false, null);
         SseEmitter emitter = mock(SseEmitter.class);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
@@ -278,7 +280,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 없으면 예외 없이 조용히 스킵된다")
     void onNotificationPush_no_subscriber_noop() {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", false, null);
+        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, false, null);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of());
 
         assertThatCode(() -> notificationService.onNotificationPush(new NotificationPushEvent(1L, response)))

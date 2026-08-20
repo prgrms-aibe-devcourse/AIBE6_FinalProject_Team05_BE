@@ -288,6 +288,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     user_id      BIGINT NOT NULL REFERENCES users(id),
     type         VARCHAR(30) NOT NULL,                          -- PRICE_TARGET / TRADE_CONFIRMED / LISTING_STALE / INQUIRY_HANDLED 등
     message      VARCHAR(255),
+    card_id      BIGINT REFERENCES cards(id),                   -- 알림 클릭 시 카드 상세 이동용; 카드와 무관한 알림(문의 처리 등)은 NULL
     is_read      BOOLEAN NOT NULL DEFAULT FALSE,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
