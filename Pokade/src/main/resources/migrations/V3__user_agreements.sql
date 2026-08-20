@@ -15,6 +15,10 @@
 --     그 컬럼을 요구해 재기동 시 validate에서 죽고, 배포 실패 시 롤백 경로도 막힌다.
 --     제거는 배포가 안정된 뒤 V4로 따로 돌린다(급하지 않다).
 
+-- 전체를 한 트랜잭션으로 묶는다. 중간에 실패하면 아무것도 남지 않아, 부분 적용 상태를
+-- 걱정하지 않고 그대로 다시 실행할 수 있다.
+BEGIN;
+
 -- 1) 동의 이력 테이블. 항목별 최신 행이 현재 상태이고, 철회도 agreed=false인 새 행으로 남긴다.
 CREATE TABLE IF NOT EXISTS user_agreements (
                                                id        BIGSERIAL PRIMARY KEY,
@@ -31,17 +35,28 @@ CREATE INDEX IF NOT EXISTS idx_user_agreements_user_type
 
 -- 2) 기존 가입자 이관. 실제로 받은 적 없는 동의라 version='legacy'로 표시해 신규 동의와 구분한다.
 --    이관해두지 않으면 기존 사용자가 전원 필수 미동의 상태가 되어 재동의 유도 화면이 필요해진다.
+--
+--    NOT EXISTS로 이미 이관된 유저를 건너뛴다 — 이 스크립트를 실수로 두 번 돌려도 행이
+--    중복되지 않는다. 없으면 재실행 시 동의 행이 2배가 되어 이관 확인 쿼리가 어긋난다.
 INSERT INTO user_agreements (user_id, type, agreed, agreed_at, version)
 SELECT u.id, t.type, TRUE, u.terms_agreed_at, 'legacy'
 FROM users u
-         CROSS JOIN (VALUES ('TERMS_OF_SERVICE'), ('PRIVACY_POLICY'), ('THIRD_PARTY_SHARING')) AS t(type);
+         CROSS JOIN (VALUES ('TERMS_OF_SERVICE'), ('PRIVACY_POLICY'), ('THIRD_PARTY_SHARING')) AS t(type)
+WHERE NOT EXISTS (
+    SELECT 1 FROM user_agreements a WHERE a.user_id = u.id AND a.type = t.type
+);
 
 -- 마케팅은 기존 값을 그대로 옮긴다(대부분 false).
 INSERT INTO user_agreements (user_id, type, agreed, agreed_at, version)
 SELECT u.id, 'MARKETING', u.marketing_opt_in, u.terms_agreed_at, 'legacy'
-FROM users u;
+FROM users u
+WHERE NOT EXISTS (
+    SELECT 1 FROM user_agreements a WHERE a.user_id = u.id AND a.type = 'MARKETING'
+);
 
 -- 3) 신버전 엔티티는 terms_agreed_at을 매핑하지 않으므로 INSERT에 값을 넣지 않는다.
 --    NOT NULL을 풀지 않으면 신버전 배포 직후부터 V4를 돌릴 때까지 회원가입이 제약 위반으로 실패한다.
 --    (marketing_opt_in은 DEFAULT FALSE가 있어 그대로 둬도 무방하다.)
 ALTER TABLE users ALTER COLUMN terms_agreed_at DROP NOT NULL;
+
+COMMIT;

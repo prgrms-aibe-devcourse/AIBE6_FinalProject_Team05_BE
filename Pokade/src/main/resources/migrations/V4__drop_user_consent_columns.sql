@@ -15,5 +15,10 @@
 --   배포 후에는 신규 가입자가 앱을 통해 동의를 기록하므로 이 등식으로는 이관 여부를 판별할 수 없다.
 --   V3의 이관이 누락된 채 이 스크립트를 돌리면 동의 이력이 복구 불가능하게 사라진다.
 
+-- IF EXISTS라 재실행해도 안전하다. 한 트랜잭션으로 묶어 둘 중 하나만 지워지는 상태를 막는다.
+BEGIN;
+
 ALTER TABLE users DROP COLUMN IF EXISTS terms_agreed_at;
 ALTER TABLE users DROP COLUMN IF EXISTS marketing_opt_in;
+
+COMMIT;
