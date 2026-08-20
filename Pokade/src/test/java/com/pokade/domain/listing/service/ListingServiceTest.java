@@ -8,6 +8,7 @@ import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.global.event.ListingCreatedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.Optional;
 
@@ -24,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,6 +45,9 @@ class ListingServiceTest {
 
     @Mock
     private UserAccessChecker userAccessChecker;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ListingService listingService;
@@ -70,6 +76,18 @@ class ListingServiceTest {
 
         assertThat(response.sellerId()).isEqualTo(100L);
         assertThat(response.price()).isEqualTo(10000);
+    }
+
+    @Test
+    void 매물_등록에_성공하면_ListingCreatedEvent가_저장된_카드ID_변형ID로_발행된다() {
+        ListingCreateRequest request = new ListingCreateRequest(1L, 2L, 10000, ListingGrade.A);
+        given(listingRepository.existsBySellerIdAndCardIdAndVariantIdAndStatus(
+                anyLong(), any(), any(), any())).willReturn(false);
+        given(listingRepository.save(any(Listing.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        listingService.createListing(100L, request);
+
+        then(eventPublisher).should().publishEvent(new ListingCreatedEvent(1L, 2L));
     }
 
     @Test
