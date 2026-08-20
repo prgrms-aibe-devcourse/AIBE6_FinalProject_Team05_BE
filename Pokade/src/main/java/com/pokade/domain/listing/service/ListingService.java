@@ -12,10 +12,14 @@ import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +33,7 @@ import java.util.stream.Collectors;
 public class ListingService {
 
     private final ListingRepository listingRepository;
+    private final TradeRepository tradeRepository;
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
     private final UserAccessChecker userAccessChecker;
@@ -76,18 +81,25 @@ public class ListingService {
                 .toList();
     }
 
-    public List<ListingSummaryResponse> getMyListings(Long sellerId, ListingStatus status) {
-        List<Listing> listings = status != null
-                ? listingRepository.findBySellerIdAndStatus(sellerId, status)
-                : listingRepository.findBySellerId(sellerId);
+    public Page<ListingSummaryResponse> getMyListings(Long sellerId, ListingStatus status, Pageable pageable) {
+        Page<Listing> listingsPage = status != null
+                ? listingRepository.findBySellerIdAndStatus(sellerId, status, pageable)
+                : listingRepository.findBySellerId(sellerId, pageable);
 
+        List<Listing> listings = listingsPage.getContent();
         List<Long> cardIds = listings.stream().map(Listing::getCardId).distinct().toList();
         Map<Long, String> cardNamesById = cardRepository.findAllById(cardIds).stream()
                 .collect(Collectors.toMap(Card::getId, Card::getName));
 
-        return listings.stream()
-                .map(listing -> ListingSummaryResponse.of(listing, cardNamesById.get(listing.getCardId())))
-                .toList();
+        // 거래 진행 상황 화면으로 연결하기 위해 매물별 거래 ID를 배치 조회 (건건이 조회하면 목록 크기만큼 쿼리가 나간다).
+        List<Long> listingIds = listings.stream().map(Listing::getId).toList();
+        Map<Long, Long> tradeIdByListingId = tradeRepository.findByListingIdIn(listingIds).stream()
+                .collect(Collectors.toMap(trade -> trade.getListing().getId(), Trade::getId));
+
+        return listingsPage.map(listing -> ListingSummaryResponse.of(
+                listing,
+                cardNamesById.get(listing.getCardId()),
+                tradeIdByListingId.get(listing.getId())));
     }
 
     @Transactional

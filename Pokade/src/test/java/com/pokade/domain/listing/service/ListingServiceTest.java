@@ -4,10 +4,13 @@ import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
+import com.pokade.domain.listing.dto.ListingSummaryResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.trade.entity.Trade;
+import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
@@ -17,6 +20,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +37,9 @@ class ListingServiceTest {
 
     @Mock
     private ListingRepository listingRepository;
+
+    @Mock
+    private TradeRepository tradeRepository;
 
     @Mock
     private CardRepository cardRepository;
@@ -97,5 +104,41 @@ class ListingServiceTest {
         ListingResponse response = listingService.updatePrice(100L, 1L, new ListingUpdateRequest(20000));
 
         assertThat(response.price()).isEqualTo(20000);
+    }
+
+    @Test
+    void 내_매물_목록_조회시_연결된_거래가_있으면_거래ID를_함께_반환한다() {
+        Listing tradingListing = Listing.builder()
+                .cardId(1L)
+                .sellerId(100L)
+                .price(10000)
+                .build();
+        org.springframework.test.util.ReflectionTestUtils.setField(tradingListing, "id", 10L);
+
+        Listing activeListing = Listing.builder()
+                .cardId(2L)
+                .sellerId(100L)
+                .price(20000)
+                .build();
+        org.springframework.test.util.ReflectionTestUtils.setField(activeListing, "id", 20L);
+
+        Trade trade = Trade.builder().listing(tradingListing).buyerId(200L).price(10000).build();
+        org.springframework.test.util.ReflectionTestUtils.setField(trade, "id", 500L);
+
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        given(listingRepository.findBySellerId(100L, pageable))
+                .willReturn(new org.springframework.data.domain.PageImpl<>(List.of(tradingListing, activeListing)));
+        given(cardRepository.findAllById(any())).willReturn(List.of());
+        given(tradeRepository.findByListingIdIn(any())).willReturn(List.of(trade));
+
+        List<ListingSummaryResponse> responses = listingService.getMyListings(100L, null, pageable).getContent();
+
+        assertThat(responses).hasSize(2);
+        ListingSummaryResponse tradingSummary = responses.stream()
+                .filter(r -> r.id().equals(10L)).findFirst().orElseThrow();
+        ListingSummaryResponse activeSummary = responses.stream()
+                .filter(r -> r.id().equals(20L)).findFirst().orElseThrow();
+        assertThat(tradingSummary.tradeId()).isEqualTo(500L);
+        assertThat(activeSummary.tradeId()).isNull();
     }
 }

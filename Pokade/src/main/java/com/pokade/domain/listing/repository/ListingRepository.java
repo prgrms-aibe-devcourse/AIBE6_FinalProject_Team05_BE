@@ -3,6 +3,8 @@ package com.pokade.domain.listing.repository;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -36,6 +38,11 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
     List<Listing> findBySellerId(Long sellerId);
 
     List<Listing> findBySellerIdAndStatus(Long sellerId, ListingStatus status);
+
+    // "내 상품관리" 화면 페이징 조회용.
+    Page<Listing> findBySellerId(Long sellerId, Pageable pageable);
+
+    Page<Listing> findBySellerIdAndStatus(Long sellerId, ListingStatus status, Pageable pageable);
 
     long countBySellerIdAndStatus(Long sellerId, ListingStatus status);
 
@@ -75,4 +82,11 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
     @Query("UPDATE Listing l SET l.status = com.pokade.domain.listing.entity.ListingStatus.HIDDEN "
             + "WHERE l.id = :id AND l.status <> com.pokade.domain.listing.entity.ListingStatus.HIDDEN")
     int hideIfNotAlreadyHidden(@Param("id") Long listingId);
+
+    // cutoff 이전에 등록되고도 여전히 ACTIVE인 매물을 일괄 EXPIRED 처리. 반환값 = 만료 처리된 매물 수.
+    // ACTIVE 조건으로만 걸려있어 markAsTrading(구매)과 동시에 발생해도 DB 행 잠금으로 하나만 반영된다.
+    @Modifying
+    @Query("UPDATE Listing l SET l.status = com.pokade.domain.listing.entity.ListingStatus.EXPIRED "
+            + "WHERE l.status = com.pokade.domain.listing.entity.ListingStatus.ACTIVE AND l.createdAt < :cutoff")
+    int expireActiveListingsCreatedBefore(@Param("cutoff") LocalDateTime cutoff);
 }
