@@ -40,6 +40,18 @@ spring:
       hibernate:
         format_sql: true
 
+  # Boot 4.0.7의 FlywayAutoConfiguration을 HibernateJpaConfiguration과 함께 쓰면 "Circular
+  # depends-on relationship between 'flyway' and 'entityManagerFactory'"로 부팅 자체가
+  # 실패한다(AspectJ/Actuator/spring-ai/open-in-view 조합 문제 아님, 여러 조합으로 재현 확인됨).
+  # 그래서 이 자동설정은 끄고, FlywayMigrationListener가 환경 준비 시점에 Flyway를 빈 등록
+  # 없이 직접 실행한다. baseline-on-migrate/baseline-version은 그 리스너가 이 값을 읽어 쓴다 —
+  # 기존 schema.sql 시절 이미 만들어진 스키마(prod/로컬 dev 모두)를 재실행 없이 "이미 적용됨"으로
+  # 인정시키는 값이다. V1__baseline_schema.sql이 그 스키마와 동일한 내용이라 안전하다.
+  flyway:
+    enabled: false
+    baseline-on-migrate: true
+    baseline-version: 1
+
   servlet:
     multipart:
       max-file-size: 10MB
