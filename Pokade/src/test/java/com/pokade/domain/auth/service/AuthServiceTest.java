@@ -7,6 +7,7 @@ import com.pokade.domain.auth.dto.response.SignupResponse;
 import com.pokade.domain.auth.store.LoginAttemptStore;
 import com.pokade.domain.auth.store.RefreshTokenStore;
 import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.entity.type.AgreementType;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -88,6 +90,46 @@ class AuthServiceTest {
         User saved = captor.getValue();
         assertThat(saved.getPassword()).isEqualTo("ENCODED_PW"); // 평문 저장 아님
         assertThat(saved.getStatus()).isEqualTo(UserStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("가입에 성공하면 동의 항목 4종을 요청 값 그대로 기록한다")
+    void signup_recordsAgreements() {
+        // given — 필수 3종은 동의, 마케팅만 거부한 상태
+        SignupRequest req = new SignupRequest(
+                "test@pokade.com", "pokade1234", "홍길동", true, true, true, false);
+        given(userRepository.findByEmail(req.email())).willReturn(Optional.empty());
+        given(userRepository.existsByNickname(req.nickname())).willReturn(false);
+        given(passwordEncoder.encode(req.password())).willReturn("ENCODED_PW");
+        given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        authService.signup(req);
+
+        // then
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<AgreementType, Boolean>> captor = ArgumentCaptor.forClass(Map.class);
+        then(userAgreementService).should().recordSignupAgreements(any(), captor.capture());
+
+        Map<AgreementType, Boolean> agreements = captor.getValue();
+        assertThat(agreements).hasSize(4);
+        assertThat(agreements.get(AgreementType.TERMS_OF_SERVICE)).isTrue();
+        assertThat(agreements.get(AgreementType.PRIVACY_POLICY)).isTrue();
+        assertThat(agreements.get(AgreementType.THIRD_PARTY_SHARING)).isTrue();
+        assertThat(agreements.get(AgreementType.MARKETING)).isFalse(); // 선택 항목은 요청 값을 따른다
+    }
+
+    @Test
+    @DisplayName("가입이 실패하면 동의를 기록하지 않는다")
+    void signup_failed_doesNotRecordAgreements() {
+        // given
+        SignupRequest req = request("test@pokade.com", "pokade1234", "홍길동");
+        given(userRepository.findByEmail(req.email())).willReturn(Optional.empty());
+        given(userRepository.existsByNickname(req.nickname())).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> authService.signup(req)).isInstanceOf(BusinessException.class);
+        then(userAgreementService).should(never()).recordSignupAgreements(any(), any());
     }
 
     @Test

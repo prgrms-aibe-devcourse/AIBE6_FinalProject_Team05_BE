@@ -34,6 +34,8 @@ class ProfileServiceTest {
     private TradeCountPort tradeCountPort;
     @Mock
     private ListingCountPort listingCountPort;
+    @Mock
+    private UserAgreementService userAgreementService;
 
     @InjectMocks
     private ProfileService profileService;
