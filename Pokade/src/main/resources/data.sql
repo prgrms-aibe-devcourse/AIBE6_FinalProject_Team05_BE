@@ -117,12 +117,12 @@ DELETE FROM buy_offers;
 DELETE FROM listings;
 
 -- ---------- users (테스트 유저 2명) ----------
-INSERT INTO users (email, password, nickname, provider, role, status, terms_agreed_at, created_at, updated_at)
-VALUES ('seller1@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '민준테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now(), now())
+INSERT INTO users (email, password, nickname, provider, role, status, created_at, updated_at)
+VALUES ('seller1@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '민준테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now())
     ON CONFLICT (email) DO NOTHING;
 
-INSERT INTO users (email, password, nickname, provider, role, status, terms_agreed_at, created_at, updated_at)
-VALUES ('seller2@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '지호테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now(), now())
+INSERT INTO users (email, password, nickname, provider, role, status, created_at, updated_at)
+VALUES ('seller2@test.com', '$2a$10$dummyHashedPasswordForLocalTestOnly', '지호테스트', 'LOCAL', 'USER', 'ACTIVE', now(), now())
     ON CONFLICT (email) DO NOTHING;
 
 -- ---------- listings (매도호가) ----------

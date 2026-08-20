@@ -2,6 +2,7 @@ package com.pokade.domain.auth.controller;
 
 import com.pokade.domain.auth.dto.TokenPair;
 import com.pokade.domain.auth.service.AuthService;
+import com.pokade.domain.auth.service.OAuth2LoginService;
 import com.pokade.global.security.JwtAuthenticationEntryPoint;
 import com.pokade.global.security.JwtAuthenticationFilter;
 import com.pokade.global.security.JwtProperties;
@@ -40,6 +41,8 @@ class AuthControllerTest {
 
     @MockitoBean
     private AuthService authService;
+    @MockitoBean
+    private OAuth2LoginService oauth2LoginService;
 
     // SecurityConfig가 생성자에서 요구하는 빈들 — 슬라이스엔 없으므로 목으로 채움
     @MockitoBean
@@ -140,5 +143,47 @@ class AuthControllerTest {
         assertThat(result).hasStatusOk();
         assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).isNull(); // 쿠키 미세팅
         then(authService).should().reissue("old-refresh");
+    }
+
+    private static String signupBody(boolean terms, boolean privacy, boolean thirdParty, boolean marketing) {
+        return """
+                {"email":"user@pokade.com","password":"pokade1234","nickname":"홍길동",
+                 "termsOfService":%s,"privacyPolicy":%s,"thirdPartySharing":%s,"marketing":%s}
+                """.formatted(terms, privacy, thirdParty, marketing);
+    }
+
+    @Test
+    @DisplayName("필수 동의를 하나라도 빠뜨리면 400을 반환하고 가입 서비스를 호출하지 않는다")
+    void signup_requiredAgreementMissing() {
+        // 필수 3종을 하나씩 빼며 검증한다 — 어느 항목이 빠져도 가입이 진행되어서는 안 된다.
+        String[] bodies = {
+                signupBody(false, true, true, false),  // 이용약관 미동의
+                signupBody(true, false, true, false),  // 개인정보 미동의
+                signupBody(true, true, false, false),  // 제3자 제공 미동의
+        };
+
+        for (String body : bodies) {
+            mockMvcTester.post()
+                    .uri("/api/auth/signup")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(body)
+                    .assertThat()
+                    .hasStatus(HttpStatus.BAD_REQUEST);
+        }
+
+        then(authService).should(never()).signup(any());
+    }
+
+    @Test
+    @DisplayName("필수 동의를 모두 하면 마케팅을 거부해도 가입 서비스를 호출한다")
+    void signup_marketingOptional() {
+        mockMvcTester.post()
+                .uri("/api/auth/signup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(signupBody(true, true, true, false))
+                .assertThat()
+                .hasStatusOk();
+
+        then(authService).should().signup(any());
     }
 }
