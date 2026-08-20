@@ -3,6 +3,7 @@ package com.pokade.domain.portfolio.controller;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemUpdateRequest;
+import com.pokade.domain.portfolio.dto.PortfolioSummaryResponse;
 import com.pokade.domain.portfolio.service.PortfolioService;
 import com.pokade.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -39,6 +40,13 @@ public class PortfolioController {
             @AuthenticationPrincipal Long userId
     ) {
         return ApiResponse.ok(portfolioService.getMyPortfolio(userId));
+    }
+
+    @GetMapping("/summary")
+    public ApiResponse<PortfolioSummaryResponse> getSummary(
+            @AuthenticationPrincipal Long userId
+    ) {
+        return ApiResponse.ok(portfolioService.getSummary(userId));
     }
 
     @PutMapping("/{id}")

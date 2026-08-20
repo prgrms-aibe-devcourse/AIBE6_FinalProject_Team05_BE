@@ -7,6 +7,7 @@ import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemUpdateRequest;
+import com.pokade.domain.portfolio.dto.PortfolioSummaryResponse;
 import com.pokade.domain.portfolio.entity.PortfolioItem;
 import com.pokade.domain.portfolio.repository.PortfolioItemRepository;
 import com.pokade.global.exception.BusinessException;
@@ -18,7 +19,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -231,5 +234,97 @@ class PortfolioServiceTest {
         portfolioService.addFromCompletedTrade(1L, 1L, 10L, 5L, 50000);
 
         then(portfolioItemRepository).should().save(any(PortfolioItem.class));
+    }
+
+    // ===== getSummary =====
+
+    private CardPriceRepository.VariantMarketPriceView variantMarketPriceView(
+            Long variantId, BigDecimal market, String currency, BigDecimal change1dPct) {
+        return new CardPriceRepository.VariantMarketPriceView() {
+            @Override
+            public Long getVariantId() {
+                return variantId;
+            }
+
+            @Override
+            public BigDecimal getMarket() {
+                return market;
+            }
+
+            @Override
+            public String getCurrency() {
+                return currency;
+            }
+
+            @Override
+            public BigDecimal getChange1dPct() {
+                return change1dPct;
+            }
+        };
+    }
+
+    @Test
+    @DisplayName("총 평가액: 보유 카드가 없으면 0으로 반환")
+    void getSummary_empty() {
+        given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of());
+
+        PortfolioSummaryResponse result = portfolioService.getSummary(1L);
+
+        assertThat(result).isEqualTo(new PortfolioSummaryResponse(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null));
+    }
+
+    @Test
+    @DisplayName("총 평가액: 시세 정보가 없는 항목은 계산에서 제외되어 0으로 반환")
+    void getSummary_noPriceData() {
+        PortfolioItem item = stubItem(1L, 10L, null);
+        ReflectionTestUtils.setField(item, "id", 100L);
+        given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(item));
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(anyList())).willReturn(List.of());
+
+        PortfolioSummaryResponse result = portfolioService.getSummary(1L);
+
+        assertThat(result).isEqualTo(new PortfolioSummaryResponse(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null));
+    }
+
+    @Test
+    @DisplayName("총 평가액: 전일 대비 등락 없이(change1dPct=null) 평가액만 정상 계산")
+    void getSummary_withoutChange() {
+        PortfolioItem item = stubItem(1L, 10L, 5L);
+        ReflectionTestUtils.setField(item, "id", 100L);
+        given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(item));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of(variantMarketPriceView(5L, new BigDecimal("10000"), "KRW", null)));
+
+        PortfolioSummaryResponse result = portfolioService.getSummary(1L);
+
+        // 전일가도 시세와 동일(10000.00)해서 등락은 0이지만, 나눗셈을 거치는 경로라 스케일이 0.00으로 남는다.
+        assertThat(result).isEqualTo(new PortfolioSummaryResponse(
+                new BigDecimal("10000"), BigDecimal.ZERO, new BigDecimal("0.00"), "KRW"));
+    }
+
+    @Test
+    @DisplayName("총 평가액: change1dPct 반영해 전일 대비 등락액·등락률 계산")
+    void getSummary_withPositiveChange() {
+        PortfolioItem item = PortfolioItem.builder()
+                .userId(1L)
+                .cardId(10L)
+                .variantId(5L)
+                .quantity(2)
+                .acquiredPrice(50000)
+                .acquiredAt(LocalDateTime.now())
+                .build();
+        ReflectionTestUtils.setField(item, "id", 100L);
+        given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(item));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of(variantMarketPriceView(5L, new BigDecimal("10000"), "KRW", new BigDecimal("25"))));
+
+        PortfolioSummaryResponse result = portfolioService.getSummary(1L);
+
+        // market=10000, qty=2 → totalValue=20000 / 전일가=10000/1.25=8000 → previousValue=16000
+        // changeAmount=4000, changeRate=4000/16000*100=25.00
+        assertThat(result).isEqualTo(new PortfolioSummaryResponse(
+                new BigDecimal("20000"), new BigDecimal("4000"), new BigDecimal("25.00"), "KRW"));
     }
 }

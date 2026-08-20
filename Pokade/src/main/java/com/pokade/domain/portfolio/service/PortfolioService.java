@@ -8,6 +8,7 @@ import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemUpdateRequest;
+import com.pokade.domain.portfolio.dto.PortfolioSummaryResponse;
 import com.pokade.domain.portfolio.entity.PortfolioItem;
 import com.pokade.domain.portfolio.repository.PortfolioItemRepository;
 import com.pokade.global.exception.BusinessException;
@@ -17,8 +18,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -91,6 +95,87 @@ public class PortfolioService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_ITEM_NOT_FOUND));
 
         portfolioItemRepository.delete(item);
+    }
+
+    // FR-PORT-02: 시세 없는 항목은 평가액 계산에서 제외한다(현재가를 모르면 전일가도 추정할 수 없음).
+    // 전일가는 getGradeChart와 동일한 방식으로 change_1d_pct를 거슬러 올라가 추정한다(체결 이력 기반이 아닌 근사치).
+    public PortfolioSummaryResponse getSummary(Long userId) {
+        List<PortfolioItem> items = portfolioItemRepository.findByUserIdOrderByIdDesc(userId);
+        if (items.isEmpty()) {
+            return new PortfolioSummaryResponse(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null);
+        }
+
+        Map<Long, Long> variantIdByItemId = resolveVariantIdsByItemId(items);
+        Set<Long> variantIds = Set.copyOf(variantIdByItemId.values());
+
+        Map<Long, CardPriceRepository.VariantMarketPriceView> priceMap = variantIds.isEmpty()
+                ? Map.of()
+                : cardPriceRepository.findMarketPricesByVariantIds(
+                        new ArrayList<>(variantIds), RAW_PRICE_TYPE, EMPTY_GRADE, EMPTY_COMPANY)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                CardPriceRepository.VariantMarketPriceView::getVariantId, v -> v));
+
+        BigDecimal totalValue = BigDecimal.ZERO;
+        BigDecimal previousValue = BigDecimal.ZERO;
+        String currency = null;
+
+        for (PortfolioItem item : items) {
+            Long variantId = variantIdByItemId.get(item.getId());
+            CardPriceRepository.VariantMarketPriceView price = variantId != null ? priceMap.get(variantId) : null;
+            if (price == null || price.getMarket() == null) {
+                continue;
+            }
+
+            BigDecimal quantity = BigDecimal.valueOf(item.getQuantity());
+            totalValue = totalValue.add(price.getMarket().multiply(quantity));
+            if (currency == null) {
+                currency = price.getCurrency();
+            }
+
+            BigDecimal change1dPct = price.getChange1dPct();
+            BigDecimal divisor = change1dPct == null
+                    ? BigDecimal.ONE
+                    : BigDecimal.ONE.add(change1dPct.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
+            BigDecimal previousUnitPrice = divisor.signum() == 0
+                    ? price.getMarket()
+                    : price.getMarket().divide(divisor, 2, RoundingMode.HALF_UP);
+            previousValue = previousValue.add(previousUnitPrice.multiply(quantity));
+        }
+
+        BigDecimal changeAmount = totalValue.subtract(previousValue).setScale(0, RoundingMode.HALF_UP);
+        BigDecimal changeRate = previousValue.signum() == 0
+                ? BigDecimal.ZERO
+                : changeAmount.divide(previousValue, 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100))
+                        .setScale(2, RoundingMode.HALF_UP);
+
+        return new PortfolioSummaryResponse(totalValue.setScale(0, RoundingMode.HALF_UP), changeAmount, changeRate, currency);
+    }
+
+    // variantId가 명시된 항목은 그대로, null인 항목은 카드의 대표 변형으로 일괄 해석한다(enrich()의 변형 해석 로직과 동일한 규칙).
+    private Map<Long, Long> resolveVariantIdsByItemId(List<PortfolioItem> items) {
+        Set<Long> nullVariantCardIds = items.stream()
+                .filter(i -> i.getVariantId() == null)
+                .map(PortfolioItem::getCardId)
+                .collect(Collectors.toSet());
+
+        Map<Long, Long> primaryVariantByCard = nullVariantCardIds.isEmpty()
+                ? Map.of()
+                : cardVariantRepository.findPrimaryVariantIdsByCardIds(new ArrayList<>(nullVariantCardIds))
+                        .stream()
+                        .collect(Collectors.toMap(
+                                CardVariantRepository.PrimaryVariantIdView::getCardId,
+                                CardVariantRepository.PrimaryVariantIdView::getVariantId));
+
+        Map<Long, Long> resolved = new HashMap<>();
+        for (PortfolioItem item : items) {
+            Long variantId = item.getVariantId() != null ? item.getVariantId() : primaryVariantByCard.get(item.getCardId());
+            if (variantId != null) {
+                resolved.put(item.getId(), variantId);
+            }
+        }
+        return resolved;
     }
 
     /**
