@@ -29,7 +29,7 @@ class WatchlistTargetPriceNoticeProcessorTest {
     @Mock WatchlistRepository watchlistRepository;
     @Mock PriceTradeStatsRepository priceTradeStatsRepository;
     @Mock NotificationService notificationService;
-    @Mock WatchlistService watchlistService;
+    @Mock WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator;
     @InjectMocks WatchlistTargetPriceNoticeProcessor processor;
 
     private record PriceRange(Long cardId, Integer minPrice, Integer maxPrice)
@@ -58,15 +58,15 @@ class WatchlistTargetPriceNoticeProcessorTest {
         Card card = Card.builder().id(10L).name("리자몽").build();
 
         PriceRange allTimeRange = new PriceRange(10L, 800, 1200);
-        given(watchlistService.resolveReachedTargetPrice(watchlist, allTimeRange)).willReturn(1000);
+        given(watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, allTimeRange)).willReturn(1000);
 
         PriceRange sinceRegistration = new PriceRange(10L, 900, 1100);
         given(priceTradeStatsRepository.findPriceRangesByCardIdsSince(
                 eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED), any()))
                 .willReturn(List.of(sinceRegistration));
-        given(watchlistService.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
+        given(watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
         given(watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId())).willReturn(1);
-        given(watchlistService.resolveCardDisplayName(card)).willReturn("리자몽");
+        given(watchlistTargetPriceEvaluator.resolveCardDisplayName(card)).willReturn("리자몽");
 
         processor.process(1L, card, allTimeRange);
 
@@ -82,13 +82,13 @@ class WatchlistTargetPriceNoticeProcessorTest {
         Card card = Card.builder().id(10L).name("리자몽").build();
 
         PriceRange allTimeRange = new PriceRange(10L, 800, 1200);
-        given(watchlistService.resolveReachedTargetPrice(watchlist, allTimeRange)).willReturn(1000);
+        given(watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, allTimeRange)).willReturn(1000);
 
         PriceRange sinceRegistration = new PriceRange(10L, 900, 1100);
         given(priceTradeStatsRepository.findPriceRangesByCardIdsSince(
                 eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED), any()))
                 .willReturn(List.of(sinceRegistration));
-        given(watchlistService.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
+        given(watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
         given(watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId())).willReturn(0);
 
         processor.process(1L, card, allTimeRange);
@@ -105,13 +105,13 @@ class WatchlistTargetPriceNoticeProcessorTest {
 
         // 전체 기간 기준으로는 후보로 걸러짐(1차 통과)
         PriceRange allTimeRange = new PriceRange(10L, 800, 1200);
-        given(watchlistService.resolveReachedTargetPrice(watchlist, allTimeRange)).willReturn(1000);
+        given(watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, allTimeRange)).willReturn(1000);
 
         // 등록 이후로 좁히면 체결 이력 없음 -> 2차 확인에서 탈락
         given(priceTradeStatsRepository.findPriceRangesByCardIdsSince(
                 eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED), any()))
                 .willReturn(List.of());
-        given(watchlistService.resolveReachedTargetPrice(watchlist, null)).willReturn(null);
+        given(watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, null)).willReturn(null);
 
         processor.process(1L, card, allTimeRange);
 
