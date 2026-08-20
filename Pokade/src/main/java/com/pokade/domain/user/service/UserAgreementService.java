@@ -34,4 +34,12 @@ public class UserAgreementService {
                 .map(UserAgreement::isAgreed)
                 .orElse(false);
     }
+
+    // 마케팅 수신 동의를 변경한다 덮어쓰지 않고 새 행으로 쌓아 이력을 남긴다.
+    @Transactional
+    public void changeMarketing(Long userId, boolean agreed) {
+        userAgreementRepository.save(
+                UserAgreement.record(userId, AgreementType.MARKETING, agreed, LocalDateTime.now())
+        );
+    }
 }
