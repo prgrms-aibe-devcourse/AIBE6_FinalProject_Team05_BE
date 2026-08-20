@@ -8,6 +8,7 @@ import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.watchlist.dto.WatchlistCountResponse;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
@@ -27,9 +28,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
@@ -669,5 +672,59 @@ class WatchlistServiceTest {
         watchlistService.deleteWatchlist(1L, 1L);
 
         then(watchlistRepository).should().delete(target);
+    }
+
+    // ===== 관심수(워치리스트 등록 수) 배치 조회 =====
+
+    private record CountView(Long cardId, Long count) implements WatchlistRepository.WatchlistCardCountView {
+        public Long getCardId() { return cardId; }
+        public Long getCount() { return count; }
+    }
+
+    @Test
+    @DisplayName("관심수: cardIds가 null이면 INVALID_INPUT")
+    void getWatchlistCounts_nullCardIds() {
+        assertThatThrownBy(() -> watchlistService.getWatchlistCounts(null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        then(watchlistRepository).should(never()).countGroupedByCardIdIn(any());
+    }
+
+    @Test
+    @DisplayName("관심수: cardIds가 빈 리스트면 INVALID_INPUT")
+    void getWatchlistCounts_emptyCardIds() {
+        assertThatThrownBy(() -> watchlistService.getWatchlistCounts(List.of()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        then(watchlistRepository).should(never()).countGroupedByCardIdIn(any());
+    }
+
+    @Test
+    @DisplayName("관심수: 상한(100개)을 초과하면 INVALID_INPUT")
+    void getWatchlistCounts_tooManyCardIds() {
+        List<Long> tooMany = LongStream.rangeClosed(1, 101).boxed().toList();
+
+        assertThatThrownBy(() -> watchlistService.getWatchlistCounts(tooMany))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        then(watchlistRepository).should(never()).countGroupedByCardIdIn(any());
+    }
+
+    @Test
+    @DisplayName("관심수: 등록이 없는 카드는 0으로 채워지고, repository는 정확히 1번만 호출된다(N+1 방지)")
+    void getWatchlistCounts_zeroFillsMissingCardsAndBatchesOnce() {
+        // cardId 10은 중복 입력 - distinct 처리되어 실제 조회에는 (10, 20, 30) 3건만 나가야 한다.
+        // 등록이 하나도 없는 카드(20, 30)는 GROUP BY 결과에 행 자체가 없으므로 스텁에서도 제외한다.
+        given(watchlistRepository.countGroupedByCardIdIn(List.of(10L, 20L, 30L)))
+                .willReturn(List.of(new CountView(10L, 3L)));
+
+        List<WatchlistCountResponse> result = watchlistService.getWatchlistCounts(List.of(10L, 20L, 10L, 30L));
+
+        assertThat(result).extracting(WatchlistCountResponse::cardId, WatchlistCountResponse::count)
+                .containsExactly(
+                        tuple(10L, 3L),
+                        tuple(20L, 0L),
+                        tuple(30L, 0L));
+        then(watchlistRepository).should(times(1)).countGroupedByCardIdIn(any());
     }
 }

@@ -3,6 +3,7 @@ package com.pokade.domain.watchlist.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.auth.service.OAuth2LoginService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.watchlist.dto.WatchlistCountResponse;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
@@ -172,6 +173,40 @@ class WatchlistControllerTest {
                 .andExpect(jsonPath("$.data[0].currentPrice.sellPrice").value(8000))
                 .andExpect(jsonPath("$.data[0].changeRate").value(3.25))
                 .andExpect(jsonPath("$.data[0].targetReached").value(true));
+    }
+
+    @Test
+    void 관심수_조회에_성공하면_200과_카드별_등록수를_반환한다() throws Exception {
+        given(watchlistService.getWatchlistCounts(List.of(1L, 2L)))
+                .willReturn(List.of(new WatchlistCountResponse(1L, 3L), new WatchlistCountResponse(2L, 0L)));
+
+        mockMvc.perform(get("/api/watchlist/counts")
+                        .param("cardIds", "1,2")
+                        .with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].cardId").value(1L))
+                .andExpect(jsonPath("$.data[0].count").value(3))
+                .andExpect(jsonPath("$.data[1].cardId").value(2L))
+                .andExpect(jsonPath("$.data[1].count").value(0));
+    }
+
+    @Test
+    void 관심수_조회시_cardIds가_없으면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/watchlist/counts").with(userId(100L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 관심수_조회시_상한을_초과하면_400을_반환한다() throws Exception {
+        given(watchlistService.getWatchlistCounts(List.of(1L, 2L)))
+                .willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최대 100개까지 지정할 수 있습니다."));
+
+        mockMvc.perform(get("/api/watchlist/counts")
+                        .param("cardIds", "1,2")
+                        .with(userId(100L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }
 
     @Test

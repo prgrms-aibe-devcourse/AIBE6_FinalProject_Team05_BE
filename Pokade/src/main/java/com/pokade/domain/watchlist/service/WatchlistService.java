@@ -7,6 +7,7 @@ import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.watchlist.dto.WatchlistCountResponse;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
@@ -33,6 +34,8 @@ import java.util.stream.Collectors;
 public class WatchlistService {
 
     private static final long WATCHLIST_LIMIT = 20;
+    // CardQueryService.MAX_FILTER_VALUES와 같은 취지 - 한 번에 조회 가능한 카드 수 상한을 둬서 과도한 IN절을 막는다.
+    private static final int MAX_COUNT_CARD_IDS = 100;
 
     private final WatchlistRepository watchlistRepository;
     private final PriceService priceService;
@@ -173,6 +176,28 @@ public class WatchlistService {
         if (targetBuyPrice == null && targetSellPrice == null) {
             throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
         }
+    }
+
+    // 카드별 관심수(워치리스트 등록 수) 배치 조회 - 카드 수와 무관하게 쿼리 1회로 처리한다(getWatchlist()의
+    // IN절 + Map 그룹핑 패턴과 동일). 등록이 하나도 없는 카드는 응답에서 제외되지 않고 0으로 채워진다.
+    public List<WatchlistCountResponse> getWatchlistCounts(List<Long> cardIds) {
+        if (cardIds == null || cardIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최소 1개 이상 지정해야 합니다.");
+        }
+        List<Long> distinctCardIds = cardIds.stream().distinct().toList();
+        if (distinctCardIds.size() > MAX_COUNT_CARD_IDS) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "cardIds는 최대 " + MAX_COUNT_CARD_IDS + "개까지 지정할 수 있습니다.");
+        }
+
+        Map<Long, Long> countByCardId = watchlistRepository.countGroupedByCardIdIn(distinctCardIds).stream()
+                .collect(Collectors.toMap(
+                        WatchlistRepository.WatchlistCardCountView::getCardId,
+                        WatchlistRepository.WatchlistCardCountView::getCount));
+
+        return distinctCardIds.stream()
+                .map(cardId -> new WatchlistCountResponse(cardId, countByCardId.getOrDefault(cardId, 0L)))
+                .toList();
     }
 
     @Transactional
