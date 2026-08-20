@@ -130,7 +130,6 @@ class UserOptimisticLockTest extends AbstractIntegrationTest {
                 .email(email).password("ENCODED_PW")
                 .nickname(nickname).role(Role.USER).provider(Provider.LOCAL)
                 .status(UserStatus.ACTIVE)
-                .termsAgreedAt(LocalDateTime.now())
                 .pointBalance(0)
                 .build();
         u.requestWithdrawal(LocalDateTime.now().minusDays(8));
