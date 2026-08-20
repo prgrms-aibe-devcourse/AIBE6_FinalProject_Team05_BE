@@ -5,10 +5,11 @@
 -- 배포 담당자가 psql로 수동 1회 실행한다.
 --
 -- 실행 시점: 새 애플리케이션 버전을 배포하기 "직전".
---   - 이 스크립트는 테이블 생성과 데이터 이관뿐이라 전부 "추가"다. 구버전 앱은 이 테이블을
---     모르지만 존재 자체가 무해하므로 먼저 실행해도 계속 동작한다.
---   - users의 옛 컬럼 제거는 여기 넣지 않는다. 구버전 앱이 그 컬럼을 요구하므로 배포 전에
---     지우면 재기동 시 validate에서 죽는다. 제거는 배포 "직후" V4로 분리했다.
+--   - 이 스크립트를 돌리고 나면 구버전과 신버전이 같은 스키마에서 함께 동작한다.
+--     구버전은 terms_agreed_at에 계속 값을 넣고, 신버전은 그 컬럼을 매핑하지 않아 NULL로 남긴다.
+--   - users의 옛 컬럼 제거는 여기 넣지 않는다. 배포 전에 지우면 아직 도는 구버전 앱이
+--     그 컬럼을 요구해 재기동 시 validate에서 죽고, 배포 실패 시 롤백 경로도 막힌다.
+--     제거는 배포가 안정된 뒤 V4로 따로 돌린다(급하지 않다).
 
 -- 1) 동의 이력 테이블. 항목별 최신 행이 현재 상태이고, 철회도 agreed=false인 새 행으로 남긴다.
 CREATE TABLE IF NOT EXISTS user_agreements (
@@ -35,3 +36,8 @@ FROM users u
 INSERT INTO user_agreements (user_id, type, agreed, agreed_at, version)
 SELECT u.id, 'MARKETING', u.marketing_opt_in, u.terms_agreed_at, 'legacy'
 FROM users u;
+
+-- 3) 신버전 엔티티는 terms_agreed_at을 매핑하지 않으므로 INSERT에 값을 넣지 않는다.
+--    NOT NULL을 풀지 않으면 신버전 배포 직후부터 V4를 돌릴 때까지 회원가입이 제약 위반으로 실패한다.
+--    (marketing_opt_in은 DEFAULT FALSE가 있어 그대로 둬도 무방하다.)
+ALTER TABLE users ALTER COLUMN terms_agreed_at DROP NOT NULL;
