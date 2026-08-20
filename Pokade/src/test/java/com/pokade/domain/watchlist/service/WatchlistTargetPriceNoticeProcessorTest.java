@@ -66,6 +66,7 @@ class WatchlistTargetPriceNoticeProcessorTest {
                 .willReturn(List.of(sinceRegistration));
         given(watchlistService.resolveReachedTargetPrice(watchlist, sinceRegistration)).willReturn(1000);
         given(watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId())).willReturn(1);
+        given(watchlistService.resolveCardDisplayName(card)).willReturn("리자몽");
 
         processor.process(1L, card, allTimeRange);
 

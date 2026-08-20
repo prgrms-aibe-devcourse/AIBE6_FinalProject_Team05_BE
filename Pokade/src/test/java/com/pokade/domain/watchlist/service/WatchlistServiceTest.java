@@ -22,7 +22,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -225,7 +227,7 @@ class WatchlistServiceTest {
         assertThat(result).isEmpty();
         then(priceService).should(never()).getSummaries(any(), any(), anyBoolean());
         then(cardRepository).should(never()).findAllById(any());
-        then(priceTradeStatsRepository).should(never()).findPriceRangesByCardIds(any(), any(), any());
+        then(priceTradeStatsRepository).should(never()).findPriceRangesByCardIdsSincePerCard(any(), any(), any(), any());
         then(priceService).should(never()).getChangeRates(any());
     }
 
@@ -290,7 +292,7 @@ class WatchlistServiceTest {
         Watchlist watchlist = watchlist(1L, 10L); // targetBuyPrice = 1000
         given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlist));
         given(priceService.getSummaries(eq(List.of(10L)), isNull(), eq(true))).willReturn(List.of());
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED)))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(eq(List.of(10L)), eq(List.of(LocalDateTime.MIN)), isNull(), eq(TradeStatus.COMPLETED)))
                 .willReturn(List.of(new PriceRange(10L, 800, 1200)));
 
         List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
@@ -306,7 +308,7 @@ class WatchlistServiceTest {
         given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlist));
         given(priceService.getSummaries(eq(List.of(10L)), isNull(), eq(true)))
                 .willReturn(List.of(new CardPriceSummaryResponse(10L, 500, null, null, "KRW", null, null)));
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED)))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(eq(List.of(10L)), eq(List.of(LocalDateTime.MIN)), isNull(), eq(TradeStatus.COMPLETED)))
                 .willReturn(List.of(new PriceRange(10L, 300, 9500))); // 과거 한때 9500까지 거래된 적 있음
 
         List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
@@ -320,7 +322,7 @@ class WatchlistServiceTest {
         Watchlist watchlist = watchlist(1L, 10L); // targetBuyPrice = 1000
         given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlist));
         given(priceService.getSummaries(eq(List.of(10L)), isNull(), eq(true))).willReturn(List.of());
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED)))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(eq(List.of(10L)), eq(List.of(LocalDateTime.MIN)), isNull(), eq(TradeStatus.COMPLETED)))
                 .willReturn(List.of(new PriceRange(10L, 1500, 2000)));
 
         List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
@@ -334,12 +336,37 @@ class WatchlistServiceTest {
         Watchlist watchlist = watchlist(1L, 10L);
         given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlist));
         given(priceService.getSummaries(eq(List.of(10L)), isNull(), eq(true))).willReturn(List.of());
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED)))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(eq(List.of(10L)), eq(List.of(LocalDateTime.MIN)), isNull(), eq(TradeStatus.COMPLETED)))
                 .willReturn(List.of());
 
         List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
 
         assertThat(result.get(0).targetReached()).isFalse();
+    }
+
+    // #275: 워치리스트마다 서로 다른 등록(createdAt) 시점이 카드ID와 정확히 같은 순서로 페어링되어
+    // 리포지토리에 전달되는지 검증한다(배치 페어링 파라미터라 순서가 어긋나면 다른 카드의 since를
+    // 잘못 적용하게 됨).
+    @Test
+    @DisplayName("목록 조회: 워치리스트마다 다른 등록 시점(createdAt)이 카드ID와 정확히 페어링되어 전달된다(#275)")
+    void getWatchlist_pairsEachCardWithItsOwnCreatedAt() {
+        Watchlist watchlistA = watchlist(1L, 10L);
+        Watchlist watchlistB = watchlist(1L, 20L);
+        LocalDateTime createdAtA = LocalDateTime.now().minusDays(10);
+        LocalDateTime createdAtB = LocalDateTime.now().minusDays(1);
+        ReflectionTestUtils.setField(watchlistA, "createdAt", createdAtA);
+        ReflectionTestUtils.setField(watchlistB, "createdAt", createdAtB);
+        given(watchlistRepository.findByUserId(1L)).willReturn(List.of(watchlistA, watchlistB));
+        given(priceService.getSummaries(eq(List.of(10L, 20L)), isNull(), eq(true))).willReturn(List.of());
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(
+                eq(List.of(10L, 20L)), eq(List.of(createdAtA, createdAtB)), isNull(), eq(TradeStatus.COMPLETED)))
+                .willReturn(List.of(new PriceRange(10L, 800, 1200)));
+
+        List<WatchlistResponse> result = watchlistService.getWatchlist(1L);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).targetReached()).isTrue();
+        assertThat(result.get(1).targetReached()).isFalse();
     }
 
     @Test
@@ -448,7 +475,7 @@ class WatchlistServiceTest {
     void updateWatchlist_targetReached_reflectsActualPriceRange() {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
 
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
@@ -462,7 +489,7 @@ class WatchlistServiceTest {
     void updateWatchlist_targetReached_falseWhenOutOfRange() {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
 
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(9000, null, null));
@@ -477,7 +504,7 @@ class WatchlistServiceTest {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false(메모리 스냅샷 - 배치가 이미 선점한 상황을 재현)
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
         given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(0);
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
 
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
@@ -493,7 +520,7 @@ class WatchlistServiceTest {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
         given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
         Card card = Card.builder().id(10L).name("리자몽").build();
         given(cardRepository.findById(10L)).willReturn(Optional.of(card));
@@ -511,7 +538,7 @@ class WatchlistServiceTest {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
         target.markAsNotified();
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 800, 1200)));
 
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(1000, null, null));
@@ -528,7 +555,7 @@ class WatchlistServiceTest {
         target.markAsNotified();
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
         given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 800, 1200)));
         Card card = Card.builder().id(10L).name("리자몽").build();
         given(cardRepository.findById(10L)).willReturn(Optional.of(card));
@@ -545,7 +572,7 @@ class WatchlistServiceTest {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
         given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
         Card card = Card.builder().id(10L).name("리자몽").build();
         given(cardRepository.findById(10L)).willReturn(Optional.of(card));
@@ -562,7 +589,7 @@ class WatchlistServiceTest {
         Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, isNotified = false
         given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
         given(watchlistRepository.markAsNotifiedIfNotYet(any())).willReturn(1);
-        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(10L), null, TradeStatus.COMPLETED))
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
                 .willReturn(List.of(new PriceRange(10L, 1800, 2200)));
         given(cardRepository.findById(10L)).willReturn(Optional.empty());
 
@@ -571,6 +598,43 @@ class WatchlistServiceTest {
         assertThat(response.targetReached()).isTrue();
         assertThat(response.isNotified()).isTrue();
         then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+    }
+
+    // #275 버그 재현 테스트: 워치리스트 등록(createdAt) 훨씬 이전에 목표가 범위였다가 지금은 벗어난
+    // 카드에 대해, 등록 시점 이후 범위만 봤을 때는 미도달이어야 한다는 걸 실제 createdAt 값으로 검증한다.
+    // (수정 전 버그: 전체 기간 range를 써서 등록 이전 이력만으로도 "도달"로 잘못 판정됐음)
+    @Test
+    @DisplayName("수정: 등록(createdAt) 시점 이후 범위만 판정에 반영되고, 그 정확한 시점이 리포지토리에 전달된다(#275)")
+    void updateWatchlist_usesActualCreatedAtAsRangeScope() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000
+        LocalDateTime registeredAt = LocalDateTime.now().minusDays(3);
+        ReflectionTestUtils.setField(target, "createdAt", registeredAt);
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        // 등록 이후 범위로 좁히면 목표가(2000)가 그 구간(2500~2700) 밖이라 미도달이어야 한다 -
+        // 등록 이전 전체 기간을 봤다면(버그 재현 시나리오) 과거 저가 이력 때문에 도달로 잘못 나왔을 수 있다.
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(
+                List.of(10L), List.of(registeredAt), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 2500, 2700)));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, null));
+
+        assertThat(response.targetReached()).isFalse();
+        // 옛 방식(전체 기간 findPriceRangesByCardIds)은 더 이상 호출되지 않아야 한다.
+        then(priceTradeStatsRepository).should(never()).findPriceRangesByCardIds(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("수정: createdAt이 null(방어적 케이스)이어도 NPE 없이 LocalDateTime.MIN으로 폴백해서 정상 동작한다(#275)")
+    void updateWatchlist_nullCreatedAt_fallsBackToMinSafely() {
+        Watchlist target = watchlist(1L, 10L); // targetBuyPrice = 1000, createdAt = null(빌더 기본값)
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+        given(priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(
+                List.of(10L), List.of(LocalDateTime.MIN), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(10L, 800, 1200)));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(1000, null, null));
+
+        assertThat(response.targetReached()).isTrue();
     }
 
     // ===== 삭제 =====
