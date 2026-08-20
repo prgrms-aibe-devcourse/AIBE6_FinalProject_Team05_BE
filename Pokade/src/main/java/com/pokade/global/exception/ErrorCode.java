@@ -92,6 +92,8 @@ public enum ErrorCode {
 
     // ===== 포트폴리오 =====
     PORTFOLIO_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "포트폴리오 항목을 찾을 수 없습니다."),
+    PORTFOLIO_PRICE_NOT_FOUND(HttpStatus.NOT_FOUND, "시세 정보가 없어 손익을 계산할 수 없습니다."),
+    PORTFOLIO_ACQUIRED_PRICE_REQUIRED(HttpStatus.BAD_REQUEST, "취득가가 입력되지 않아 손익을 계산할 수 없습니다."),
 
     // ===== Scrydex 동기화 배치 (관리자 트리거) =====
     SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "이미 동기화가 진행 중입니다.");

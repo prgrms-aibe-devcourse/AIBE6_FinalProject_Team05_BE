@@ -6,6 +6,7 @@ import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
+import com.pokade.domain.portfolio.dto.PortfolioItemPnlResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemUpdateRequest;
 import com.pokade.domain.portfolio.dto.PortfolioSummaryResponse;
@@ -151,6 +152,44 @@ public class PortfolioService {
                         .setScale(2, RoundingMode.HALF_UP);
 
         return new PortfolioSummaryResponse(totalValue.setScale(0, RoundingMode.HALF_UP), changeAmount, changeRate, currency);
+    }
+
+    // FR-PORT-05: 취득가(플랫폼 거래로 취득 시 체결가가 그대로 저장됨) 대비 현재 시세로 손익을 계산한다.
+    public PortfolioItemPnlResponse getPnl(Long userId, Long itemId) {
+        PortfolioItem item = portfolioItemRepository.findByIdAndUserId(itemId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_ITEM_NOT_FOUND));
+
+        if (item.getAcquiredPrice() == null) {
+            throw new BusinessException(ErrorCode.PORTFOLIO_ACQUIRED_PRICE_REQUIRED);
+        }
+
+        Long resolvedVariantId = item.getVariantId() != null
+                ? item.getVariantId()
+                : cardVariantRepository.findPrimaryVariantId(item.getCardId()).orElse(null);
+
+        CardPriceRepository.VariantMarketPriceView price = resolvedVariantId != null
+                ? cardPriceRepository.findMarketPricesByVariantIds(
+                        List.of(resolvedVariantId), RAW_PRICE_TYPE, EMPTY_GRADE, EMPTY_COMPANY)
+                        .stream().findFirst().orElse(null)
+                : null;
+
+        if (price == null || price.getMarket() == null) {
+            throw new BusinessException(ErrorCode.PORTFOLIO_PRICE_NOT_FOUND);
+        }
+
+        BigDecimal quantity = BigDecimal.valueOf(item.getQuantity());
+        BigDecimal acquiredTotal = BigDecimal.valueOf(item.getAcquiredPrice()).multiply(quantity);
+        BigDecimal currentTotal = price.getMarket().multiply(quantity);
+        BigDecimal pnlAmount = currentTotal.subtract(acquiredTotal).setScale(0, RoundingMode.HALF_UP);
+        BigDecimal pnlRate = acquiredTotal.signum() == 0
+                ? BigDecimal.ZERO
+                : pnlAmount.divide(acquiredTotal, 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100))
+                        .setScale(2, RoundingMode.HALF_UP);
+
+        return new PortfolioItemPnlResponse(
+                item.getId(), item.getCardId(), item.getQuantity(), item.getAcquiredPrice(),
+                price.getMarket(), price.getCurrency(), pnlAmount, pnlRate);
     }
 
     // variantId가 명시된 항목은 그대로, null인 항목은 카드의 대표 변형으로 일괄 해석한다(enrich()의 변형 해석 로직과 동일한 규칙).

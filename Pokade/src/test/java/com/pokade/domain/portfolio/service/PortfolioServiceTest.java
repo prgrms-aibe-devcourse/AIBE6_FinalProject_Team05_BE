@@ -5,6 +5,7 @@ import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
+import com.pokade.domain.portfolio.dto.PortfolioItemPnlResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemUpdateRequest;
 import com.pokade.domain.portfolio.dto.PortfolioSummaryResponse;
@@ -326,5 +327,107 @@ class PortfolioServiceTest {
         // changeAmount=4000, changeRate=4000/16000*100=25.00
         assertThat(result).isEqualTo(new PortfolioSummaryResponse(
                 new BigDecimal("20000"), new BigDecimal("4000"), new BigDecimal("25.00"), "KRW"));
+    }
+
+    // ===== getPnl =====
+
+    @Test
+    @DisplayName("손익: 본인 항목이 아니면 PORTFOLIO_ITEM_NOT_FOUND")
+    void getPnl_notFound() {
+        given(portfolioItemRepository.findByIdAndUserId(1L, 99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> portfolioService.getPnl(99L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PORTFOLIO_ITEM_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("손익: 취득가가 없으면 PORTFOLIO_ACQUIRED_PRICE_REQUIRED")
+    void getPnl_acquiredPriceMissing() {
+        PortfolioItem item = PortfolioItem.builder()
+                .userId(1L)
+                .cardId(10L)
+                .variantId(5L)
+                .quantity(1)
+                .acquiredPrice(null)
+                .build();
+        given(portfolioItemRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(item));
+
+        assertThatThrownBy(() -> portfolioService.getPnl(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PORTFOLIO_ACQUIRED_PRICE_REQUIRED);
+        then(cardPriceRepository).should(never()).findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("손익: 시세 정보가 없으면 PORTFOLIO_PRICE_NOT_FOUND")
+    void getPnl_priceNotFound() {
+        PortfolioItem item = stubItem(1L, 10L, 5L);
+        given(portfolioItemRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(item));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of());
+
+        assertThatThrownBy(() -> portfolioService.getPnl(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PORTFOLIO_PRICE_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("손익: variantId가 null이고 대표 변형도 없으면 PORTFOLIO_PRICE_NOT_FOUND")
+    void getPnl_noVariant_priceNotFound() {
+        PortfolioItem item = stubItem(1L, 10L, null);
+        given(portfolioItemRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(item));
+        given(cardVariantRepository.findPrimaryVariantId(10L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> portfolioService.getPnl(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PORTFOLIO_PRICE_NOT_FOUND);
+        then(cardPriceRepository).should(never()).findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("손익: 현재 시세가 취득가보다 높으면 이익(+)으로 계산")
+    void getPnl_profit() {
+        PortfolioItem item = PortfolioItem.builder()
+                .userId(1L)
+                .cardId(10L)
+                .variantId(5L)
+                .quantity(2)
+                .acquiredPrice(8000)
+                .acquiredAt(LocalDateTime.now())
+                .build();
+        given(portfolioItemRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(item));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of(variantMarketPriceView(5L, new BigDecimal("10000"), "KRW", null)));
+
+        PortfolioItemPnlResponse result = portfolioService.getPnl(1L, 1L);
+
+        // 취득총액=8000*2=16000, 현재총액=10000*2=20000 → pnlAmount=4000, pnlRate=4000/16000*100=25.00
+        assertThat(result).isEqualTo(new PortfolioItemPnlResponse(
+                null, 10L, 2, 8000, new BigDecimal("10000"), "KRW",
+                new BigDecimal("4000"), new BigDecimal("25.00")));
+    }
+
+    @Test
+    @DisplayName("손익: 현재 시세가 취득가보다 낮으면 손실(-)로 계산")
+    void getPnl_loss() {
+        PortfolioItem item = PortfolioItem.builder()
+                .userId(1L)
+                .cardId(10L)
+                .variantId(5L)
+                .quantity(1)
+                .acquiredPrice(10000)
+                .acquiredAt(LocalDateTime.now())
+                .build();
+        given(portfolioItemRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(item));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of(variantMarketPriceView(5L, new BigDecimal("7500"), "KRW", null)));
+
+        PortfolioItemPnlResponse result = portfolioService.getPnl(1L, 1L);
+
+        // pnlAmount=7500-10000=-2500, pnlRate=-2500/10000*100=-25.00
+        assertThat(result).isEqualTo(new PortfolioItemPnlResponse(
+                null, 10L, 1, 10000, new BigDecimal("7500"), "KRW",
+                new BigDecimal("-2500"), new BigDecimal("-25.00")));
     }
 }

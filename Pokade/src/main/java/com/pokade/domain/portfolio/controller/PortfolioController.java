@@ -1,6 +1,7 @@
 package com.pokade.domain.portfolio.controller;
 
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
+import com.pokade.domain.portfolio.dto.PortfolioItemPnlResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemUpdateRequest;
 import com.pokade.domain.portfolio.dto.PortfolioSummaryResponse;
@@ -47,6 +48,14 @@ public class PortfolioController {
             @AuthenticationPrincipal Long userId
     ) {
         return ApiResponse.ok(portfolioService.getSummary(userId));
+    }
+
+    @GetMapping("/{id}/pnl")
+    public ApiResponse<PortfolioItemPnlResponse> getPnl(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.ok(portfolioService.getPnl(userId, id));
     }
 
     @PutMapping("/{id}")
