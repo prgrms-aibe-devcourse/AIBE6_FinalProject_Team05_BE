@@ -38,6 +38,9 @@ public class Notification {
     @Column(length = 255)
     private String message;
 
+    @Column(name = "card_id")
+    private Long cardId;
+
     @Column(name = "is_read", nullable = false)
     private boolean isRead;
 
@@ -46,10 +49,11 @@ public class Notification {
     private LocalDateTime createdAt;
 
     @Builder
-    public Notification(Long userId, NotificationType type, String message) {
+    public Notification(Long userId, NotificationType type, String message, Long cardId) {
         this.userId = userId;
         this.type = type;
         this.message = message;
+        this.cardId = cardId;
         this.isRead = false;
     }
 
