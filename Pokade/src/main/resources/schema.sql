@@ -139,8 +139,6 @@ CREATE TABLE IF NOT EXISTS users (
     profile_image_url     VARCHAR(255),
     birth_date            DATE,
     phone_number          VARCHAR(20),
-    terms_agreed_at       TIMESTAMP NOT NULL,                  -- 필수약관 동의 시각
-    marketing_opt_in      BOOLEAN NOT NULL DEFAULT FALSE,      -- 선택 동의(마케팅 수신)
     point_balance         INTEGER NOT NULL DEFAULT 0,
     deleted_at            TIMESTAMP,
     withdrawal_requested_at TIMESTAMP,
@@ -356,3 +354,16 @@ CREATE TABLE IF NOT EXISTS inquiry_images (
     image_url    VARCHAR(255) NOT NULL,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 회원 약관 동의 이력. 항목별 최신 행이 현재 상태이고, 철회도 agreed=false인 새 행으로 남긴다.
+CREATE TABLE IF NOT EXISTS user_agreements (
+                                               id        BIGSERIAL PRIMARY KEY,
+                                               user_id   BIGINT      NOT NULL REFERENCES users(id),
+                                               type      VARCHAR(30) NOT NULL,                  -- TERMS_OF_SERVICE / PRIVACY_POLICY / THIRD_PARTY_SHARING / MARKETING
+                                               agreed    BOOLEAN     NOT NULL,
+                                               agreed_at TIMESTAMP   NOT NULL,
+                                               version   VARCHAR(20) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_agreements_user_type
+    ON user_agreements (user_id, type, agreed_at DESC);
