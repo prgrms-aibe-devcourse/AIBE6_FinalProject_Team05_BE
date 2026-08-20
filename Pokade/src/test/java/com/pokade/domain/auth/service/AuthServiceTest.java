@@ -10,6 +10,7 @@ import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.domain.user.service.UserAgreementService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtTokenProvider;
@@ -45,11 +46,13 @@ class AuthServiceTest {
     RefreshTokenStore refreshTokenStore;
     @Mock
     LoginAttemptStore loginAttemptStore;
+    @Mock
+    UserAgreementService userAgreementService;
     @InjectMocks
     AuthService authService;
 
     private SignupRequest request(String email, String pw, String nickname) {
-        return new SignupRequest(email, pw, nickname);
+        return new SignupRequest(email, pw, nickname, true, true, true, false);
     }
 
     private User userWithStatus(String email, UserStatus status) {

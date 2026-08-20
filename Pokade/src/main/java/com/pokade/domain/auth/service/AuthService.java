@@ -7,8 +7,10 @@ import com.pokade.domain.auth.dto.response.SignupResponse;
 import com.pokade.domain.auth.store.LoginAttemptStore;
 import com.pokade.domain.auth.store.RefreshTokenStore;
 import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.entity.type.AgreementType;
 import com.pokade.domain.user.entity.type.UserStatus;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.domain.user.service.UserAgreementService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtTokenProvider;
@@ -18,6 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -29,6 +32,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final LoginAttemptStore loginAttemptStore;
+    private final UserAgreementService userAgreementService;
 
     private String dummyHash;
 
@@ -49,6 +53,13 @@ public class AuthService {
         User user = userRepository.save(
                 User.createLocalUser(request.email(), encodedPassword, request.nickname())
         );
+
+        userAgreementService.recordSignupAgreements(user.getId(), Map.of(
+                AgreementType.TERMS_OF_SERVICE, request.termsOfService(),
+                AgreementType.PRIVACY_POLICY, request.privacyPolicy(),
+                AgreementType.THIRD_PARTY_SHARING, request.thirdPartySharing(),
+                AgreementType.MARKETING, request.marketing()
+        ));
 
         return SignupResponse.from(user);
     }
