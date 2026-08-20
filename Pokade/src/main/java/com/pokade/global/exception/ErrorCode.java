@@ -85,7 +85,12 @@ public enum ErrorCode {
     NOTIFICATION_ALREADY_READ(HttpStatus.BAD_REQUEST, "이미 읽음 처리된 알림입니다."),
 
     // ===== Scrydex 동기화 배치 (관리자 트리거) =====
-    SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "이미 동기화가 진행 중입니다.");
+    SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "이미 동기화가 진행 중입니다."),
+
+    // ===== 포인트 =====
+    INSUFFICIENT_POINT_BALANCE(HttpStatus.PAYMENT_REQUIRED, "포인트 잔액이 부족합니다."),
+    POINT_CHARGE_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "충전 주문을 찾을 수 없습니다."),
+    POINT_CHARGE_ORDER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 충전 주문입니다.");
 
     private final HttpStatus status;
     private final String message;

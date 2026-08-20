@@ -265,7 +265,22 @@ CREATE TABLE IF NOT EXISTS point_transactions (
     amount                    INTEGER NOT NULL,
     balance_after             INTEGER NOT NULL,
     related_grade_result_id   BIGINT REFERENCES grade_results(id),
+    related_trade_id          BIGINT REFERENCES trades(id),     -- 매물 구매 시 포인트 차감 이력용
     created_at                TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- point_transactions가 이미 존재하는 기존 DB는 CREATE TABLE IF NOT EXISTS가 스킵되므로 신규 컬럼을 별도로 추가한다.
+ALTER TABLE point_transactions ADD COLUMN IF NOT EXISTS related_trade_id BIGINT REFERENCES trades(id);
+
+-- 포인트 충전 주문 - 토스페이먼츠 결제창을 띄우기 전에 PENDING으로 먼저 기록해, 승인 콜백에서
+-- 클라이언트가 보낸 금액이 아니라 이 행의 amount를 기준으로 검증한다.
+CREATE TABLE IF NOT EXISTS point_charge_orders (
+    id           BIGSERIAL PRIMARY KEY,
+    order_id     VARCHAR(64) NOT NULL UNIQUE,
+    user_id      BIGINT NOT NULL REFERENCES users(id),
+    amount       INTEGER NOT NULL,
+    status       VARCHAR(20) NOT NULL DEFAULT 'PENDING',   -- PENDING / CONFIRMED / FAILED
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ---------- 5. 워치리스트 / 알림 / 챗봇 ----------
