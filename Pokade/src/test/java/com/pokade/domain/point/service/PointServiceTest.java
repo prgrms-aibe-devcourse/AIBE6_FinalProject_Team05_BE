@@ -106,7 +106,27 @@ class PointServiceTest {
     }
 
     @Test
-    @DisplayName("존재하지 않는 유저에게 charge/use를 호출하면 USER_NOT_FOUND를 던진다")
+    @DisplayName("refund: 이전에 차감된 포인트를 되돌리고 relatedTradeId를 포함한 REFUND 이력을 남긴다")
+    void refund_addsBalanceBackAndSavesHistory() {
+        User user = user(7000);
+        given(userRepository.findByIdWithLock(1L)).willReturn(Optional.of(user));
+
+        int result = pointService.refund(1L, 3000, 42L);
+
+        assertThat(result).isEqualTo(10000);
+        assertThat(user.getPointBalance()).isEqualTo(10000);
+
+        ArgumentCaptor<PointTransaction> captor = ArgumentCaptor.forClass(PointTransaction.class);
+        then(pointTransactionRepository).should().save(captor.capture());
+        PointTransaction saved = captor.getValue();
+        assertThat(saved.getType()).isEqualTo(PointTransactionType.REFUND);
+        assertThat(saved.getAmount()).isEqualTo(3000);
+        assertThat(saved.getBalanceAfter()).isEqualTo(10000);
+        assertThat(saved.getRelatedTradeId()).isEqualTo(42L);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 유저에게 charge/use/refund를 호출하면 USER_NOT_FOUND를 던진다")
     void missingUser_throwsUserNotFound() {
         given(userRepository.findByIdWithLock(999L)).willReturn(Optional.empty());
 
@@ -114,6 +134,9 @@ class PointServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.USER_NOT_FOUND);
         assertThatThrownBy(() -> pointService.use(999L, 1000, null))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.USER_NOT_FOUND);
+        assertThatThrownBy(() -> pointService.refund(999L, 1000, null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.USER_NOT_FOUND);
     }

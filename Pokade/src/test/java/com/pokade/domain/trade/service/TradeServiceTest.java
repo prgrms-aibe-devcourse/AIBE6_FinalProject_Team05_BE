@@ -3,6 +3,7 @@ package com.pokade.domain.trade.service;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.point.service.PointService;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Trade;
@@ -24,7 +25,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
@@ -48,6 +51,9 @@ class TradeServiceTest {
 
     @Mock
     private UserAccessChecker userAccessChecker;
+
+    @Mock
+    private PointService pointService;
 
     @InjectMocks
     private TradeService tradeService;
@@ -103,7 +109,7 @@ class TradeServiceTest {
     }
 
     @Test
-    void 즉시구매시_구매자_판매자_모두_활성이면_거래가_생성된다() {
+    void 즉시구매시_구매자_판매자_모두_활성이면_거래가_생성되고_포인트가_차감된다() {
         Listing listing = tradeOf(100L, 200L).getListing();
         given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
         given(listingRepository.markAsTrading(any())).willReturn(1);
@@ -113,6 +119,23 @@ class TradeServiceTest {
 
         assertThat(response.buyerId()).isEqualTo(200L);
         assertThat(response.status()).isEqualTo(TradeStatus.PENDING);
+        verify(pointService).use(eq(200L), eq(10000), any());
+    }
+
+    @Test
+    void 즉시구매시_포인트_잔액이_부족하면_INSUFFICIENT_POINT_BALANCE_예외가_발생한다() {
+        Listing listing = tradeOf(100L, 200L).getListing();
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        given(listingRepository.markAsTrading(any())).willReturn(1);
+        given(tradeRepository.save(any(Trade.class))).willAnswer(invocation -> invocation.getArgument(0));
+        willThrow(new BusinessException(ErrorCode.INSUFFICIENT_POINT_BALANCE))
+                .given(pointService).use(any(), anyInt(), any());
+
+        assertThatThrownBy(() -> tradeService.createTrade(200L, new TradeCreateRequest(1L)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INSUFFICIENT_POINT_BALANCE);
+
+        verify(paymentRepository, never()).save(any());
     }
 
     @Test
@@ -219,23 +242,25 @@ class TradeServiceTest {
     }
 
     @Test
-    void 구매자가_취소하면_거래상태가_CANCELLED로_바뀐다() {
+    void 구매자가_취소하면_거래상태가_CANCELLED로_바뀌고_포인트가_환불된다() {
         Trade trade = tradeOf(100L, 200L);
         given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
 
         TradeResponse response = tradeService.cancelTrade(200L, 1L);
 
         assertThat(response.status()).isEqualTo(TradeStatus.CANCELLED);
+        verify(pointService).refund(eq(200L), eq(10000), any());
     }
 
     @Test
-    void 판매자가_취소하면_거래상태가_CANCELLED로_바뀐다() {
+    void 판매자가_취소하면_거래상태가_CANCELLED로_바뀌고_구매자에게_포인트가_환불된다() {
         Trade trade = tradeOf(100L, 200L);
         given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
 
         TradeResponse response = tradeService.cancelTrade(100L, 1L);
 
         assertThat(response.status()).isEqualTo(TradeStatus.CANCELLED);
+        verify(pointService).refund(eq(200L), eq(10000), any());
     }
 
     @Test
@@ -258,7 +283,7 @@ class TradeServiceTest {
     }
 
     @Test
-    void 이미_완료된_거래를_취소하면_INVALID_TRADE_STATUS_예외가_발생한다() {
+    void 이미_완료된_거래를_취소하면_INVALID_TRADE_STATUS_예외가_발생하고_환불되지_않는다() {
         Trade trade = deliveredTradeOf(100L, 200L);
         trade.complete();
         given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
@@ -266,6 +291,8 @@ class TradeServiceTest {
         assertThatThrownBy(() -> tradeService.cancelTrade(200L, 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
+
+        verify(pointService, never()).refund(any(), anyInt(), any());
     }
 
     @Test

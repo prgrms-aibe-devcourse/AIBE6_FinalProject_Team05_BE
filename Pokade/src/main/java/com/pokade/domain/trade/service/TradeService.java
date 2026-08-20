@@ -4,6 +4,7 @@ import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.point.service.PointService;
 import com.pokade.domain.trade.dto.MyTradeResponse;
 import com.pokade.domain.trade.dto.MyTradeSearchCondition;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
@@ -39,6 +40,7 @@ public class TradeService {
     private final PaymentRepository paymentRepository;
     private final CardRepository cardRepository;
     private final UserAccessChecker userAccessChecker;
+    private final PointService pointService;
 
     private TradeResponse toResponse(Trade trade) {
         String cardName = cardRepository.findById(trade.getListing().getCardId())
@@ -72,13 +74,16 @@ public class TradeService {
                         .build()
         );
 
-        // TODO: 실제 PG 연동 전까지는 결제가 항상 성공한다고 가정 (에스크로 보류 상태로만 생성)
+        // 포인트 잔액이 부족하면 여기서 BusinessException(INSUFFICIENT_POINT_BALANCE)이 발생하고,
+        // 같은 트랜잭션 안이라 위의 markAsTrading/Trade 저장도 함께 롤백된다.
+        pointService.use(buyerId, trade.getPrice(), trade.getId());
+
         paymentRepository.save(
                 Payment.builder()
                         .trade(trade)
                         .buyerId(buyerId)
                         .amount(trade.getPrice())
-                        .method(PaymentMethod.CARD)
+                        .method(PaymentMethod.POINT)
                         .build()
         );
 
@@ -198,6 +203,10 @@ public class TradeService {
         }
 
         trade.cancel();
+
+        // 거래 생성 시 buyer의 포인트가 이미 차감됐으므로, 취소 성공 시 그만큼 돌려준다.
+        // trade.cancel()이 이미 취소/완료된 거래는 걸러주므로 같은 거래에 대해 두 번 환불될 일은 없다.
+        pointService.refund(trade.getBuyerId(), trade.getPrice(), trade.getId());
 
         return toResponse(trade);
     }

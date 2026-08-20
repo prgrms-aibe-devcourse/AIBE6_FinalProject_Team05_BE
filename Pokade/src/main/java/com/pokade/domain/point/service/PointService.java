@@ -51,6 +51,23 @@ public class PointService {
         return user.getPointBalance();
     }
 
+    // 포인트 환불(거래 취소 등) - 이전에 차감된 포인트를 되돌린다. charge()와 달리 관련 거래 id를 이력에 남긴다.
+    @Transactional
+    public int refund(Long userId, int amount, Long relatedTradeId) {
+        User user = findUserWithLock(userId);
+        user.chargePoints(amount);
+
+        pointTransactionRepository.save(PointTransaction.builder()
+                .userId(userId)
+                .type(PointTransactionType.REFUND)
+                .amount(amount)
+                .balanceAfter(user.getPointBalance())
+                .relatedTradeId(relatedTradeId)
+                .build());
+
+        return user.getPointBalance();
+    }
+
     // 동시 요청이 같은 유저의 잔액을 함께 읽고-갱신해도 갱신유실/초과차감이 없도록 비관적 쓰기 락으로 조회한다.
     private User findUserWithLock(Long userId) {
         return userRepository.findByIdWithLock(userId)
