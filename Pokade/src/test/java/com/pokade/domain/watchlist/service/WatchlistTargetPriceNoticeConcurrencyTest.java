@@ -103,7 +103,7 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
         given(priceTradeStatsRepository.findPriceRangesByCardIds(any(), any(), any())).willReturn(List.of(range));
         given(priceTradeStatsRepository.findPriceRangesByCardIdsSince(any(), any(), any(), any())).willReturn(List.of(range));
 
-        NotificationService notificationService = new NotificationService(notificationRepository, new SseEmitterStore(), event -> { });
+        NotificationService notificationService = new NotificationService(notificationRepository, cardRepository, new SseEmitterStore(), event -> { });
         WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator = new WatchlistTargetPriceEvaluator(
                 watchlistRepository, cardRepository, notificationService, mock(CardNameKoResolver.class));
         WatchlistTargetPriceNoticeProcessor processor = new WatchlistTargetPriceNoticeProcessor(

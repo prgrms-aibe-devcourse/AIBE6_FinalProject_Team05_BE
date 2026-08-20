@@ -146,7 +146,7 @@ class WatchlistServiceTest {
 
         assertThat(response.targetReached()).isTrue();
         assertThat(response.isNotified()).isTrue();
-        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), eq(2000));
+        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), any(Card.class), eq(2000));
     }
 
     @Test
@@ -163,7 +163,7 @@ class WatchlistServiceTest {
 
         assertThat(response.targetReached()).isFalse();
         assertThat(response.isNotified()).isFalse();
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
     }
 
     @Test
@@ -182,7 +182,7 @@ class WatchlistServiceTest {
 
         assertThat(response.targetReached()).isTrue();
         assertThat(response.isNotified()).isTrue();
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
     }
 
     @Test
@@ -506,7 +506,7 @@ class WatchlistServiceTest {
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(9000, null, null));
 
         assertThat(response.targetReached()).isFalse();
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
     }
 
     @Test
@@ -522,7 +522,7 @@ class WatchlistServiceTest {
 
         assertThat(response.targetReached()).isTrue();
         assertThat(response.isNotified()).isFalse();
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
     }
 
     @Test
@@ -540,7 +540,7 @@ class WatchlistServiceTest {
 
         assertThat(response.targetReached()).isTrue();
         assertThat(response.isNotified()).isTrue();
-        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), eq(2000));
+        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), any(Card.class), eq(2000));
     }
 
     @Test
@@ -556,7 +556,7 @@ class WatchlistServiceTest {
 
         assertThat(response.targetReached()).isTrue();
         assertThat(response.isNotified()).isTrue();
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
     }
 
     @Test
@@ -574,7 +574,7 @@ class WatchlistServiceTest {
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(null, null, true));
 
         assertThat(response.isNotified()).isTrue();
-        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), eq(1000));
+        then(notificationService).should().createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), any(Card.class), eq(1000));
     }
 
     @Test
@@ -591,7 +591,7 @@ class WatchlistServiceTest {
         WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(2000, null, true));
 
         assertThat(response.isNotified()).isTrue();
-        then(notificationService).should(times(1)).createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), eq(2000));
+        then(notificationService).should(times(1)).createPriceTargetNotification(any(Watchlist.class), eq("리자몽"), any(Card.class), eq(2000));
     }
 
     @Test
@@ -608,7 +608,7 @@ class WatchlistServiceTest {
 
         assertThat(response.targetReached()).isTrue();
         assertThat(response.isNotified()).isTrue();
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
     }
 
     // #275 버그 재현 테스트: 워치리스트 등록(createdAt) 훨씬 이전에 목표가 범위였다가 지금은 벗어난

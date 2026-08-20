@@ -62,6 +62,6 @@ public class WatchlistTargetPriceNoticeProcessor {
 
         // #275: 카드명 한글화 - WatchlistTargetPriceEvaluator가 가진 CardNameKoResolver 폴백 로직을 재사용한다
         // (즉시 알림 경로인 WatchlistTargetPriceEvaluator.notifyIfTargetAlreadyReached()와 항상 같은 표시명을 쓰도록).
-        notificationService.createPriceTargetNotification(watchlist, watchlistTargetPriceEvaluator.resolveCardDisplayName(card), reachedTargetPrice);
+        notificationService.createPriceTargetNotification(watchlist, watchlistTargetPriceEvaluator.resolveCardDisplayName(card), card, reachedTargetPrice);
     }
 }

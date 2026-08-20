@@ -57,7 +57,7 @@ public class WatchlistTargetPriceEvaluator {
 
     private void notifyIfTargetAlreadyReached(Watchlist watchlist, Integer reachedTargetPrice) {
         cardRepository.findById(watchlist.getCardId())
-                .ifPresent(card -> notificationService.createPriceTargetNotification(watchlist, resolveCardDisplayName(card), reachedTargetPrice));
+                .ifPresent(card -> notificationService.createPriceTargetNotification(watchlist, resolveCardDisplayName(card), card, reachedTargetPrice));
     }
 
     // 알림 문구에 쓸 카드 표시명(#275) - 한글명이 있으면 한글명, 없으면(도감번호 없음/매핑 실패 등) 영문 원본으로

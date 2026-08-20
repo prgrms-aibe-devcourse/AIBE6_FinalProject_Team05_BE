@@ -1,5 +1,7 @@
 package com.pokade.domain.notification.service;
 
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.notification.dto.NotificationResponse;
 import com.pokade.domain.notification.entity.Notification;
 import com.pokade.domain.notification.entity.NotificationType;
@@ -27,7 +29,12 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -46,6 +53,7 @@ public class NotificationService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final NotificationRepository notificationRepository;
+    private final CardRepository cardRepository;
     private final SseEmitterStore sseEmitterStore;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -56,7 +64,24 @@ public class NotificationService {
 
     public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {
         PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
-        return notificationRepository.findByUserId(userId, pageable).map(NotificationResponse::of);
+        Page<Notification> notifications = notificationRepository.findByUserId(userId, pageable);
+
+        // cardId별로 각각 조회하면 페이지당(최대 MAX_PAGE_SIZE건) N+1이 되므로, distinct cardId로 한 번에
+        // 배치 조회한다(WatchlistService.getWatchlist()와 동일한 패턴). cardId가 없는 알림(INQUIRY_HANDLED 등)은
+        // 애초에 이 목록에서 제외되므로 cardById.get(null)이 자연스럽게 null을 반환한다.
+        List<Long> cardIds = notifications.stream()
+                .map(Notification::getCardId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        // Map.of()는 null 키 조회 시 NPE를 던지므로(cardId가 없는 알림에서 cardById.get(null) 호출 시 문제),
+        // 빈 맵 폴백도 null 키 조회가 안전한 Collections.emptyMap()을 쓴다.
+        Map<Long, Card> cardById = cardIds.isEmpty()
+                ? Collections.emptyMap()
+                : cardRepository.findAllById(cardIds).stream()
+                        .collect(Collectors.toMap(Card::getId, Function.identity()));
+
+        return notifications.map(notification -> NotificationResponse.of(notification, cardById.get(notification.getCardId())));
     }
 
     @Transactional
@@ -84,8 +109,10 @@ public class NotificationService {
     }
 
     // 워치리스트 목표가 도달 알림 생성 (reachedTargetPrice: 도달한 것으로 판정된 목표가 - 구매/판매 목표가 중 실제로 도달한 쪽)
+    // card: 호출자(WatchlistTargetPriceEvaluator/WatchlistTargetPriceNoticeProcessor)가 목표가 판정을 위해
+    // 이미 조회해 둔 카드 - 여기서 다시 조회하지 않고 그대로 재사용해 SSE 즉시 푸시에도 카드 이미지를 채운다.
     @Transactional
-    public void createPriceTargetNotification(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
+    public void createPriceTargetNotification(Watchlist watchlist, String cardName, Card card, Integer reachedTargetPrice) {
         Notification notification = Notification.builder()
                 .userId(watchlist.getUserId())
                 .type(NotificationType.PRICE_TARGET)
@@ -94,7 +121,7 @@ public class NotificationService {
                 .build();
 
         notificationRepository.save(notification);
-        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification));
+        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification, card));
     }
 
     private String buildPriceTargetMessage(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
@@ -115,7 +142,7 @@ public class NotificationService {
                 .build();
 
         notificationRepository.save(notification);
-        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification)));
+        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification, null)));
     }
 
     // 트랜잭션이 없는 컨텍스트(단위 테스트 등)에서도 그대로 실행되도록 fallbackExecution=true.
