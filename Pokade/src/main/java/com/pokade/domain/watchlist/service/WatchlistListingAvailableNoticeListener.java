@@ -30,8 +30,11 @@ import java.util.Objects;
 // 워치리스트 매칭 시에는 양쪽 null을 실제 대표 variant ID로 치환해서 비교한다 - 그대로 null==null로만
 // 비교하면 "대표 변형에 관심 있다"고 등록한 워치리스트가 구체적 variantId로 올라온 재입고 매물을 놓친다.
 //
+// listingNotified 리셋(매물이 다시 소진되면 다음 재입고 때 또 알릴 수 있게 false로 되돌리는 것)은 이
+// 리스너가 아니라 별도 배치(WatchlistListingNotifiedResetService, #300 후속)가 담당한다 - 매물이 ACTIVE를
+// 벗어나는 지점이 listing/trade/admin 3개 도메인에 흩어져 있어 이벤트 기반보다 배치가 결합이 적다.
+//
 // 스코프 제한(이번 범위에서 의도적으로 제외):
-// - 재알림 리셋 없음 - listingNotified는 한 번 true가 되면 매물이 다시 소진돼도 리셋되지 않는다.
 // - 같은 카드로 두 매물이 거의 동시에 등록되는 TOCTOU 경합(둘 다 count==1로 볼 수 있음)은 감내한다.
 // - "유일한 활성 매물" count는 variant_id 리터럴 값 기준이라, null-variant 매물과 명시적 대표-variant
 //   매물이 동시에 존재하는 드문 경우 실제보다 낮게 잡힐 수 있다(불필요한 알림이 한 번 더 갈 수 있는

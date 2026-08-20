@@ -16,6 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.card.support.PokedexKoNameCache;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
+import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.service.ListingService;
 import com.pokade.domain.notification.entity.Notification;
@@ -45,11 +46,15 @@ import jakarta.persistence.EntityManager;
 @DataJpaTest
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({ListingService.class, WatchlistListingAvailableNoticeListener.class, NotificationService.class,
-        CardNameKoResolver.class, PokedexKoNameCache.class, UserAccessGuard.class, SseEmitterStore.class})
+        CardNameKoResolver.class, PokedexKoNameCache.class, UserAccessGuard.class, SseEmitterStore.class,
+        WatchlistListingNotifiedResetService.class, WatchlistListingNotifiedResetProcessor.class})
 class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private ListingService listingService;
+
+    @Autowired
+    private WatchlistListingNotifiedResetService watchlistListingNotifiedResetService;
 
     @Autowired
     private WatchlistRepository watchlistRepository;
@@ -189,6 +194,34 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
 
         assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId))
                 .extracting(Notification::getType).contains(NotificationType.LISTING_AVAILABLE);
+        assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isTrue();
+    }
+
+    @Test
+    void 매물이_취소되고_리셋_배치가_돌면_다음_재입고_때_또_알림이_간다() {
+        Long sellerId = persistActiveUser("listing-notice-seller5@test.com");
+        Long watcherId = persistActiveUser("listing-notice-watcher5@test.com");
+        Long cardId = persistCard("listing-notice-card-5", "Charizard");
+        Long watchlistId = persistWatchlist(watcherId, cardId);
+
+        Long listingId = transactionTemplate().execute(status ->
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A)).id());
+        assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isTrue();
+        int notificationCountAfterFirstListing = notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId).size();
+
+        // 판매자가 취소 - 활성 매물이 0개가 된다. 리셋 배치가 돌기 전까지는 listingNotified가 그대로 true다.
+        runInNewTransaction(() -> listingService.deleteListing(sellerId, listingId));
+        assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isTrue();
+
+        watchlistListingNotifiedResetService.resetListingNotifiedIfSoldOut();
+        assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isFalse();
+
+        // 리셋됐으니 재입고 매물 등록 시 다시 알림이 간다.
+        runInNewTransaction(() ->
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 9000, ListingGrade.A)));
+
+        List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId);
+        assertThat(notifications).hasSizeGreaterThan(notificationCountAfterFirstListing);
         assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isTrue();
     }
 }

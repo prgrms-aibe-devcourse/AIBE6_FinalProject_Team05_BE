@@ -44,9 +44,10 @@ public class Watchlist {
     @Column(name = "is_notified", nullable = false)
     private boolean isNotified;
 
-    // #300: 이 카드에 매물이 없다가 새로 생겼을 때 알림을 이미 보냈는지 여부. isNotified(목표가 알림)와
-    // 별개 플래그다 - 한 워치리스트가 두 종류 알림을 독립적으로 받을 수 있다. 한 번 true가 되면 이번
-    // 범위에서는 리셋하지 않는다(매물이 다시 사라졌다가 재입고돼도 재알림 없음 - 후속 작업에서 다룰 예정).
+    // #300: 이 카드(variant)에 매물이 없다가 새로 생겼을 때 알림을 이미 보냈는지 여부. isNotified(목표가
+    // 알림)와 별개 플래그다 - 한 워치리스트가 두 종류 알림을 독립적으로 받을 수 있다.
+    // WatchlistListingNotifiedResetProcessor 배치가 매물이 다시 소진된 걸 감지하면 false로 리셋해서
+    // 다음 재입고 때 또 알릴 수 있게 한다.
     @Column(name = "listing_notified", nullable = false)
     private boolean listingNotified;
 
@@ -72,6 +73,12 @@ public class Watchlist {
     // #300: 매물 재입고 알림을 보냈음을 표시한다. markAsNotified()(목표가 알림)와 독립적으로 동작한다.
     public void markAsListingNotified() {
         this.listingNotified = true;
+    }
+
+    // #300: 매물이 다시 소진돼(활성 매물 0개) 다음 재입고 때 또 알릴 수 있도록 리셋한다.
+    // WatchlistListingNotifiedResetProcessor 배치 전용 - resetNotification()(목표가 알림)과는 별개다.
+    public void resetListingNotified() {
+        this.listingNotified = false;
     }
 
     // updateTargetPrices()의 "가격이 실제로 바뀐 경우"에만 리셋하는 조건부 로직과 달리,
