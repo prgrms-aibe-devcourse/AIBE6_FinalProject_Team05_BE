@@ -8,8 +8,6 @@ import com.pokade.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDateTime;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -22,7 +20,6 @@ class UserTest {
                 .role(Role.USER)
                 .provider(Provider.LOCAL)
                 .status(UserStatus.ACTIVE)
-                .termsAgreedAt(LocalDateTime.now())
                 .pointBalance(pointBalance)
                 .build();
     }

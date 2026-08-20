@@ -18,7 +18,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,7 +45,6 @@ class PointServiceTest {
                 .role(Role.USER)
                 .provider(Provider.LOCAL)
                 .status(UserStatus.ACTIVE)
-                .termsAgreedAt(LocalDateTime.now())
                 .pointBalance(pointBalance)
                 .build();
     }

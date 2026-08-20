@@ -155,8 +155,8 @@ class PointServiceConcurrencyTest extends AbstractIntegrationTest {
 
     private Long insertUser(String email, int pointBalance) {
         return ((Number) entityManager.createNativeQuery(
-                        "INSERT INTO users (email, nickname, provider, role, status, terms_agreed_at, point_balance) "
-                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE', now(), :pointBalance) RETURNING id")
+                        "INSERT INTO users (email, nickname, provider, role, status, point_balance) "
+                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE', :pointBalance) RETURNING id")
                 .setParameter("email", email)
                 .setParameter("nickname", email.substring(0, email.indexOf('@')))
                 .setParameter("pointBalance", pointBalance)
