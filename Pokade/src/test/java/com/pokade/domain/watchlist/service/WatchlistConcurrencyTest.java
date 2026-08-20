@@ -51,9 +51,13 @@ class WatchlistConcurrencyTest {
     private EntityManager entityManager;
 
     private WatchlistService newWatchlistService() {
+        CardRepository cardRepository = mock(CardRepository.class);
+        CardNameKoResolver cardNameKoResolver = mock(CardNameKoResolver.class);
+        NotificationService notificationService = mock(NotificationService.class);
+        WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator =
+                new WatchlistTargetPriceEvaluator(watchlistRepository, cardRepository, notificationService, cardNameKoResolver);
         return new WatchlistService(watchlistRepository, mock(PriceService.class),
-                mock(CardRepository.class), mock(PriceTradeStatsRepository.class), mock(CardNameKoResolver.class),
-                mock(NotificationService.class));
+                cardRepository, mock(PriceTradeStatsRepository.class), cardNameKoResolver, watchlistTargetPriceEvaluator);
     }
 
     @Test

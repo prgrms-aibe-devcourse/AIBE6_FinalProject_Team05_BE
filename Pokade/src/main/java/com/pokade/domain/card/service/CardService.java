@@ -7,11 +7,9 @@ import org.springframework.stereotype.Service;
 import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardFacetsResponse;
 import com.pokade.domain.card.dto.CardResponse;
-import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 
 import java.util.List;
-import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,10 +34,6 @@ public class CardService {
     private final CardQueryService cardQueryService;
     private final CardFacetService cardFacetService;
 
-    public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
-        return cardQueryService.search(types, rarities, expansionId, minPrice, maxPrice, sort, pageable);
-    }
-
     public Page<CardResponse> search(List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         return cardQueryService.search(types, rarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
     }
@@ -58,13 +52,5 @@ public class CardService {
 
     public CardFacetsResponse getFacets() {
         return cardFacetService.getFacets();
-    }
-
-    /**
-     * Scrydex external_id로 내부 카드 엔티티를 조회한다. AI 등급진단 등 다른 도메인이
-     * vision/외부 식별 결과를 내부 card_id에 매핑할 때 사용할 수 있도록 제공하는 조회 전용 메서드.
-     */
-    public Optional<Card> findByExternalId(String externalId) {
-        return cardQueryService.findByExternalId(externalId);
     }
 }
