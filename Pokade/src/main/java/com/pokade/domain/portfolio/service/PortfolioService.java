@@ -5,6 +5,8 @@ import com.pokade.domain.card.entity.CardVariant;
 import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.portfolio.dto.PortfolioAnalyticsItemResponse;
+import com.pokade.domain.portfolio.dto.PortfolioAnalyticsResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
 import com.pokade.domain.portfolio.dto.PortfolioItemPnlResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
@@ -23,7 +25,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +41,7 @@ public class PortfolioService {
     private static final String RAW_PRICE_TYPE = "raw";
     private static final String EMPTY_GRADE = "";
     private static final String EMPTY_COMPANY = "";
+    private static final String UNCLASSIFIED = "미분류";
 
     private final PortfolioItemRepository portfolioItemRepository;
     private final CardRepository cardRepository;
@@ -190,6 +195,75 @@ public class PortfolioService {
         return new PortfolioItemPnlResponse(
                 item.getId(), item.getCardId(), item.getQuantity(), item.getAcquiredPrice(),
                 price.getMarket(), price.getCurrency(), pnlAmount, pnlRate);
+    }
+
+    // FR-PORT-06: 평가액(FR-PORT-02와 동일한 raw NM 시세) 기준으로 세트별·레어도별 구성 비율을 계산한다.
+    // 시세 없는 항목은 평가액에 못 넣으므로 getSummary()와 동일하게 계산에서 제외한다.
+    public PortfolioAnalyticsResponse getAnalytics(Long userId) {
+        List<PortfolioItem> items = portfolioItemRepository.findByUserIdOrderByIdDesc(userId);
+        if (items.isEmpty()) {
+            return new PortfolioAnalyticsResponse(List.of(), List.of());
+        }
+
+        Map<Long, Long> variantIdByItemId = resolveVariantIdsByItemId(items);
+        Set<Long> variantIds = Set.copyOf(variantIdByItemId.values());
+
+        Map<Long, CardPriceRepository.VariantMarketPriceView> priceMap = variantIds.isEmpty()
+                ? Map.of()
+                : cardPriceRepository.findMarketPricesByVariantIds(
+                        new ArrayList<>(variantIds), RAW_PRICE_TYPE, EMPTY_GRADE, EMPTY_COMPANY)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                CardPriceRepository.VariantMarketPriceView::getVariantId, v -> v));
+
+        // 시세 있는 항목만 남긴다 - 없는 카드는 cardRepository 조회 대상에서도 제외한다(불필요한 배치 조회 방지).
+        Map<PortfolioItem, BigDecimal> valueByPricedItem = new LinkedHashMap<>();
+        BigDecimal totalValue = BigDecimal.ZERO;
+        for (PortfolioItem item : items) {
+            Long variantId = variantIdByItemId.get(item.getId());
+            CardPriceRepository.VariantMarketPriceView price = variantId != null ? priceMap.get(variantId) : null;
+            if (price == null || price.getMarket() == null) {
+                continue;
+            }
+            BigDecimal value = price.getMarket().multiply(BigDecimal.valueOf(item.getQuantity()));
+            valueByPricedItem.put(item, value);
+            totalValue = totalValue.add(value);
+        }
+
+        if (valueByPricedItem.isEmpty()) {
+            return new PortfolioAnalyticsResponse(List.of(), List.of());
+        }
+
+        Set<Long> cardIds = valueByPricedItem.keySet().stream().map(PortfolioItem::getCardId).collect(Collectors.toSet());
+        Map<Long, Card> cardMap = cardRepository.findAllById(cardIds).stream()
+                .collect(Collectors.toMap(Card::getId, c -> c));
+
+        Map<String, BigDecimal> valueBySet = new LinkedHashMap<>();
+        Map<String, BigDecimal> valueByRarity = new LinkedHashMap<>();
+        for (Map.Entry<PortfolioItem, BigDecimal> entry : valueByPricedItem.entrySet()) {
+            Card card = cardMap.get(entry.getKey().getCardId());
+            String setKey = card != null && card.getSetName() != null ? card.getSetName() : UNCLASSIFIED;
+            String rarityKey = card != null && card.getRarity() != null ? card.getRarity() : UNCLASSIFIED;
+
+            valueBySet.merge(setKey, entry.getValue(), BigDecimal::add);
+            valueByRarity.merge(rarityKey, entry.getValue(), BigDecimal::add);
+        }
+
+        return new PortfolioAnalyticsResponse(
+                toAnalyticsItems(valueBySet, totalValue),
+                toAnalyticsItems(valueByRarity, totalValue));
+    }
+
+    private List<PortfolioAnalyticsItemResponse> toAnalyticsItems(Map<String, BigDecimal> valueByLabel, BigDecimal totalValue) {
+        return valueByLabel.entrySet().stream()
+                .map(entry -> new PortfolioAnalyticsItemResponse(
+                        entry.getKey(),
+                        entry.getValue().setScale(0, RoundingMode.HALF_UP),
+                        entry.getValue().divide(totalValue, 4, RoundingMode.HALF_UP)
+                                .multiply(BigDecimal.valueOf(100))
+                                .setScale(2, RoundingMode.HALF_UP)))
+                .sorted(Comparator.comparing(PortfolioAnalyticsItemResponse::value).reversed())
+                .toList();
     }
 
     // variantId가 명시된 항목은 그대로, null인 항목은 카드의 대표 변형으로 일괄 해석한다(enrich()의 변형 해석 로직과 동일한 규칙).
