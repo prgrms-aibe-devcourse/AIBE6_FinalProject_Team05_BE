@@ -90,6 +90,9 @@ public enum ErrorCode {
     WATCHLIST_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "워치리스트는 최대 20개까지 등록할 수 있습니다."),
     NOTIFICATION_ALREADY_READ(HttpStatus.BAD_REQUEST, "이미 읽음 처리된 알림입니다."),
 
+    // ===== 포트폴리오 =====
+    PORTFOLIO_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "포트폴리오 항목을 찾을 수 없습니다."),
+
     // ===== Scrydex 동기화 배치 (관리자 트리거) =====
     SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "이미 동기화가 진행 중입니다.");
 

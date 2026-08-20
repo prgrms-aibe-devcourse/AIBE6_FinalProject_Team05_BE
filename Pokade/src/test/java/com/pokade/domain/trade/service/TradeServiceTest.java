@@ -3,6 +3,7 @@ package com.pokade.domain.trade.service;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.portfolio.service.PortfolioService;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Trade;
@@ -48,6 +49,9 @@ class TradeServiceTest {
 
     @Mock
     private UserAccessChecker userAccessChecker;
+
+    @Mock
+    private PortfolioService portfolioService;
 
     @InjectMocks
     private TradeService tradeService;

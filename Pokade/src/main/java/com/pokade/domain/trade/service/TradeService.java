@@ -4,6 +4,7 @@ import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.portfolio.service.PortfolioService;
 import com.pokade.domain.trade.dto.MyTradeResponse;
 import com.pokade.domain.trade.dto.MyTradeSearchCondition;
 import com.pokade.domain.trade.dto.TradeCreateRequest;
@@ -39,6 +40,7 @@ public class TradeService {
     private final PaymentRepository paymentRepository;
     private final CardRepository cardRepository;
     private final UserAccessChecker userAccessChecker;
+    private final PortfolioService portfolioService;
 
     private TradeResponse toResponse(Trade trade) {
         String cardName = cardRepository.findById(trade.getListing().getCardId())
@@ -132,6 +134,15 @@ public class TradeService {
         }
 
         trade.complete();
+
+        Listing listing = trade.getListing();
+        portfolioService.addFromCompletedTrade(
+                buyerId,
+                trade.getId(),
+                listing.getCardId(),
+                listing.getVariantId(),
+                trade.getPrice()
+        );
 
         return toResponse(trade);
     }
