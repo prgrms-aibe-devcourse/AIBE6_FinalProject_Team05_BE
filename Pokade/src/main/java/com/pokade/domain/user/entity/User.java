@@ -10,7 +10,6 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -50,12 +49,6 @@ public class User {
 
     @Column(name = "profile_image_url")
     private String profileImageUrl;
-
-    @Column(name = "birth_date")
-    private LocalDate birthDate;
-
-    @Column(name = "phone_number", length = 20)
-    private String phoneNumber;
 
     @Column(name = "point_balance", nullable = false)
     private Integer pointBalance;
@@ -147,8 +140,6 @@ public class User {
         this.email = "deleted_" + anonToken + "@pokade.invalid";
         this.nickname = "deleted_" + anonToken;
         this.password = null;
-        this.phoneNumber = null;
-        this.birthDate = null;
         String previousKey = this.profileImageUrl;
         this.profileImageUrl = null;
         return previousKey;
