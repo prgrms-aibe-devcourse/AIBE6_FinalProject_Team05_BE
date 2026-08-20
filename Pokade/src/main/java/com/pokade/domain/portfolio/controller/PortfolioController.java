@@ -66,6 +66,15 @@ public class PortfolioController {
         return ApiResponse.ok(portfolioService.getAnalytics(userId));
     }
 
+    // FR-AI-04: AI 등급 진단 결과를 바탕으로 도감에 카드 즉시 등록.
+    @PostMapping("/from-grade/{resultId}")
+    public ApiResponse<PortfolioItemResponse> addFromGradeResult(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long resultId
+    ) {
+        return ApiResponse.ok("도감에 등록되었습니다.", portfolioService.addFromGradeResult(userId, resultId));
+    }
+
     @PutMapping("/{id}")
     public ApiResponse<PortfolioItemResponse> updateItem(
             @AuthenticationPrincipal Long userId,

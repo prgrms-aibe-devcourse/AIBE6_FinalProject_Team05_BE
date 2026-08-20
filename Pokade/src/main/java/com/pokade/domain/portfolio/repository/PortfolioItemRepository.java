@@ -13,4 +13,6 @@ public interface PortfolioItemRepository extends JpaRepository<PortfolioItem, Lo
     Optional<PortfolioItem> findByIdAndUserId(Long id, Long userId);
 
     boolean existsByTradeId(Long tradeId);
+
+    boolean existsByGradeResultId(Long gradeResultId);
 }

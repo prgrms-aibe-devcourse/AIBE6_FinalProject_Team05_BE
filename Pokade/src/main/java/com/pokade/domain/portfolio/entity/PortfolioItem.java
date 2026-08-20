@@ -46,9 +46,14 @@ public class PortfolioItem {
     @Column(name = "trade_id", unique = true)
     private Long tradeId;
 
+    // AI 등급 진단 결과로부터 등록된 경우 연결 (UNIQUE 제약) — 동일 진단 결과의 중복 등록 방지용.
+    @Column(name = "grade_result_id", unique = true)
+    private Long gradeResultId;
+
     @Builder
     public PortfolioItem(Long userId, Long cardId, Long variantId, Integer quantity,
-                         Integer acquiredPrice, LocalDateTime acquiredAt, Long tradeId) {
+                         Integer acquiredPrice, LocalDateTime acquiredAt, Long tradeId,
+                         Long gradeResultId) {
         this.userId = userId;
         this.cardId = cardId;
         this.variantId = variantId;
@@ -56,6 +61,7 @@ public class PortfolioItem {
         this.acquiredPrice = acquiredPrice;
         this.acquiredAt = acquiredAt;
         this.tradeId = tradeId;
+        this.gradeResultId = gradeResultId;
     }
 
     public void update(Integer quantity, Integer acquiredPrice, LocalDateTime acquiredAt) {

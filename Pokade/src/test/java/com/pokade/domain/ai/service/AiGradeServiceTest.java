@@ -25,6 +25,7 @@ import com.pokade.domain.ai.entity.GradeResult;
 import com.pokade.domain.ai.entity.GradeStatus;
 import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
+import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import org.springframework.ai.chat.client.ChatClient;
@@ -46,6 +47,9 @@ class AiGradeServiceTest {
 
     @Mock
     private GradeResultImageRepository gradeResultImageRepository;
+
+    @Mock
+    private CardRepository cardRepository;
 
     @InjectMocks
     private AiGradeService aiGradeService;

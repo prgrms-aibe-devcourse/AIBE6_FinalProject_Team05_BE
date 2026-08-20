@@ -1,5 +1,8 @@
 package com.pokade.domain.portfolio.service;
 
+import com.pokade.domain.ai.entity.GradeResult;
+import com.pokade.domain.ai.entity.GradeStatus;
+import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
 import com.pokade.domain.card.repository.CardPriceRepository;
@@ -47,6 +50,7 @@ public class PortfolioService {
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
     private final CardPriceRepository cardPriceRepository;
+    private final GradeResultRepository gradeResultRepository;
     private final UserAccessChecker userAccessChecker;
 
     @Transactional
@@ -313,6 +317,59 @@ public class PortfolioService {
                 .build();
 
         portfolioItemRepository.save(item);
+    }
+
+    // FR-AI-04: AI 등급 진단 결과를 바탕으로 도감에 카드를 등록한다.
+    // 도감 등록은 유저 선택(자동 아님) — 컨트롤러가 이 메서드를 명시적 요청에서만 호출한다.
+    @Transactional
+    public PortfolioItemResponse addFromGradeResult(Long userId, Long resultId) {
+        userAccessChecker.assertWritable(userId);
+
+        GradeResult gradeResult = gradeResultRepository.findById(resultId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GRADE_RESULT_NOT_FOUND));
+
+        if (!gradeResult.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        if (gradeResult.getStatus() != GradeStatus.SUCCESS || gradeResult.getGrade() == null) {
+            throw new BusinessException(ErrorCode.GRADE_RESULT_NOT_REGISTRABLE);
+        }
+
+        if (portfolioItemRepository.existsByGradeResultId(resultId)) {
+            throw new BusinessException(ErrorCode.GRADE_RESULT_ALREADY_REGISTERED);
+        }
+
+        // cardId/variantId는 카드 자동식별 연동 전까지 채워지지 않을 수 있어(현재 Vision은
+        // vision_card_id(externalId)만 반환), 저장된 값이 없으면 그 자리에서 externalId로 해석한다.
+        Long cardId = gradeResult.getCardId();
+        Card card;
+        if (cardId != null) {
+            card = cardRepository.findById(cardId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
+        } else if (gradeResult.getVisionCardId() != null) {
+            card = cardRepository.findByExternalId(gradeResult.getVisionCardId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
+            cardId = card.getId();
+        } else {
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+        }
+
+        Long variantId = gradeResult.getVariantId() != null
+                ? gradeResult.getVariantId()
+                : cardVariantRepository.findPrimaryVariantId(cardId).orElse(null);
+
+        PortfolioItem item = PortfolioItem.builder()
+                .userId(userId)
+                .cardId(cardId)
+                .variantId(variantId)
+                .quantity(1)
+                .acquiredAt(LocalDateTime.now())
+                .gradeResultId(resultId)
+                .build();
+
+        portfolioItemRepository.save(item);
+        return enrichSingle(item, card);
     }
 
     // ─── 내부 enrichment 헬퍼 ────────────────────────────────────────────────

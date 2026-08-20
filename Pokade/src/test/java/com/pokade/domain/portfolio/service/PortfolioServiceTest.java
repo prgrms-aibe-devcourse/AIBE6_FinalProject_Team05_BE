@@ -1,5 +1,8 @@
 package com.pokade.domain.portfolio.service;
 
+import com.pokade.domain.ai.entity.GradeResult;
+import com.pokade.domain.ai.entity.GradeStatus;
+import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
@@ -45,6 +48,7 @@ class PortfolioServiceTest {
     @Mock CardRepository cardRepository;
     @Mock CardVariantRepository cardVariantRepository;
     @Mock CardPriceRepository cardPriceRepository;
+    @Mock GradeResultRepository gradeResultRepository;
     @Mock UserAccessChecker userAccessChecker;
 
     @InjectMocks PortfolioService portfolioService;
@@ -522,5 +526,95 @@ class PortfolioServiceTest {
         // 레어도는 둘 다 "레어도R"로 합산되어 100%
         assertThat(result.byRarity()).containsExactly(
                 new PortfolioAnalyticsItemResponse("레어도R", new BigDecimal("40000"), new BigDecimal("100.00")));
+    }
+
+    // ===== addFromGradeResult =====
+
+    private GradeResult stubGradeResult(Long userId, GradeStatus status, String grade, String visionCardId) {
+        return GradeResult.builder()
+                .userId(userId)
+                .status(status)
+                .grade(grade)
+                .visionCardId(visionCardId)
+                .isFree(true)
+                .pointUsed(0)
+                .retryAllowed(false)
+                .build();
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): 존재하지 않는 결과면 GRADE_RESULT_NOT_FOUND")
+    void addFromGradeResult_notFound() {
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GRADE_RESULT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): 본인 결과가 아니면 ACCESS_DENIED")
+    void addFromGradeResult_accessDenied() {
+        GradeResult gradeResult = stubGradeResult(99L, GradeStatus.SUCCESS, "S", "base1-4");
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
+
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): 품질 실패(QUALITY_FAIL) 결과면 GRADE_RESULT_NOT_REGISTRABLE")
+    void addFromGradeResult_notRegistrable() {
+        GradeResult gradeResult = stubGradeResult(1L, GradeStatus.QUALITY_FAIL, null, null);
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
+
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GRADE_RESULT_NOT_REGISTRABLE);
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): 이미 등록된 결과면 GRADE_RESULT_ALREADY_REGISTERED")
+    void addFromGradeResult_alreadyRegistered() {
+        GradeResult gradeResult = stubGradeResult(1L, GradeStatus.SUCCESS, "S", "base1-4");
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
+        given(portfolioItemRepository.existsByGradeResultId(1L)).willReturn(true);
+
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.GRADE_RESULT_ALREADY_REGISTERED);
+        then(portfolioItemRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): vision_card_id로 카드를 못 찾으면 CARD_NOT_FOUND")
+    void addFromGradeResult_cardNotFound() {
+        GradeResult gradeResult = stubGradeResult(1L, GradeStatus.SUCCESS, "S", "base1-4");
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
+        given(portfolioItemRepository.existsByGradeResultId(1L)).willReturn(false);
+        given(cardRepository.findByExternalId("base1-4")).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.CARD_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): 정상 케이스면 vision_card_id로 카드를 해석해 등록한다")
+    void addFromGradeResult_success() {
+        GradeResult gradeResult = stubGradeResult(1L, GradeStatus.SUCCESS, "S", "base1-4");
+        Card card = stubCard(10L);
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
+        given(portfolioItemRepository.existsByGradeResultId(1L)).willReturn(false);
+        given(cardRepository.findByExternalId("base1-4")).willReturn(Optional.of(card));
+        given(cardVariantRepository.findPrimaryVariantId(10L)).willReturn(Optional.empty());
+        given(portfolioItemRepository.save(any(PortfolioItem.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PortfolioItemResponse response = portfolioService.addFromGradeResult(1L, 1L);
+
+        assertThat(response.cardId()).isEqualTo(10L);
+        assertThat(response.quantity()).isEqualTo(1);
+        then(portfolioItemRepository).should().save(any(PortfolioItem.class));
     }
 }

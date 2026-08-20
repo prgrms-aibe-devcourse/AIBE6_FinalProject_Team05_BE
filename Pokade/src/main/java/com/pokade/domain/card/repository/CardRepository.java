@@ -206,6 +206,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     Optional<Card> findByExternalId(String externalId);
 
+    // AI 등급 진단 이력 응답에서 vision_card_id(externalId)로 카드 정보를 배치 조회할 때 사용(N+1 방지).
+    List<Card> findByExternalIdIn(List<String> externalIds);
+
     /**
      * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 타입 값(원본 텍스트, 다국어 혼재)별로
      * 그 타입을 가진 카드 수를 조회한다(#263). types는 배열 컬럼이라 unnest로 펼친 뒤 카드 단위로
