@@ -16,10 +16,10 @@ import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -48,7 +48,18 @@ class WatchlistServiceTest {
     @Mock PriceTradeStatsRepository priceTradeStatsRepository;
     @Mock CardNameKoResolver cardNameKoResolver;
     @Mock NotificationService notificationService;
-    @InjectMocks WatchlistService watchlistService;
+    WatchlistService watchlistService;
+
+    // 목표가 판정/알림 로직은 WatchlistTargetPriceEvaluator로 분리돼 있지만, 그 판정 결과가 WatchlistService의
+    // 응답(targetReached/isNotified)에 실제로 반영되는지는 이 테스트가 여전히 검증해야 하므로 mock이 아니라
+    // 같은 mock 협력자로 구성한 실제 인스턴스를 주입한다.
+    @BeforeEach
+    void setUp() {
+        WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator =
+                new WatchlistTargetPriceEvaluator(watchlistRepository, cardRepository, notificationService, cardNameKoResolver);
+        watchlistService = new WatchlistService(
+                watchlistRepository, priceService, cardRepository, priceTradeStatsRepository, cardNameKoResolver, watchlistTargetPriceEvaluator);
+    }
 
     private Watchlist watchlist(Long userId, Long cardId) {
         return Watchlist.builder()
