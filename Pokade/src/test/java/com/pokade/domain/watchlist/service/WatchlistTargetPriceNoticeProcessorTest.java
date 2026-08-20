@@ -46,7 +46,7 @@ class WatchlistTargetPriceNoticeProcessorTest {
 
         processor.process(1L, Card.builder().id(10L).name("리자몽").build(), new PriceRange(10L, 800, 1200));
 
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
         then(watchlistRepository).should(never()).markAsNotifiedIfNotYet(any());
     }
 
@@ -71,7 +71,7 @@ class WatchlistTargetPriceNoticeProcessorTest {
         processor.process(1L, card, allTimeRange);
 
         then(watchlistRepository).should().markAsNotifiedIfNotYet(watchlist.getId());
-        then(notificationService).should().createPriceTargetNotification(watchlist, "리자몽", 1000);
+        then(notificationService).should().createPriceTargetNotification(watchlist, "리자몽", card, 1000);
     }
 
     @Test
@@ -93,7 +93,7 @@ class WatchlistTargetPriceNoticeProcessorTest {
 
         processor.process(1L, card, allTimeRange);
 
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
     }
 
     @Test
@@ -115,7 +115,7 @@ class WatchlistTargetPriceNoticeProcessorTest {
 
         processor.process(1L, card, allTimeRange);
 
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
         then(watchlistRepository).should(never()).markAsNotifiedIfNotYet(any());
     }
 
@@ -127,7 +127,7 @@ class WatchlistTargetPriceNoticeProcessorTest {
 
         processor.process(1L, null, new PriceRange(10L, 800, 1200));
 
-        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any());
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
         then(watchlistRepository).should(never()).markAsNotifiedIfNotYet(any());
     }
 }
