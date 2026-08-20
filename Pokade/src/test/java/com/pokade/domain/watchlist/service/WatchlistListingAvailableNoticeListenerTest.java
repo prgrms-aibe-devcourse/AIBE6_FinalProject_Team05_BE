@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
@@ -40,6 +41,9 @@ class WatchlistListingAvailableNoticeListenerTest {
     private CardRepository cardRepository;
 
     @Mock
+    private CardVariantRepository cardVariantRepository;
+
+    @Mock
     private CardNameKoResolver cardNameKoResolver;
 
     @Mock
@@ -49,15 +53,20 @@ class WatchlistListingAvailableNoticeListenerTest {
     private WatchlistListingAvailableNoticeListener listener;
 
     private Watchlist watchlist(Long id, Long cardId) {
-        Watchlist watchlist = Watchlist.builder().userId(id).cardId(cardId).targetBuyPrice(1000).build();
+        return watchlist(id, cardId, null);
+    }
+
+    private Watchlist watchlist(Long id, Long cardId, Long variantId) {
+        Watchlist watchlist = Watchlist.builder()
+                .userId(id).cardId(cardId).variantId(variantId).targetBuyPrice(1000).build();
         org.springframework.test.util.ReflectionTestUtils.setField(watchlist, "id", id);
         return watchlist;
     }
 
     @Test
-    @DisplayName("이미 매물이 있던 카드(count != 1)면 워치리스트 조회 자체를 하지 않는다")
+    @DisplayName("이미 매물이 있던 (카드, variant)면(count != 1) 워치리스트 조회 자체를 하지 않는다")
     void onListingCreated_skipsWhenNotUniqueActiveListing() {
-        given(listingRepository.countByCardIdAndStatus(1L, ListingStatus.ACTIVE)).willReturn(2L);
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, null, ListingStatus.ACTIVE)).willReturn(2L);
 
         listener.onListingCreated(new ListingCreatedEvent(1L, null));
 
@@ -68,7 +77,7 @@ class WatchlistListingAvailableNoticeListenerTest {
     @Test
     @DisplayName("유일한 활성 매물이지만 워치리스트 등록자가 없으면 알림을 만들지 않는다")
     void onListingCreated_noWatchersMeansNoNotification() {
-        given(listingRepository.countByCardIdAndStatus(1L, ListingStatus.ACTIVE)).willReturn(1L);
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, null, ListingStatus.ACTIVE)).willReturn(1L);
         given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L)).willReturn(List.of());
 
         listener.onListingCreated(new ListingCreatedEvent(1L, null));
@@ -82,8 +91,9 @@ class WatchlistListingAvailableNoticeListenerTest {
     void onListingCreated_createsNotificationAndMarksListingNotified() {
         Watchlist w1 = watchlist(10L, 1L);
         Card card = Card.builder().id(1L).name("Charizard").build();
-        given(listingRepository.countByCardIdAndStatus(1L, ListingStatus.ACTIVE)).willReturn(1L);
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, null, ListingStatus.ACTIVE)).willReturn(1L);
         given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L)).willReturn(List.of(w1));
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(Optional.empty());
         given(cardRepository.findById(1L)).willReturn(Optional.of(card));
         given(cardNameKoResolver.resolve(card)).willReturn("리자몽");
         given(watchlistRepository.markListingNotifiedIfNotYet(10L)).willReturn(1);
@@ -99,8 +109,9 @@ class WatchlistListingAvailableNoticeListenerTest {
     void onListingCreated_fallsBackToOriginalNameWhenNoKoreanName() {
         Watchlist w1 = watchlist(10L, 1L);
         Card card = Card.builder().id(1L).name("Charizard").build();
-        given(listingRepository.countByCardIdAndStatus(1L, ListingStatus.ACTIVE)).willReturn(1L);
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, null, ListingStatus.ACTIVE)).willReturn(1L);
         given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L)).willReturn(List.of(w1));
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(Optional.empty());
         given(cardRepository.findById(1L)).willReturn(Optional.of(card));
         given(cardNameKoResolver.resolve(card)).willReturn(null);
         given(watchlistRepository.markListingNotifiedIfNotYet(10L)).willReturn(1);
@@ -115,8 +126,9 @@ class WatchlistListingAvailableNoticeListenerTest {
     void onListingCreated_skipsWhenClaimFails() {
         Watchlist w1 = watchlist(10L, 1L);
         Card card = Card.builder().id(1L).name("Charizard").build();
-        given(listingRepository.countByCardIdAndStatus(1L, ListingStatus.ACTIVE)).willReturn(1L);
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, null, ListingStatus.ACTIVE)).willReturn(1L);
         given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L)).willReturn(List.of(w1));
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(Optional.empty());
         given(cardRepository.findById(1L)).willReturn(Optional.of(card));
         given(cardNameKoResolver.resolve(card)).willReturn("리자몽");
         given(watchlistRepository.markListingNotifiedIfNotYet(10L)).willReturn(0);
@@ -133,8 +145,9 @@ class WatchlistListingAvailableNoticeListenerTest {
         Watchlist w1 = watchlist(10L, 1L);
         Watchlist w2 = watchlist(20L, 1L);
         Card card = Card.builder().id(1L).name("Charizard").build();
-        given(listingRepository.countByCardIdAndStatus(1L, ListingStatus.ACTIVE)).willReturn(1L);
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, null, ListingStatus.ACTIVE)).willReturn(1L);
         given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L)).willReturn(List.of(w1, w2));
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(Optional.empty());
         given(cardRepository.findById(1L)).willReturn(Optional.of(card));
         given(cardNameKoResolver.resolve(card)).willReturn("리자몽");
         given(watchlistRepository.markListingNotifiedIfNotYet(10L)).willReturn(1);
@@ -150,13 +163,73 @@ class WatchlistListingAvailableNoticeListenerTest {
     @DisplayName("카드를 찾을 수 없으면 알림을 만들지 않는다")
     void onListingCreated_skipsWhenCardNotFound() {
         Watchlist w1 = watchlist(10L, 1L);
-        given(listingRepository.countByCardIdAndStatus(1L, ListingStatus.ACTIVE)).willReturn(1L);
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, null, ListingStatus.ACTIVE)).willReturn(1L);
         given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L)).willReturn(List.of(w1));
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(Optional.empty());
         given(cardRepository.findById(1L)).willReturn(Optional.empty());
 
         listener.onListingCreated(new ListingCreatedEvent(1L, null));
 
         then(watchlistRepository).should(never()).markListingNotifiedIfNotYet(any());
         then(notificationService).should(never()).createListingAvailableNotification(any(), any(), any());
+    }
+
+    // ===== #300 후속: variant 단위 판단 =====
+
+    @Test
+    @DisplayName("매물의 variant와 다른 variant를 관심 등록한 워치리스트는 알림 대상에서 제외된다")
+    void onListingCreated_skipsWatcherWatchingDifferentVariant() {
+        Watchlist watchingVariantA = watchlist(10L, 1L, 100L);
+        Watchlist watchingVariantB = watchlist(20L, 1L, 200L);
+        Card card = Card.builder().id(1L).name("Charizard").build();
+        // 이번에 등록된 매물은 variantId=100L(A) - 유일한 활성 매물이라 count는 1.
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, 100L, ListingStatus.ACTIVE)).willReturn(1L);
+        given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L))
+                .willReturn(List.of(watchingVariantA, watchingVariantB));
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(Optional.of(100L));
+        given(cardRepository.findById(1L)).willReturn(Optional.of(card));
+        given(cardNameKoResolver.resolve(card)).willReturn("리자몽");
+        given(watchlistRepository.markListingNotifiedIfNotYet(10L)).willReturn(1);
+
+        listener.onListingCreated(new ListingCreatedEvent(1L, 100L));
+
+        then(notificationService).should().createListingAvailableNotification(eq(watchingVariantA), any(), any());
+        then(notificationService).should(never()).createListingAvailableNotification(eq(watchingVariantB), any(), any());
+        then(watchlistRepository).should(never()).markListingNotifiedIfNotYet(20L);
+    }
+
+    @Test
+    @DisplayName("대표 변형에 관심 등록(variantId=null)한 워치리스트는 실제 대표 variant로 올라온 매물과 매칭된다")
+    void onListingCreated_matchesNullWatcherAgainstResolvedPrimaryVariant() {
+        Watchlist watchingPrimary = watchlist(10L, 1L, null);
+        Card card = Card.builder().id(1L).name("Charizard").build();
+        // 매물은 명시적으로 variantId=100L(대표 variant)로 등록됐다.
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, 100L, ListingStatus.ACTIVE)).willReturn(1L);
+        given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L)).willReturn(List.of(watchingPrimary));
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(Optional.of(100L));
+        given(cardRepository.findById(1L)).willReturn(Optional.of(card));
+        given(cardNameKoResolver.resolve(card)).willReturn("리자몽");
+        given(watchlistRepository.markListingNotifiedIfNotYet(10L)).willReturn(1);
+
+        listener.onListingCreated(new ListingCreatedEvent(1L, 100L));
+
+        then(notificationService).should().createListingAvailableNotification(watchingPrimary, "리자몽", card);
+    }
+
+    @Test
+    @DisplayName("대표 variant 정보 자체가 없으면 variantId가 null인 워치리스트끼리만 매칭된다")
+    void onListingCreated_matchesNullToNullWhenNoPrimaryVariantInfo() {
+        Watchlist watchingNull = watchlist(10L, 1L, null);
+        Card card = Card.builder().id(1L).name("Charizard").build();
+        given(listingRepository.countByCardIdAndVariantIdAndStatus(1L, null, ListingStatus.ACTIVE)).willReturn(1L);
+        given(watchlistRepository.findByCardIdAndListingNotifiedFalse(1L)).willReturn(List.of(watchingNull));
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(Optional.empty());
+        given(cardRepository.findById(1L)).willReturn(Optional.of(card));
+        given(cardNameKoResolver.resolve(card)).willReturn("리자몽");
+        given(watchlistRepository.markListingNotifiedIfNotYet(10L)).willReturn(1);
+
+        listener.onListingCreated(new ListingCreatedEvent(1L, null));
+
+        then(notificationService).should().createListingAvailableNotification(watchingNull, "리자몽", card);
     }
 }

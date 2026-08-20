@@ -89,12 +89,26 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
     }
 
     private Long persistWatchlist(Long userId, Long cardId) {
+        return persistWatchlist(userId, cardId, null);
+    }
+
+    private Long persistWatchlist(Long userId, Long cardId, Long variantId) {
         return transactionTemplate().execute(status -> {
             Watchlist watchlist = Watchlist.builder()
-                    .userId(userId).cardId(cardId).targetBuyPrice(1000).build();
+                    .userId(userId).cardId(cardId).variantId(variantId).targetBuyPrice(1000).build();
             entityManager.persist(watchlist);
             return watchlist.getId();
         });
+    }
+
+    private Long persistVariant(Long cardId, String variantName, boolean primary) {
+        return transactionTemplate().execute(status -> ((Number) entityManager.createNativeQuery(
+                        "INSERT INTO card_variants (card_id, variant_name, is_primary, synced_at) "
+                                + "VALUES (:cardId, :variantName, :primary, now()) RETURNING id")
+                .setParameter("cardId", cardId)
+                .setParameter("variantName", variantName)
+                .setParameter("primary", primary)
+                .getSingleResult()).longValue());
     }
 
     private void runInNewTransaction(Runnable action) {
@@ -151,5 +165,30 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
 
         List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId);
         assertThat(notifications).hasSize(notificationCountAfterFirst);
+    }
+
+    @Test
+    void 다른_variant를_관심등록한_워치리스트에는_재입고_알림이_가지_않는다() {
+        Long sellerId = persistActiveUser("listing-notice-seller4@test.com");
+        Long watcherId = persistActiveUser("listing-notice-watcher4@test.com");
+        Long cardId = persistCard("listing-notice-card-4", "Charizard");
+        Long variantA = persistVariant(cardId, "holo", true);
+        Long variantB = persistVariant(cardId, "normal", false);
+        Long watchlistId = persistWatchlist(watcherId, cardId, variantA);
+
+        // variantB로 매물 등록 - watcherId는 variantA만 관심 등록했으니 알림이 가면 안 된다.
+        runInNewTransaction(() ->
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, variantB, 10000, ListingGrade.A)));
+
+        assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId)).isEmpty();
+        assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isFalse();
+
+        // variantA로 매물 등록 - 이번엔 관심 등록한 variant와 일치하므로 알림이 간다.
+        runInNewTransaction(() ->
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, variantA, 9000, ListingGrade.A)));
+
+        assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId))
+                .extracting(Notification::getType).contains(NotificationType.LISTING_AVAILABLE);
+        assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isTrue();
     }
 }
