@@ -36,4 +36,14 @@ public interface WatchlistRepository extends JpaRepository<Watchlist, Long> {
     @Modifying(flushAutomatically = true)
     @Query("UPDATE Watchlist w SET w.isNotified = true WHERE w.id = :id AND w.isNotified = false")
     int markAsNotifiedIfNotYet(@Param("id") Long id);
+
+    // 카드별 관심수(워치리스트 등록 수) 배치 조회 - 카드 수와 무관하게 쿼리 1회로 처리한다(CardRepository.findGradesByCardIds와 동일한 패턴).
+    // 등록이 하나도 없는 카드는 결과 행 자체가 없으므로, 호출부에서 요청한 cardId 전체에 대해 0으로 채워야 한다.
+    @Query("SELECT w.cardId AS cardId, COUNT(w) AS count FROM Watchlist w WHERE w.cardId IN :cardIds GROUP BY w.cardId")
+    List<WatchlistCardCountView> countGroupedByCardIdIn(@Param("cardIds") List<Long> cardIds);
+
+    interface WatchlistCardCountView {
+        Long getCardId();
+        Long getCount();
+    }
 }

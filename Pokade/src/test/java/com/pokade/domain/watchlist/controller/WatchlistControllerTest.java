@@ -3,6 +3,7 @@ package com.pokade.domain.watchlist.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.auth.service.OAuth2LoginService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.watchlist.dto.WatchlistCountResponse;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
@@ -33,6 +34,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -172,6 +175,52 @@ class WatchlistControllerTest {
                 .andExpect(jsonPath("$.data[0].currentPrice.sellPrice").value(8000))
                 .andExpect(jsonPath("$.data[0].changeRate").value(3.25))
                 .andExpect(jsonPath("$.data[0].targetReached").value(true));
+    }
+
+    @Test
+    void 관심수_조회에_성공하면_200과_카드별_등록수를_반환한다() throws Exception {
+        given(watchlistService.getWatchlistCounts(List.of(1L, 2L)))
+                .willReturn(List.of(new WatchlistCountResponse(1L, 3L), new WatchlistCountResponse(2L, 0L)));
+
+        mockMvc.perform(get("/api/watchlist/counts")
+                        .param("cardIds", "1,2")
+                        .with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].cardId").value(1L))
+                .andExpect(jsonPath("$.data[0].count").value(3))
+                .andExpect(jsonPath("$.data[1].cardId").value(2L))
+                .andExpect(jsonPath("$.data[1].count").value(0));
+    }
+
+    @Test
+    void 관심수_조회시_cardIds가_없으면_400을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/watchlist/counts").with(userId(100L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 관심수_조회시_상한을_초과하면_400을_반환한다() throws Exception {
+        // 소수(예: 2개)만 보내고 서비스가 예외를 던지도록 흉내내면 "쿼리 파라미터 파싱이 실제로 101개를
+        // 만들어내는지"는 검증되지 않는다 - 실제 1~101 cardId를 콤마로 이어 보내고, 서비스에 전달된
+        // 리스트를 캡처해 크기/내용까지 확인한다. 상한(100개) 초과 시 실제로 예외를 던지는 로직 자체는
+        // WatchlistServiceTest.getWatchlistCounts_tooManyCardIds에서 이미 검증한다 - 여기서는 컨트롤러의
+        // 파라미터 바인딩과 예외 -> 400 응답 변환만 확인한다.
+        List<Long> expectedCardIds = LongStream.rangeClosed(1, 101).boxed().toList();
+        String cardIdsParam = expectedCardIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+
+        given(watchlistService.getWatchlistCounts(any()))
+                .willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최대 100개까지 지정할 수 있습니다."));
+
+        mockMvc.perform(get("/api/watchlist/counts")
+                        .param("cardIds", cardIdsParam)
+                        .with(userId(100L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+
+        ArgumentCaptor<List<Long>> cardIdsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(watchlistService).getWatchlistCounts(cardIdsCaptor.capture());
+        assertThat(cardIdsCaptor.getValue()).hasSize(101).containsExactlyElementsOf(expectedCardIds);
     }
 
     @Test
