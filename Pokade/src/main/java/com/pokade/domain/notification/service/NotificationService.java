@@ -9,12 +9,15 @@ import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.web.PageableValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -39,6 +42,9 @@ public class NotificationService {
     // 보내 연결이 유휴 상태로 조기 종료되지 않도록 한다.
     private static final long HEARTBEAT_INTERVAL_MILLIS = 15_000L;
 
+    // #162: 다른 페이징 API(AiGradeService/CardQueryService/ChatService)와 동일한 상한
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final NotificationRepository notificationRepository;
     private final SseEmitterStore sseEmitterStore;
     private final ApplicationEventPublisher eventPublisher;
@@ -48,11 +54,9 @@ public class NotificationService {
     @Autowired(required = false)
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
-    public List<NotificationResponse> getNotifications(Long userId) {
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId)
-                .stream()
-                .map(NotificationResponse::of)
-                .toList();
+    public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {
+        PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
+        return notificationRepository.findByUserId(userId, pageable).map(NotificationResponse::of);
     }
 
     @Transactional
@@ -67,6 +71,16 @@ public class NotificationService {
             throw new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND);
         }
         throw new BusinessException(ErrorCode.NOTIFICATION_ALREADY_READ);
+    }
+
+    // #162: 본인 소유 알림만 삭제 가능 - 조건부 원자적 DELETE(WHERE id=:id AND userId=:userId)가 0건이면
+    // 존재하지 않거나 본인 소유가 아닌 것이므로 구분 없이 NOTIFICATION_NOT_FOUND로 처리한다.
+    @Transactional
+    public void deleteNotification(Long userId, Long notificationId) {
+        int deleted = notificationRepository.deleteByIdAndUserId(notificationId, userId);
+        if (deleted == 0) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND);
+        }
     }
 
     // 워치리스트 목표가 도달 알림 생성 (reachedTargetPrice: 도달한 것으로 판정된 목표가 - 구매/판매 목표가 중 실제로 도달한 쪽)
