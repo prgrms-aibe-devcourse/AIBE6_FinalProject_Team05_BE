@@ -53,6 +53,12 @@ public class CardQueryService {
     private static final int MAX_FILTER_VALUES = 20;
     // 키워드 검색어 상한: cards.name 컬럼 길이(200자)보다 짧게 잡아 과도하게 긴 ILIKE 패턴을 차단.
     private static final int MAX_KEYWORD_LENGTH = 100;
+    // #187: pg_trgm similarity() 유사도 폴백 검색의 최소 점수 - 스파이크 테스트(리자옹→리자몽/리자드 0.33,
+    // 핏카츄→피카츄 0.14, 꼬부리→꼬부기 0.33) 기준으로 시작. 실제 운영에서 노이즈가 많으면 올리는 방향으로 조정.
+    private static final double SIMILARITY_THRESHOLD = 0.14;
+    // #187: 이보다 짧으면 유사도 폴백을 생략한다 - 1글자는 트라이그램 자체가 구분력이 없다(스파이크에서
+    // "리" 한 글자로는 후보 전체가 비슷한 점수로 몰려 무의미했음).
+    private static final int MIN_KEYWORD_LENGTH_FOR_SIMILARITY = 2;
     // 카드 목록/상세 응답에 표시할 등급 값. PSA10/9/8은 감정 등급이라 표시 대상이 아니다.
     // 네이티브 쿼리 IN (:validGrades) 바인드 파라미터로 전달하기 위한 리스트 형태.
     private static final List<String> GRADE_WHITELIST_LIST = List.of("S", "A", "B");
@@ -143,9 +149,19 @@ public class CardQueryService {
         }
         Page<Card> cards = (KoreanTextUtil.isKorean(keyword) || KoreanTextUtil.isChosungOnly(keyword))
                 ? searchByPokedexKoName(keyword, pageable)
-                : cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
+                : searchByName(keyword, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
         return cards.map(card -> toCardResponse(card, gradesByCardId));
+    }
+
+    // 영문 등 이름 검색 - 정확 검색(부분일치)이 0건이고 키워드가 최소 길이 이상일 때만 pg_trgm 유사도
+    // 검색으로 폴백한다(#187). 오타 없는 대다수 검색은 기존 LIKE 부분일치 그대로 동작/성능 유지.
+    private Page<Card> searchByName(String keyword, Pageable pageable) {
+        Page<Card> exact = cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
+        if (exact.getTotalElements() > 0 || keyword.length() < MIN_KEYWORD_LENGTH_FOR_SIMILARITY) {
+            return exact;
+        }
+        return cardRepository.findByNameSimilarTo(keyword, SIMILARITY_THRESHOLD, pageable);
     }
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
@@ -154,9 +170,18 @@ public class CardQueryService {
     // 도감번호가 없는 트레이너/에너지 카드는 이 경로로 검색되지 않는다 - 의도된 한계
     // (PokeAPI 도감번호 매핑 방식의 알려진 제약).
     private Page<Card> searchByPokedexKoName(String keyword, Pageable pageable) {
-        List<PokedexKoName> matches = KoreanTextUtil.isChosungOnly(keyword)
-                ? pokedexKoNameRepository.findByNameKoChosungContaining(keyword)
-                : pokedexKoNameRepository.findByNameKoContaining(keyword);
+        List<PokedexKoName> matches;
+        if (KoreanTextUtil.isChosungOnly(keyword)) {
+            matches = pokedexKoNameRepository.findByNameKoChosungContaining(keyword);
+        } else {
+            matches = pokedexKoNameRepository.findByNameKoContaining(keyword);
+            // 정확 검색(부분일치)이 0건이고 키워드가 최소 길이 이상일 때만 유사도 검색으로 폴백한다(#187).
+            // 초성 검색은 이미 자음 단위 매칭이라 대상에서 제외 - similarity()를 자음 문자열에 쓰는 건
+            // 스파이크로 검증된 시나리오가 아니다.
+            if (matches.isEmpty() && keyword.length() >= MIN_KEYWORD_LENGTH_FOR_SIMILARITY) {
+                matches = pokedexKoNameRepository.findByNameKoSimilarTo(keyword, SIMILARITY_THRESHOLD);
+            }
+        }
         if (matches.isEmpty()) {
             return Page.empty(pageable);
         }
