@@ -108,7 +108,7 @@ public class CardQueryService {
                 ? cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable)
                 : cardRepository.search(expandedTypes, expandedRarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> toCardResponse(card, gradesByCardId));
+        return cards.map(card -> toCardResponse(card, gradesByCardId, false));
     }
 
     @Transactional
@@ -147,21 +147,27 @@ public class CardQueryService {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
         }
-        Page<Card> cards = (KoreanTextUtil.isKorean(keyword) || KoreanTextUtil.isChosungOnly(keyword))
+        NameSearchResult result = (KoreanTextUtil.isKorean(keyword) || KoreanTextUtil.isChosungOnly(keyword))
                 ? searchByPokedexKoName(keyword, pageable)
                 : searchByName(keyword, pageable);
-        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> toCardResponse(card, gradesByCardId));
+        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(result.cards().getContent());
+        return result.cards().map(card -> toCardResponse(card, gradesByCardId, result.fuzzyMatch()));
+    }
+
+    // searchByName()/searchByPokedexKoName()이 정확 검색과 유사도 폴백 중 어느 쪼을 탔는지(#187 fuzzyMatch
+    // 응답 플래그)를 함께 반환하기 위한 내부 홀더. Page<Card>만으로는 그 정보가 사라진다.
+    private record NameSearchResult(Page<Card> cards, boolean fuzzyMatch) {
     }
 
     // 영문 등 이름 검색 - 정확 검색(부분일치)이 0건이고 키워드가 최소 길이 이상일 때만 pg_trgm 유사도
     // 검색으로 폴백한다(#187). 오타 없는 대다수 검색은 기존 LIKE 부분일치 그대로 동작/성능 유지.
-    private Page<Card> searchByName(String keyword, Pageable pageable) {
+    private NameSearchResult searchByName(String keyword, Pageable pageable) {
         Page<Card> exact = cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
         if (exact.getTotalElements() > 0 || keyword.length() < MIN_KEYWORD_LENGTH_FOR_SIMILARITY) {
-            return exact;
+            return new NameSearchResult(exact, false);
         }
-        return cardRepository.findByNameSimilarTo(keyword, SIMILARITY_THRESHOLD, pageable);
+        Page<Card> similar = cardRepository.findByNameSimilarTo(keyword, SIMILARITY_THRESHOLD, pageable);
+        return new NameSearchResult(similar, similar.getTotalElements() > 0);
     }
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
@@ -169,8 +175,9 @@ public class CardQueryService {
     // 한글/초성 검색은 도감번호(national_pokedex_numbers) 매핑 기반이라 포켓몬 카드만 지원한다.
     // 도감번호가 없는 트레이너/에너지 카드는 이 경로로 검색되지 않는다 - 의도된 한계
     // (PokeAPI 도감번호 매핑 방식의 알려진 제약).
-    private Page<Card> searchByPokedexKoName(String keyword, Pageable pageable) {
+    private NameSearchResult searchByPokedexKoName(String keyword, Pageable pageable) {
         List<PokedexKoName> matches;
+        boolean fuzzyMatch = false;
         if (KoreanTextUtil.isChosungOnly(keyword)) {
             matches = pokedexKoNameRepository.findByNameKoChosungContaining(keyword);
         } else {
@@ -180,13 +187,14 @@ public class CardQueryService {
             // 스파이크로 검증된 시나리오가 아니다.
             if (matches.isEmpty() && keyword.length() >= MIN_KEYWORD_LENGTH_FOR_SIMILARITY) {
                 matches = pokedexKoNameRepository.findByNameKoSimilarTo(keyword, SIMILARITY_THRESHOLD);
+                fuzzyMatch = !matches.isEmpty();
             }
         }
         if (matches.isEmpty()) {
-            return Page.empty(pageable);
+            return new NameSearchResult(Page.empty(pageable), false);
         }
         List<Integer> pokedexNumbers = matches.stream().map(PokedexKoName::getPokedexNumber).toList();
-        return cardRepository.findByNationalPokedexNumbersIn(pokedexNumbers, pageable);
+        return new NameSearchResult(cardRepository.findByNationalPokedexNumbersIn(pokedexNumbers, pageable), fuzzyMatch);
     }
 
     @Transactional(readOnly = true)
@@ -203,14 +211,14 @@ public class CardQueryService {
         }
         Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(related);
         return related.stream()
-                .map(relatedCard -> toCardResponse(relatedCard, gradesByCardId))
+                .map(relatedCard -> toCardResponse(relatedCard, gradesByCardId, false))
                 .toList();
     }
 
-    private CardResponse toCardResponse(Card card, Map<Long, List<String>> gradesByCardId) {
+    private CardResponse toCardResponse(Card card, Map<Long, List<String>> gradesByCardId, boolean fuzzyMatch) {
         return CardResponse.from(card, gradesByCardId.getOrDefault(card.getId(), List.of()),
                 cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()),
-                CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()));
+                CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()), fuzzyMatch);
     }
 
     private Map<Long, List<String>> fetchGradesByCardIds(List<Card> cards) {

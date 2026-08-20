@@ -383,6 +383,7 @@ class CardQueryServiceTest {
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
+        assertThat(result.getContent().get(0).fuzzyMatch()).isFalse();
     }
 
     @Test
@@ -497,6 +498,7 @@ class CardQueryServiceTest {
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Pikachu");
+        assertThat(result.getContent().get(0).fuzzyMatch()).isFalse();
         verify(cardRepository).findByNationalPokedexNumbersIn(List.of(25), pageable);
     }
 
@@ -551,6 +553,7 @@ class CardQueryServiceTest {
         Page<CardResponse> result = cardQueryService.searchByKeyword("Charizrd", pageable);
 
         assertThat(result.getContent()).extracting(CardResponse::name).containsExactly("Charizard");
+        assertThat(result.getContent()).extracting(CardResponse::fuzzyMatch).containsExactly(true);
         verify(cardRepository).findByNameSimilarTo("Charizrd", 0.14, pageable);
     }
 
@@ -565,6 +568,7 @@ class CardQueryServiceTest {
         Page<CardResponse> result = cardQueryService.searchByKeyword("char", pageable);
 
         assertThat(result.getContent()).extracting(CardResponse::name).containsExactly("Charizard");
+        assertThat(result.getContent()).extracting(CardResponse::fuzzyMatch).containsExactly(false);
         verify(cardRepository, never()).findByNameSimilarTo(any(), any(Double.class), any());
     }
 
@@ -599,6 +603,7 @@ class CardQueryServiceTest {
         Page<CardResponse> result = cardQueryService.searchByKeyword("리자옹", pageable);
 
         assertThat(result.getContent()).extracting(CardResponse::name).containsExactly("Charizard");
+        assertThat(result.getContent()).extracting(CardResponse::fuzzyMatch).containsExactly(true);
         verify(pokedexKoNameRepository).findByNameKoSimilarTo("리자옹", 0.14);
     }
 
