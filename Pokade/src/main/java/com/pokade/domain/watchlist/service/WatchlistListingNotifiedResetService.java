@@ -49,8 +49,8 @@ public class WatchlistListingNotifiedResetService {
 
         for (Watchlist watchlist : watchlists) {
             try {
-                Long resolvedVariantId = watchlist.getVariantId() != null
-                        ? watchlist.getVariantId() : primaryVariantIdByCardId.get(watchlist.getCardId());
+                Long resolvedVariantId = WatchlistVariantResolver.resolveOrPrimary(
+                        watchlist.getVariantId(), primaryVariantIdByCardId.get(watchlist.getCardId()));
                 processor.process(watchlist.getId(), resolvedVariantId);
             } catch (Exception e) {
                 log.warn("워치리스트 재입고 알림 리셋 확인 실패: watchlistId={}", watchlist.getId(), e);

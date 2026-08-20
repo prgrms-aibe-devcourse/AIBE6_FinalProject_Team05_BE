@@ -25,10 +25,9 @@ import java.util.Objects;
 // 보낸다(#300). 매물 등록 트랜잭션이 실제로 커밋된 뒤에만 동작해야(그새 롤백되는 경우 유령 알림이 생기지
 // 않도록) AFTER_COMMIT에서 구독하고, 리스너 자체는 독립된 새 트랜잭션에서 DB에 쓴다.
 //
-// variantId는 null이면 "대표 변형 관심"을 뜻한다(Watchlist.variantId 주석과 동일한 규칙,
-// CardVariantRepository.findGradesByCardId의 COALESCE(variant_id, primary_id) 관례와도 일치).
-// 워치리스트 매칭 시에는 양쪽 null을 실제 대표 variant ID로 치환해서 비교한다 - 그대로 null==null로만
-// 비교하면 "대표 변형에 관심 있다"고 등록한 워치리스트가 구체적 variantId로 올라온 재입고 매물을 놓친다.
+// variantId는 null이면 "대표 변형 관심"을 뜻한다(WatchlistVariantResolver 참고). 워치리스트 매칭
+// 시에는 양쪽 null을 실제 대표 variant ID로 치환해서 비교한다 - 그대로 null==null로만 비교하면
+// "대표 변형에 관심 있다"고 등록한 워치리스트가 구체적 variantId로 올라온 재입고 매물을 놓친다.
 //
 // listingNotified 리셋(매물이 다시 소진되면 다음 재입고 때 또 알릴 수 있게 false로 되돌리는 것)은 이
 // 리스너가 아니라 별도 배치(WatchlistListingNotifiedResetService, #300 후속)가 담당한다 - 매물이 ACTIVE를
@@ -67,16 +66,13 @@ public class WatchlistListingAvailableNoticeListener {
         }
 
         // 대표 variant 정보 자체가 없으면(동기화 누락 등) primaryVariantId도 null로 남는다 - 그러면
-        // event/워치리스트 양쪽 다 null로 남아 Objects.equals(null, null)로 안전하게 매칭된다
-        // (requireNonNullElse는 폴백값이 null이면 NPE를 던져서 여기선 쓸 수 없다).
+        // event/워치리스트 양쪽 다 null로 남아 Objects.equals(null, null)로 안전하게 매칭된다.
         Long primaryVariantId = cardVariantRepository.findPrimaryVariantId(event.cardId()).orElse(null);
-        Long resolvedListingVariantId = event.variantId() != null ? event.variantId() : primaryVariantId;
+        Long resolvedListingVariantId = WatchlistVariantResolver.resolveOrPrimary(event.variantId(), primaryVariantId);
         List<Watchlist> watchers = candidates.stream()
-                .filter(watchlist -> {
-                    Long resolvedWatchVariantId = watchlist.getVariantId() != null
-                            ? watchlist.getVariantId() : primaryVariantId;
-                    return Objects.equals(resolvedWatchVariantId, resolvedListingVariantId);
-                })
+                .filter(watchlist -> Objects.equals(
+                        WatchlistVariantResolver.resolveOrPrimary(watchlist.getVariantId(), primaryVariantId),
+                        resolvedListingVariantId))
                 .toList();
         if (watchers.isEmpty()) {
             return;
