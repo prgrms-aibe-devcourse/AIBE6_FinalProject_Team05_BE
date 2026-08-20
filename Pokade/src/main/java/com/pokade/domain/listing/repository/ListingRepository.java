@@ -39,6 +39,9 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
 
     long countBySellerIdAndStatus(Long sellerId, ListingStatus status);
 
+    // #300: 워치리스트 재입고 알림 판단용 - 이번에 등록된 매물이 해당 카드의 "유일한" 활성 매물인지 확인한다.
+    long countByCardIdAndStatus(Long cardId, ListingStatus status);
+
     boolean existsBySellerIdAndCardIdAndVariantIdAndStatus(
             Long sellerId, Long cardId, Long variantId, ListingStatus status);
 

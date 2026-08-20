@@ -36,4 +36,12 @@ public interface WatchlistRepository extends JpaRepository<Watchlist, Long> {
     @Modifying(flushAutomatically = true)
     @Query("UPDATE Watchlist w SET w.isNotified = true WHERE w.id = :id AND w.isNotified = false")
     int markAsNotifiedIfNotYet(@Param("id") Long id);
+
+    // #300: 매물 재입고 알림 대상 조회 - 이미 알림을 보낸(listingNotified=true) 워치리스트는 자동으로 제외된다.
+    List<Watchlist> findByCardIdAndListingNotifiedFalse(Long cardId);
+
+    // #300: markAsNotifiedIfNotYet과 동일한 이유로 조건부 원자적 UPDATE로 "알림 생성 권한"을 선점한다.
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE Watchlist w SET w.listingNotified = true WHERE w.id = :id AND w.listingNotified = false")
+    int markListingNotifiedIfNotYet(@Param("id") Long id);
 }
