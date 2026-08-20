@@ -51,15 +51,17 @@ public class PointService {
         return user.getPointBalance();
     }
 
-    // 포인트 환불(거래 취소 등) - 이전에 차감된 포인트를 되돌린다. charge()와 달리 관련 거래 id를 이력에 남긴다.
+    // 매물 판매 정산 - 구매확정(배송완료 후 구매자 확정) 시 판매자에게 거래 금액만큼 포인트를 적립한다.
+    // 실제 계좌 이체가 아니라 플랫폼 내부 포인트로 정산하는 방식 - relatedTradeId로 어떤 거래의
+    // 정산인지 이력에 남긴다.
     @Transactional
-    public int refund(Long userId, int amount, Long relatedTradeId) {
-        User user = findUserWithLock(userId);
+    public int settle(Long sellerId, int amount, Long relatedTradeId) {
+        User user = findUserWithLock(sellerId);
         user.chargePoints(amount);
 
         pointTransactionRepository.save(PointTransaction.builder()
-                .userId(userId)
-                .type(PointTransactionType.REFUND)
+                .userId(sellerId)
+                .type(PointTransactionType.SETTLEMENT)
                 .amount(amount)
                 .balanceAfter(user.getPointBalance())
                 .relatedTradeId(relatedTradeId)

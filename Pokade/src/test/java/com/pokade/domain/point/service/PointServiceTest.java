@@ -106,27 +106,27 @@ class PointServiceTest {
     }
 
     @Test
-    @DisplayName("refund: 이전에 차감된 포인트를 되돌리고 relatedTradeId를 포함한 REFUND 이력을 남긴다")
-    void refund_addsBalanceBackAndSavesHistory() {
-        User user = user(7000);
-        given(userRepository.findByIdWithLock(1L)).willReturn(Optional.of(user));
+    @DisplayName("settle: 판매자 잔액에 거래 금액을 적립하고 relatedTradeId를 포함한 SETTLEMENT 이력을 남긴다")
+    void settle_addsBalanceAndSavesHistory() {
+        User seller = user(1000);
+        given(userRepository.findByIdWithLock(1L)).willReturn(Optional.of(seller));
 
-        int result = pointService.refund(1L, 3000, 42L);
+        int result = pointService.settle(1L, 10000, 42L);
 
-        assertThat(result).isEqualTo(10000);
-        assertThat(user.getPointBalance()).isEqualTo(10000);
+        assertThat(result).isEqualTo(11000);
+        assertThat(seller.getPointBalance()).isEqualTo(11000);
 
         ArgumentCaptor<PointTransaction> captor = ArgumentCaptor.forClass(PointTransaction.class);
         then(pointTransactionRepository).should().save(captor.capture());
         PointTransaction saved = captor.getValue();
-        assertThat(saved.getType()).isEqualTo(PointTransactionType.REFUND);
-        assertThat(saved.getAmount()).isEqualTo(3000);
-        assertThat(saved.getBalanceAfter()).isEqualTo(10000);
+        assertThat(saved.getType()).isEqualTo(PointTransactionType.SETTLEMENT);
+        assertThat(saved.getAmount()).isEqualTo(10000);
+        assertThat(saved.getBalanceAfter()).isEqualTo(11000);
         assertThat(saved.getRelatedTradeId()).isEqualTo(42L);
     }
 
     @Test
-    @DisplayName("존재하지 않는 유저에게 charge/use/refund를 호출하면 USER_NOT_FOUND를 던진다")
+    @DisplayName("존재하지 않는 유저에게 charge/use/settle을 호출하면 USER_NOT_FOUND를 던진다")
     void missingUser_throwsUserNotFound() {
         given(userRepository.findByIdWithLock(999L)).willReturn(Optional.empty());
 
@@ -136,7 +136,7 @@ class PointServiceTest {
         assertThatThrownBy(() -> pointService.use(999L, 1000, null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.USER_NOT_FOUND);
-        assertThatThrownBy(() -> pointService.refund(999L, 1000, null))
+        assertThatThrownBy(() -> pointService.settle(999L, 1000, null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.USER_NOT_FOUND);
     }

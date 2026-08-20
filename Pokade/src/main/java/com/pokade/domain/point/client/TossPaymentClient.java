@@ -1,6 +1,8 @@
 package com.pokade.domain.point.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pokade.domain.point.client.dto.TossCancelRequest;
+import com.pokade.domain.point.client.dto.TossCancelResponse;
 import com.pokade.domain.point.client.dto.TossConfirmRequest;
 import com.pokade.domain.point.client.dto.TossConfirmResponse;
 import com.pokade.domain.point.client.dto.TossErrorResponse;
@@ -17,6 +19,7 @@ import java.util.Base64;
 public class TossPaymentClient {
 
     private static final String CONFIRM_PATH = "/v1/payments/confirm";
+    private static final String CANCEL_PATH = "/v1/payments/{paymentKey}/cancel";
 
     private final RestClient restClient;
     // 별도 빈 의존 없이 에러 응답 파싱에만 쓰는 일회성 용도라, 앱 공용 ObjectMapper를 주입받지 않고
@@ -47,6 +50,24 @@ public class TossPaymentClient {
                 .body(TossConfirmResponse.class);
 
         if (response == null || !response.isDone()) {
+            throw new BusinessException(ErrorCode.PAYMENT_FAILED);
+        }
+        return response;
+    }
+
+    // 결제취소(환불) - 거래 취소 시 에스크로로 잡아둔 금액을 실제로 되돌려준다.
+    public TossCancelResponse cancelPayment(String paymentKey, String cancelReason) {
+        TossCancelResponse response = restClient.post()
+                .uri(CANCEL_PATH, paymentKey)
+                .body(new TossCancelRequest(cancelReason))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, (request, httpResponse) -> {
+                    String message = parseErrorMessage(httpResponse.getBody().readAllBytes());
+                    throw new BusinessException(ErrorCode.PAYMENT_FAILED, message);
+                })
+                .body(TossCancelResponse.class);
+
+        if (response == null || !response.isCanceled()) {
             throw new BusinessException(ErrorCode.PAYMENT_FAILED);
         }
         return response;

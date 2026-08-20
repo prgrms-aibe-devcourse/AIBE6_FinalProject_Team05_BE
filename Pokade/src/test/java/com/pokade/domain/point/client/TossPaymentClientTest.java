@@ -1,5 +1,6 @@
 package com.pokade.domain.point.client;
 
+import com.pokade.domain.point.client.dto.TossCancelResponse;
 import com.pokade.domain.point.client.dto.TossConfirmResponse;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
@@ -89,6 +90,61 @@ class TossPaymentClientTest {
                         MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> client.confirmPayment("pay_123", "order_123", 10000L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PAYMENT_FAILED);
+    }
+
+    @Test
+    @DisplayName("cancelPayment: 시크릿 키를 Basic Auth로 담아 요청하고, CANCELED 응답을 그대로 반환한다")
+    void cancelPayment_sendsBasicAuthAndReturnsResponse() {
+        setUp();
+        String expectedAuth = "Basic " + Base64.getEncoder().encodeToString("test_sk_dummy:".getBytes());
+
+        mockServer.expect(requestTo(BASE_URL + "/v1/payments/pay_123/cancel"))
+                .andExpect(method(org.springframework.http.HttpMethod.POST))
+                .andExpect(header("Authorization", expectedAuth))
+                .andExpect(jsonPath("$.cancelReason").value("거래 취소"))
+                .andRespond(withSuccess(
+                        """
+                        {"paymentKey":"pay_123","status":"CANCELED"}
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        TossCancelResponse response = client.cancelPayment("pay_123", "거래 취소");
+
+        assertThat(response.isCanceled()).isTrue();
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("cancelPayment: 토스가 4xx 에러 응답을 내려주면 PAYMENT_FAILED로 변환해 메시지를 그대로 담는다")
+    void cancelPayment_errorResponse_translatesToPaymentFailed() {
+        setUp();
+        mockServer.expect(requestTo(BASE_URL + "/v1/payments/pay_123/cancel"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"code":"ALREADY_CANCELED_PAYMENT","message":"이미 취소된 결제입니다."}
+                                """));
+
+        assertThatThrownBy(() -> client.cancelPayment("pay_123", "거래 취소"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PAYMENT_FAILED)
+                .hasMessage("이미 취소된 결제입니다.");
+    }
+
+    @Test
+    @DisplayName("cancelPayment: 응답 status가 CANCELED가 아니면 PAYMENT_FAILED를 던진다")
+    void cancelPayment_notCanceled_throwsPaymentFailed() {
+        setUp();
+        mockServer.expect(requestTo(BASE_URL + "/v1/payments/pay_123/cancel"))
+                .andRespond(withSuccess(
+                        """
+                        {"paymentKey":"pay_123","status":"DONE"}
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.cancelPayment("pay_123", "거래 취소"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PAYMENT_FAILED);
     }

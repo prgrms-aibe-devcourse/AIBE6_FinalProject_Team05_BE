@@ -1,7 +1,9 @@
 package com.pokade.domain.trade.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pokade.domain.trade.dto.TradeCreateRequest;
+import com.pokade.domain.trade.dto.TradePaymentConfirmRequest;
+import com.pokade.domain.trade.dto.TradeReadyRequest;
+import com.pokade.domain.trade.dto.TradeReadyResponse;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.service.TradeService;
@@ -82,16 +84,75 @@ class TradeControllerTest {
     }
 
     @Test
-    void 즉시구매에_성공하면_200과_생성된_거래를_반환한다() throws Exception {
-        TradeCreateRequest request = new TradeCreateRequest(1L);
+    void 결제준비에_성공하면_200과_orderId_amount를_반환한다() throws Exception {
+        TradeReadyRequest request = new TradeReadyRequest(1L);
+        TradeReadyResponse response = new TradeReadyResponse("order-1", 10000);
+
+        given(tradeService.ready(anyLong(), any(TradeReadyRequest.class)))
+                .willReturn(response);
+
+        mockMvc.perform(post("/api/trades/ready")
+                        .with(userId(200L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.orderId").value("order-1"))
+                .andExpect(jsonPath("$.data.amount").value(10000));
+    }
+
+    @Test
+    void 결제준비시_listingId가_없으면_400을_반환한다() throws Exception {
+        TradeReadyRequest invalidRequest = new TradeReadyRequest(null);
+
+        mockMvc.perform(post("/api/trades/ready")
+                        .with(userId(200L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(invalidRequest)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 결제준비시_본인_매물을_구매하려하면_400을_반환한다() throws Exception {
+        TradeReadyRequest request = new TradeReadyRequest(1L);
+
+        given(tradeService.ready(anyLong(), any(TradeReadyRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.SELF_PURCHASE_NOT_ALLOWED));
+
+        mockMvc.perform(post("/api/trades/ready")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("SELF_PURCHASE_NOT_ALLOWED"));
+    }
+
+    @Test
+    void 결제준비시_존재하지_않는_매물이면_404를_반환한다() throws Exception {
+        TradeReadyRequest request = new TradeReadyRequest(999L);
+
+        given(tradeService.ready(anyLong(), any(TradeReadyRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+
+        mockMvc.perform(post("/api/trades/ready")
+                        .with(userId(200L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
+    }
+
+    @Test
+    void 결제승인에_성공하면_200과_생성된_거래를_반환한다() throws Exception {
+        TradePaymentConfirmRequest request = new TradePaymentConfirmRequest("pay_123", "order-1", 10000L);
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
                 null, null, null, null, null, LocalDateTime.now());
 
-        given(tradeService.createTrade(anyLong(), any(TradeCreateRequest.class)))
+        given(tradeService.confirmPurchase(200L, "pay_123", "order-1", 10000L))
                 .willReturn(response);
 
-        mockMvc.perform(post("/api/trades")
+        mockMvc.perform(post("/api/trades/confirm-payment")
                         .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -102,10 +163,10 @@ class TradeControllerTest {
     }
 
     @Test
-    void listingId가_없으면_400을_반환한다() throws Exception {
-        TradeCreateRequest invalidRequest = new TradeCreateRequest(null);
+    void 결제승인시_paymentKey가_없으면_400을_반환한다() throws Exception {
+        TradePaymentConfirmRequest invalidRequest = new TradePaymentConfirmRequest("", "order-1", 10000L);
 
-        mockMvc.perform(post("/api/trades")
+        mockMvc.perform(post("/api/trades/confirm-payment")
                         .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
@@ -114,43 +175,13 @@ class TradeControllerTest {
     }
 
     @Test
-    void 본인_매물을_구매하려하면_400을_반환한다() throws Exception {
-        TradeCreateRequest request = new TradeCreateRequest(1L);
+    void 결제는_승인됐지만_매물이_이미_팔렸으면_409를_반환한다() throws Exception {
+        TradePaymentConfirmRequest request = new TradePaymentConfirmRequest("pay_123", "order-1", 10000L);
 
-        given(tradeService.createTrade(anyLong(), any(TradeCreateRequest.class)))
-                .willThrow(new BusinessException(ErrorCode.SELF_PURCHASE_NOT_ALLOWED));
-
-        mockMvc.perform(post("/api/trades")
-                        .with(userId(100L))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("SELF_PURCHASE_NOT_ALLOWED"));
-    }
-
-    @Test
-    void 존재하지_않는_매물이면_404를_반환한다() throws Exception {
-        TradeCreateRequest request = new TradeCreateRequest(999L);
-
-        given(tradeService.createTrade(anyLong(), any(TradeCreateRequest.class)))
-                .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
-
-        mockMvc.perform(post("/api/trades")
-                        .with(userId(200L))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
-    }
-
-    @Test
-    void 이미_거래중인_매물이면_409를_반환한다() throws Exception {
-        TradeCreateRequest request = new TradeCreateRequest(1L);
-
-        given(tradeService.createTrade(anyLong(), any(TradeCreateRequest.class)))
+        given(tradeService.confirmPurchase(200L, "pay_123", "order-1", 10000L))
                 .willThrow(new BusinessException(ErrorCode.TRADE_CONFLICT));
 
-        mockMvc.perform(post("/api/trades")
+        mockMvc.perform(post("/api/trades/confirm-payment")
                         .with(userId(200L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))

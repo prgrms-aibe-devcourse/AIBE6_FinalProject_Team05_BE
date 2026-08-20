@@ -205,15 +205,31 @@ CREATE INDEX IF NOT EXISTS idx_listings_orderbook
 CREATE INDEX IF NOT EXISTS idx_trades_listing_status ON trades(listing_id, status, confirmed_at DESC);
 
 CREATE TABLE IF NOT EXISTS payments (
-    id            BIGSERIAL PRIMARY KEY,
-    trade_id      BIGINT NOT NULL UNIQUE REFERENCES trades(id),
-    buyer_id      BIGINT NOT NULL REFERENCES users(id),
-    amount        INTEGER NOT NULL,
-    method        VARCHAR(20) NOT NULL,                        -- CARD / EASY_PAY 등
-    status        VARCHAR(20) NOT NULL,                        -- PAID/ESCROW_HELD/SETTLED/REFUNDED
-    paid_at       TIMESTAMP,
-    refunded_at   TIMESTAMP,
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id                BIGSERIAL PRIMARY KEY,
+    trade_id          BIGINT NOT NULL UNIQUE REFERENCES trades(id),
+    buyer_id          BIGINT NOT NULL REFERENCES users(id),
+    amount            INTEGER NOT NULL,
+    method            VARCHAR(20) NOT NULL,                        -- CARD / EASY_PAY 등
+    status            VARCHAR(20) NOT NULL,                        -- PAID/ESCROW_HELD/SETTLED/REFUNDED
+    paid_at           TIMESTAMP,
+    refunded_at       TIMESTAMP,
+    toss_payment_key  VARCHAR(200),                                -- 토스 결제취소(환불) API 호출용
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- payments가 이미 존재하는 기존 DB는 CREATE TABLE IF NOT EXISTS가 스킵되므로 신규 컬럼을 별도로 추가한다.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS toss_payment_key VARCHAR(200);
+
+-- 매물 즉시구매 주문 - 토스페이먼츠 결제창을 띄우기 전에 PENDING으로 먼저 기록해, 결제 승인 이후에만
+-- 매물을 잠근다(TRADING 전환). point_charge_orders와 동일한 ready/confirm 패턴.
+CREATE TABLE IF NOT EXISTS trade_orders (
+    id           BIGSERIAL PRIMARY KEY,
+    order_id     VARCHAR(64) NOT NULL UNIQUE,
+    buyer_id     BIGINT NOT NULL REFERENCES users(id),
+    listing_id   BIGINT NOT NULL REFERENCES listings(id),
+    amount       INTEGER NOT NULL,
+    status       VARCHAR(20) NOT NULL DEFAULT 'PENDING',   -- PENDING / CONFIRMED / FAILED
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ---------- 4. 포트폴리오 / AI 진단 / 포인트 ----------

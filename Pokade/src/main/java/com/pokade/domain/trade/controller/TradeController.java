@@ -1,6 +1,8 @@
 package com.pokade.domain.trade.controller;
 
-import com.pokade.domain.trade.dto.TradeCreateRequest;
+import com.pokade.domain.trade.dto.TradePaymentConfirmRequest;
+import com.pokade.domain.trade.dto.TradeReadyRequest;
+import com.pokade.domain.trade.dto.TradeReadyResponse;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.service.TradeService;
 import com.pokade.global.response.ApiResponse;
@@ -27,16 +29,31 @@ public class TradeController {
     private final TradeService tradeService;
 
     @Operation(
-            summary = "즉시구매 요청",
-            description = "매물을 즉시구매하여 거래를 생성합니다. 본인이 등록한 매물은 구매할 수 없고, "
-                    + "이미 거래 중이거나 판매 중이 아닌 매물이면 실패합니다."
+            summary = "즉시구매 결제 준비",
+            description = "매물 즉시구매를 위한 토스페이먼츠 결제창을 띄우기 전, 주문을 PENDING으로 먼저 기록합니다. "
+                    + "이 시점에는 매물을 잠그지 않습니다 - 본인이 등록한 매물이면 실패합니다."
     )
-    @PostMapping
-    public ApiResponse<TradeResponse> createTrade(
+    @PostMapping("/ready")
+    public ApiResponse<TradeReadyResponse> ready(
             @AuthenticationPrincipal Long buyerId,
-            @Valid @RequestBody TradeCreateRequest request
+            @Valid @RequestBody TradeReadyRequest request
     ) {
-        return ApiResponse.ok("구매 요청이 접수되었습니다.", tradeService.createTrade(buyerId, request));
+        return ApiResponse.ok(tradeService.ready(buyerId, request));
+    }
+
+    @Operation(
+            summary = "즉시구매 결제 승인",
+            description = "토스페이먼츠 결제창 successUrl 리다이렉트 이후 호출합니다. 결제 승인 후 매물을 잠그고 "
+                    + "거래를 생성합니다. 그 사이 다른 구매자가 먼저 구매했다면 승인된 결제를 즉시 취소(환불)하고 실패합니다."
+    )
+    @PostMapping("/confirm-payment")
+    public ApiResponse<TradeResponse> confirmPurchase(
+            @AuthenticationPrincipal Long buyerId,
+            @Valid @RequestBody TradePaymentConfirmRequest request
+    ) {
+        TradeResponse response = tradeService.confirmPurchase(
+                buyerId, request.paymentKey(), request.orderId(), request.amount());
+        return ApiResponse.ok("구매가 완료되었습니다.", response);
     }
 
     @Operation(summary = "거래 상세 조회", description = "거래 참여자(구매자 또는 판매자)만 조회할 수 있습니다.")

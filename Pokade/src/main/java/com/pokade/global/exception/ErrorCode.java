@@ -22,6 +22,7 @@ public enum ErrorCode {
 
     LISTING_NOT_FOUND(HttpStatus.NOT_FOUND, "매물을 찾을 수 없습니다."),
     TRADE_NOT_FOUND(HttpStatus.NOT_FOUND, "거래를 찾을 수 없습니다."),
+    TRADE_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "구매 주문을 찾을 수 없습니다."),
     CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다."),
     GRADE_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "진단 결과를 찾을 수 없습니다."),
     PRIMARY_VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "대표 변형이 지정되지 않은 카드입니다."),
@@ -32,6 +33,7 @@ public enum ErrorCode {
 
     DUPLICATE_LISTING(HttpStatus.CONFLICT, "이미 등록된 매물입니다."),
     TRADE_CONFLICT(HttpStatus.CONFLICT, "이미 처리 중인 거래입니다."),
+    TRADE_ORDER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 구매 주문입니다."),
 
     // ===== 인증 (Auth) =====
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
