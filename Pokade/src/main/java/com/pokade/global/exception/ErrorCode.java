@@ -22,6 +22,7 @@ public enum ErrorCode {
 
     LISTING_NOT_FOUND(HttpStatus.NOT_FOUND, "매물을 찾을 수 없습니다."),
     TRADE_NOT_FOUND(HttpStatus.NOT_FOUND, "거래를 찾을 수 없습니다."),
+    TRADE_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "구매 주문을 찾을 수 없습니다."),
     CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다."),
     GRADE_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "진단 결과를 찾을 수 없습니다."),
     PRIMARY_VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "대표 변형이 지정되지 않은 카드입니다."),
@@ -32,6 +33,7 @@ public enum ErrorCode {
 
     DUPLICATE_LISTING(HttpStatus.CONFLICT, "이미 등록된 매물입니다."),
     TRADE_CONFLICT(HttpStatus.CONFLICT, "이미 처리 중인 거래입니다."),
+    TRADE_ORDER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 구매 주문입니다."),
 
     // ===== 인증 (Auth) =====
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
@@ -91,7 +93,12 @@ public enum ErrorCode {
     NOTIFICATION_ALREADY_READ(HttpStatus.BAD_REQUEST, "이미 읽음 처리된 알림입니다."),
 
     // ===== Scrydex 동기화 배치 (관리자 트리거) =====
-    SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "이미 동기화가 진행 중입니다.");
+    SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "이미 동기화가 진행 중입니다."),
+
+    // ===== 포인트 =====
+    INSUFFICIENT_POINT_BALANCE(HttpStatus.PAYMENT_REQUIRED, "포인트 잔액이 부족합니다."),
+    POINT_CHARGE_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "충전 주문을 찾을 수 없습니다."),
+    POINT_CHARGE_ORDER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 충전 주문입니다.");
 
     private final HttpStatus status;
     private final String message;

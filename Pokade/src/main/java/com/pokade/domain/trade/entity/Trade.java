@@ -29,8 +29,10 @@ import java.util.Set;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Trade {
 
-    private static final Set<TradeStatus> FINAL_STATUSES =
-            Set.of(TradeStatus.COMPLETED, TradeStatus.CANCELLED);
+    // DELIVERED 이후는 구매자가 실물을 이미 수령한 상태라 취소를 막는다 - 결제가 실제 토스 에스크로로
+    // 잡혀있는 지금은, 여기서 취소를 허용하면 카드를 받고도 결제를 환불받아가는 경로가 생긴다.
+    private static final Set<TradeStatus> NOT_CANCELLABLE_STATUSES =
+            Set.of(TradeStatus.DELIVERED, TradeStatus.COMPLETED, TradeStatus.CANCELLED);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -115,8 +117,8 @@ public class Trade {
     }
 
     public void cancel() {
-        if (FINAL_STATUSES.contains(this.status)) {
-            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "이미 확정되었거나 취소된 거래입니다.");
+        if (NOT_CANCELLABLE_STATUSES.contains(this.status)) {
+            throw new BusinessException(ErrorCode.INVALID_TRADE_STATUS, "배송 완료 이후에는 취소할 수 없습니다.");
         }
         this.status = TradeStatus.CANCELLED;
     }

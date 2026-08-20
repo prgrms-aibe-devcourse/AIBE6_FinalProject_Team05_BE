@@ -53,16 +53,21 @@ public class Payment {
     @Column(name = "refunded_at")
     private LocalDateTime refundedAt;
 
+    // 토스페이먼츠 결제 승인 시 발급되는 키 - 거래 취소 시 이 키로 Toss 결제취소(환불) API를 호출한다.
+    @Column(name = "toss_payment_key", length = 200)
+    private String tossPaymentKey;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
-    public Payment(Trade trade, Long buyerId, Integer amount, PaymentMethod method) {
+    public Payment(Trade trade, Long buyerId, Integer amount, PaymentMethod method, String tossPaymentKey) {
         this.trade = trade;
         this.buyerId = buyerId;
         this.amount = amount;
         this.method = method;
+        this.tossPaymentKey = tossPaymentKey;
         this.status = PaymentStatus.ESCROW_HELD;
     }
 
