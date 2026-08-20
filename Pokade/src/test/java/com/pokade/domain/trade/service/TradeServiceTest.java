@@ -422,6 +422,20 @@ class TradeServiceTest {
     }
 
     @Test
+    void 배송_완료된_거래를_취소하면_INVALID_TRADE_STATUS_예외가_발생하고_토스_결제가_취소되지_않는다() {
+        // 구매확정(COMPLETED) 전이라도 배송이 완료됐다면(실물 수령) 취소·환불을 막아야 한다 -
+        // 안 그러면 카드를 받고도 결제를 환불받아가는 경로가 생긴다.
+        Trade trade = deliveredTradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.cancelTrade(200L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
+
+        verify(tossPaymentClient, never()).cancelPayment(any(), any());
+    }
+
+    @Test
     void 판매자가_발송처리하면_거래상태가_SHIPPED_TO_PLATFORM으로_바뀐다() {
         Trade trade = tradeOf(100L, 200L);
         given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));

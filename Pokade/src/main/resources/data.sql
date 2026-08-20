@@ -109,10 +109,11 @@ UPDATE cards SET view_count = 300 WHERE external_id = 'sv10_ja-1';
 -- =========================================================
 
 -- 재기동 시 중복 방지 (테스트 데이터만 정리)
--- payments/portfolio_items→trades, trades→listings로 참조하므로 자식부터 삭제
+-- payments/portfolio_items→trades, trades→listings, trade_orders→listings로 참조하므로 자식부터 삭제
 DELETE FROM payments;
 DELETE FROM portfolio_items;
 DELETE FROM trades;
+DELETE FROM trade_orders;
 DELETE FROM buy_offers;
 DELETE FROM listings;
 
