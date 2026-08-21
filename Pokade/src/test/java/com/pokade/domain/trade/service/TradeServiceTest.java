@@ -374,6 +374,7 @@ class TradeServiceTest {
         assertThat(response.status()).isEqualTo(TradeStatus.CANCELLED);
         verify(tossPaymentClient).cancelPayment(eq("pay_123"), anyString());
         assertThat(payment.getStatus()).isEqualTo(com.pokade.domain.trade.entity.PaymentStatus.REFUNDED);
+        verify(listingRepository).revertToActiveIfTrading(trade.getListing().getId());
     }
 
     @Test

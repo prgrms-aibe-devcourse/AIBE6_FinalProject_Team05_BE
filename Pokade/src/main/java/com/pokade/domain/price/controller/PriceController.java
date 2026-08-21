@@ -1,6 +1,7 @@
 package com.pokade.domain.price.controller;
 
 import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
@@ -40,6 +41,15 @@ public class PriceController {
             @RequestParam(required = false, defaultValue = "false") boolean includeRecentTradePrice
     ) {
         return ApiResponse.ok(priceService.getSummaries(cardIds, grade, includeRecentTradePrice));
+    }
+
+    @GetMapping("/{cardId}/buy-offers")
+    public ApiResponse<List<BuyOfferOrderbookEntryResponse>> getBuyOfferOrderbook(
+            @PathVariable Long cardId,
+            @RequestParam(required = false) Long variantId,
+            @RequestParam(required = false) ListingGrade grade
+    ) {
+        return ApiResponse.ok(priceService.getBuyOfferOrderbook(cardId, variantId, grade));
     }
 
     @GetMapping("/{cardId}/trades")
