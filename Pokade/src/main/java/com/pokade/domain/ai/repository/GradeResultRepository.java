@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface GradeResultRepository extends JpaRepository<GradeResult, Long> {
 
@@ -17,6 +18,7 @@ public interface GradeResultRepository extends JpaRepository<GradeResult, Long> 
 
     // 재업로드 가능 여부: QUALITY_FAIL이고 아직 retry_used=false인 건
     @Query("SELECT COUNT(g) > 0 FROM GradeResult g WHERE g.id = :id AND g.userId = :userId " +
-           "AND g.status = 'QUALITY_FAIL' AND g.retryAllowed = true AND g.retryUsed = false")
-    boolean existsRetryableResult(Long id, Long userId);
+           "AND g.status = :status AND g.retryAllowed = true AND g.retryUsed = false")
+    boolean existsRetryableResult(@Param("id") Long id, @Param("userId") Long userId,
+                                  @Param("status") GradeStatus status);
 }
