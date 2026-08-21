@@ -83,7 +83,7 @@ class AdminTradeControllerTest {
     private TradeResponse tradeResponseOf(Long id, TradeStatus status) {
         return new TradeResponse(
                 id, 10L, 200L, 100L, 1L, "리자몽 ex", 10000, status,
-                LocalDateTime.now(), null, null, null, null, LocalDateTime.now());
+                LocalDateTime.now(), null, null, null, null, null, null, null, LocalDateTime.now());
     }
 
     @Test

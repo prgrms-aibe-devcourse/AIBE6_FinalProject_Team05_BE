@@ -16,11 +16,14 @@ import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.repository.PaymentRepository;
 import com.pokade.domain.trade.repository.TradeOrderRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
+import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -31,6 +34,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -57,6 +61,9 @@ class TradeServiceTest {
 
     @Mock
     private UserAccessChecker userAccessChecker;
+
+    @Mock
+    private UserRepository userRepository;
 
     @Mock
     private TradeOrderRepository tradeOrderRepository;
@@ -103,6 +110,17 @@ class TradeServiceTest {
                 .build();
     }
 
+    // 포인트로 전액을 충당해 토스 결제 자체가 없었던 거래 - tossPaymentKey가 없다.
+    private Payment fullPointsPaymentOf(Trade trade, Long buyerId, int pointsUsed) {
+        return Payment.builder()
+                .trade(trade)
+                .buyerId(buyerId)
+                .amount(0)
+                .pointsUsed(pointsUsed)
+                .method(com.pokade.domain.trade.entity.PaymentMethod.CARD)
+                .build();
+    }
+
     private TradeOrder pendingOrderOf(Long buyerId, Long listingId, int amount) {
         return TradeOrder.builder()
                 .orderId("order-1")
@@ -112,12 +130,22 @@ class TradeServiceTest {
                 .build();
     }
 
+    private TradeOrder pendingOrderWithPointsOf(Long buyerId, Long listingId, int amount, int pointsUsed) {
+        return TradeOrder.builder()
+                .orderId("order-1")
+                .buyerId(buyerId)
+                .listingId(listingId)
+                .amount(amount)
+                .pointsUsed(pointsUsed)
+                .build();
+    }
+
     @Test
     void 결제준비시_구매자_계정이_비활성이면_ACCOUNT_NOT_ACTIVE_예외가_발생한다() {
         willThrow(new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE))
                 .given(userAccessChecker).assertWritable(200L);
 
-        assertThatThrownBy(() -> tradeService.ready(200L, new TradeReadyRequest(1L)))
+        assertThatThrownBy(() -> tradeService.ready(200L, new TradeReadyRequest(1L, 0, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCOUNT_NOT_ACTIVE);
 
@@ -132,7 +160,7 @@ class TradeServiceTest {
         willThrow(new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE))
                 .given(userAccessChecker).assertWritable(100L);
 
-        assertThatThrownBy(() -> tradeService.ready(200L, new TradeReadyRequest(1L)))
+        assertThatThrownBy(() -> tradeService.ready(200L, new TradeReadyRequest(1L, 0, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCOUNT_NOT_ACTIVE);
 
@@ -144,7 +172,7 @@ class TradeServiceTest {
         Trade trade = tradeOf(100L, 200L);
         given(listingRepository.findById(1L)).willReturn(Optional.of(trade.getListing()));
 
-        assertThatThrownBy(() -> tradeService.ready(100L, new TradeReadyRequest(1L)))
+        assertThatThrownBy(() -> tradeService.ready(100L, new TradeReadyRequest(1L, 0, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SELF_PURCHASE_NOT_ALLOWED);
 
@@ -156,9 +184,9 @@ class TradeServiceTest {
         Listing listing = tradeOf(100L, 200L).getListing();
         given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
 
-        TradeReadyResponse response = tradeService.ready(200L, new TradeReadyRequest(1L));
+        TradeReadyResponse response = tradeService.ready(200L, new TradeReadyRequest(1L, 0, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1"));
 
-        assertThat(response.amount()).isEqualTo(10000);
+        assertThat(response.amount()).isEqualTo(13000);
         assertThat(response.orderId()).isNotBlank();
         verify(listingRepository, never()).markAsTrading(any());
         verify(tradeOrderRepository).save(any(TradeOrder.class));
@@ -255,6 +283,107 @@ class TradeServiceTest {
         verify(tossPaymentClient).cancelPayment(eq("pay_123"), anyString());
         verify(tradeOrderRepository).markFailedIfPending("order-1");
         verify(tradeRepository, never()).save(any());
+    }
+
+    @Test
+    void 결제준비시_포인트_사용액이_결제_금액보다_크면_INVALID_INPUT_예외가_발생한다() {
+        Listing listing = tradeOf(100L, 200L).getListing();
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+
+        assertThatThrownBy(() -> tradeService.ready(
+                200L, new TradeReadyRequest(1L, 999999, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+        verify(tradeOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void 결제준비시_포인트_잔액이_부족하면_INSUFFICIENT_POINT_BALANCE_예외가_발생한다() {
+        Listing listing = tradeOf(100L, 200L).getListing();
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        given(userRepository.findById(200L)).willReturn(Optional.of(User.builder().pointBalance(1000).build()));
+
+        assertThatThrownBy(() -> tradeService.ready(
+                200L, new TradeReadyRequest(1L, 5000, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INSUFFICIENT_POINT_BALANCE);
+        verify(tradeOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void 결제준비시_포인트_사용액만큼_뺀_금액을_결제_금액으로_반환하고_주문에_남긴다() {
+        Listing listing = tradeOf(100L, 200L).getListing();
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        given(userRepository.findById(200L)).willReturn(Optional.of(User.builder().pointBalance(100000).build()));
+
+        TradeReadyResponse response = tradeService.ready(
+                200L, new TradeReadyRequest(1L, 5000, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1"));
+
+        assertThat(response.amount()).isEqualTo(8000);
+        ArgumentCaptor<TradeOrder> captor = ArgumentCaptor.forClass(TradeOrder.class);
+        verify(tradeOrderRepository).save(captor.capture());
+        assertThat(captor.getValue().getPointsUsed()).isEqualTo(5000);
+    }
+
+    @Test
+    void 결제승인시_사용한_포인트만큼_pointService_use를_호출한다() {
+        Listing listing = tradeOf(100L, 200L).getListing();
+        TradeOrder order = pendingOrderWithPointsOf(200L, 1L, 13000, 5000);
+        given(tradeOrderRepository.findByOrderId("order-1")).willReturn(Optional.of(order));
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        given(listingRepository.markAsTrading(any())).willReturn(1);
+        given(tradeRepository.save(any(Trade.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        tradeService.confirmPurchase(200L, "pay_123", "order-1", 8000);
+
+        verify(pointService).use(200L, 5000, null);
+        verify(tossPaymentClient).confirmPayment("pay_123", "order-1", 8000L);
+    }
+
+    @Test
+    void 포인트로_전액을_충당해_결제_금액이_0이면_토스_승인_없이_거래를_생성한다() {
+        Listing listing = tradeOf(100L, 200L).getListing();
+        TradeOrder order = pendingOrderWithPointsOf(200L, 1L, 13000, 13000);
+        given(tradeOrderRepository.findByOrderId("order-1")).willReturn(Optional.of(order));
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        given(listingRepository.markAsTrading(any())).willReturn(1);
+        given(tradeRepository.save(any(Trade.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        TradeResponse response = tradeService.confirmPurchase(200L, null, "order-1", 0);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.PENDING);
+        verify(pointService).use(200L, 13000, null);
+        verify(tossPaymentClient, never()).confirmPayment(any(), any(), any(Long.class));
+        ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+        verify(paymentRepository).save(captor.capture());
+        assertThat(captor.getValue().getTossPaymentKey()).isNull();
+    }
+
+    @Test
+    void 결제_금액이_남아있는데_paymentKey가_없으면_INVALID_INPUT_예외가_발생하고_토스_승인을_호출하지_않는다() {
+        TradeOrder order = pendingOrderOf(200L, 1L, 10000);
+        given(tradeOrderRepository.findByOrderId("order-1")).willReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> tradeService.confirmPurchase(200L, null, "order-1", 10000))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+        verify(tossPaymentClient, never()).confirmPayment(any(), any(), any(Long.class));
+        verify(pointService, never()).use(any(), anyInt(), any());
+    }
+
+    @Test
+    void 전액_포인트로_결제한_거래를_취소하면_토스_취소_없이_포인트를_환불한다() {
+        Trade trade = tradeOf(100L, 200L);
+        Payment payment = fullPointsPaymentOf(trade, 200L, 13000);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+        given(paymentRepository.findByTradeId(any())).willReturn(Optional.of(payment));
+
+        TradeResponse response = tradeService.cancelTrade(200L, 1L);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.CANCELLED);
+        verify(tossPaymentClient, never()).cancelPayment(any(), any());
+        verify(pointService).refund(200L, 13000, trade.getId());
+        assertThat(payment.getStatus()).isEqualTo(com.pokade.domain.trade.entity.PaymentStatus.REFUNDED);
     }
 
     @Test

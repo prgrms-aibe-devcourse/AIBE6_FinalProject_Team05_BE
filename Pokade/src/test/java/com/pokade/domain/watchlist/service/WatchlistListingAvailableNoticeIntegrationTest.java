@@ -128,7 +128,7 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
         Long watchlistId = persistWatchlist(watcherId, cardId);
 
         runInNewTransaction(() ->
-                listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A)));
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")));
 
         List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId);
         assertThat(notifications).extracting(Notification::getType).contains(NotificationType.LISTING_AVAILABLE);
@@ -144,7 +144,7 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
         persistWatchlist(watcherId, cardId);
 
         transactionTemplate().executeWithoutResult(status -> {
-            listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A));
+            listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1"));
             status.setRollbackOnly();
         });
 
@@ -161,12 +161,12 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
         persistWatchlist(watcherId, cardId);
 
         runInNewTransaction(() ->
-                listingService.createListing(seller1Id, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A)));
+                listingService.createListing(seller1Id, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")));
         // 첫 등록으로 이미 재입고 알림 1건이 생성된 상태 - 두 번째 등록은 "이미 매물이 있던 카드"라 알림이 추가되면 안 된다.
         int notificationCountAfterFirst = notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId).size();
 
         runInNewTransaction(() ->
-                listingService.createListing(seller2Id, new ListingCreateRequest(cardId, null, 12000, ListingGrade.A)));
+                listingService.createListing(seller2Id, new ListingCreateRequest(cardId, null, 12000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")));
 
         List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId);
         assertThat(notifications).hasSize(notificationCountAfterFirst);
@@ -183,14 +183,14 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
 
         // variantB로 매물 등록 - watcherId는 variantA만 관심 등록했으니 알림이 가면 안 된다.
         runInNewTransaction(() ->
-                listingService.createListing(sellerId, new ListingCreateRequest(cardId, variantB, 10000, ListingGrade.A)));
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, variantB, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")));
 
         assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId)).isEmpty();
         assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isFalse();
 
         // variantA로 매물 등록 - 이번엔 관심 등록한 variant와 일치하므로 알림이 간다.
         runInNewTransaction(() ->
-                listingService.createListing(sellerId, new ListingCreateRequest(cardId, variantA, 9000, ListingGrade.A)));
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, variantA, 9000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")));
 
         assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId))
                 .extracting(Notification::getType).contains(NotificationType.LISTING_AVAILABLE);
@@ -205,7 +205,7 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
         Long watchlistId = persistWatchlist(watcherId, cardId);
 
         Long listingId = transactionTemplate().execute(status ->
-                listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A)).id());
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")).id());
         assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isTrue();
         int notificationCountAfterFirstListing = notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId).size();
 
@@ -218,7 +218,7 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
 
         // 리셋됐으니 재입고 매물 등록 시 다시 알림이 간다.
         runInNewTransaction(() ->
-                listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 9000, ListingGrade.A)));
+                listingService.createListing(sellerId, new ListingCreateRequest(cardId, null, 9000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1")));
 
         List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(watcherId);
         assertThat(notifications).hasSizeGreaterThan(notificationCountAfterFirstListing);

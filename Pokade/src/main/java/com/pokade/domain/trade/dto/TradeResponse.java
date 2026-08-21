@@ -19,6 +19,9 @@ public record TradeResponse(
         LocalDateTime deliveredAt,
         LocalDateTime confirmedAt,
         LocalDateTime settledAt,
+        String recipientName,
+        String recipientPhone,
+        String recipientAddress,
         LocalDateTime createdAt
 ) {
 
@@ -37,6 +40,9 @@ public record TradeResponse(
                 trade.getDeliveredAt(),
                 trade.getConfirmedAt(),
                 trade.getSettledAt(),
+                trade.getRecipientName(),
+                trade.getRecipientPhone(),
+                trade.getRecipientAddress(),
                 trade.getCreatedAt()
         );
     }

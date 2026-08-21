@@ -8,23 +8,36 @@ import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.listing.entity.ListingStatus;
+import com.pokade.domain.point.client.TossPaymentClient;
+import com.pokade.domain.point.service.PointService;
 import com.pokade.domain.price.ChartPeriod;
 import com.pokade.domain.price.RankingType;
 import com.pokade.domain.price.StatsPeriod;
 import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
+import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
+import com.pokade.domain.price.dto.BuyOfferReadyRequest;
+import com.pokade.domain.price.dto.BuyOfferReadyResponse;
+import com.pokade.domain.price.dto.BuyOfferResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
+import com.pokade.domain.price.entity.BuyOffer;
+import com.pokade.domain.price.entity.BuyOfferOrder;
+import com.pokade.domain.price.entity.BuyOfferOrderStatus;
+import com.pokade.domain.price.repository.BuyOfferOrderRepository;
 import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.port.UserAccessChecker;
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -57,15 +71,23 @@ public class PriceService {
     private static final String RAW_PRICE_TYPE = "raw";
     private static final String RAW_GRADE = "";
     private static final String RAW_COMPANY = "";
+    // 구매입찰 결제 시 상품가에 더하는 고정 배송비(KRW) - TradeService.ready()의 즉시구매용 배송비와
+    // 동일한 값/성격이며, 두 도메인이 각자 자기 상수로 갖는다(공유 상수 모듈은 아직 없음).
+    private static final int SHIPPING_FEE = 3000;
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
     private final ListingRepository listingRepository;
     private final BuyOfferRepository buyOfferRepository;
+    private final BuyOfferOrderRepository buyOfferOrderRepository;
     private final TradeRepository tradeRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final PriceCardStatsRepository priceCardStatsRepository;
     private final CardPriceRepository cardPriceRepository;
+    private final UserAccessChecker userAccessChecker;
+    private final UserRepository userRepository;
+    private final TossPaymentClient tossPaymentClient;
+    private final PointService pointService;
     // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
     private final MeterRegistry meterRegistry;
 
@@ -175,6 +197,111 @@ public class PriceService {
                 .stream()
                 .map(BuyOfferOrderbookEntryResponse::of)
                 .toList();
+    }
+
+    // 구매입찰 등록 결제 준비 - 등록과 동시에 토스 에스크로 결제를 진행하므로(사용자 결정), 매물
+    // 즉시구매의 TradeService.ready()와 달리 "이미 있는 리소스를 잠그는" 개념이 없다 - 그냥 새 PENDING
+    // 주문을 기록하고, 결제가 실제로 승인된 뒤 confirmBuyOfferPurchase()에서 BuyOffer를 생성한다.
+    @Transactional
+    public BuyOfferReadyResponse readyBuyOffer(Long buyerId, BuyOfferReadyRequest request) {
+        userAccessChecker.assertWritable(buyerId);
+
+        if (!cardRepository.existsById(request.cardId())) {
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+        }
+
+        Long resolvedVariantId = request.variantId() != null
+                ? request.variantId()
+                : cardVariantRepository.findPrimaryVariantId(request.cardId())
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
+
+        int totalAmount = request.price() + SHIPPING_FEE;
+        int pointsToUse = request.pointsToUse();
+        if (pointsToUse > totalAmount) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "포인트 사용액이 결제 금액보다 클 수 없습니다.");
+        }
+        if (pointsToUse > 0) {
+            // 실제 차감은 결제 승인 시점(confirmBuyOfferPurchase)에서 한다 - 여기서는 등록을 포기하거나
+            // 결제를 완료하지 않아도 포인트가 미리 묶이지 않도록, 잔액이 충분한지만 미리 확인해 준다.
+            User buyer = userRepository.findById(buyerId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+            if (buyer.getPointBalance() < pointsToUse) {
+                throw new BusinessException(ErrorCode.INSUFFICIENT_POINT_BALANCE);
+            }
+        }
+
+        String orderId = UUID.randomUUID().toString();
+        int paymentAmount = totalAmount - pointsToUse;
+
+        buyOfferOrderRepository.save(BuyOfferOrder.builder()
+                .orderId(orderId)
+                .buyerId(buyerId)
+                .cardId(request.cardId())
+                .variantId(resolvedVariantId)
+                .grade(request.grade())
+                .price(request.price())
+                .shippingFee(SHIPPING_FEE)
+                .pointsUsed(pointsToUse)
+                .recipientName(request.recipientName())
+                .recipientPhone(request.recipientPhone())
+                .recipientAddress(request.recipientAddress())
+                .build());
+
+        return new BuyOfferReadyResponse(orderId, paymentAmount);
+    }
+
+    // 결제 승인 콜백 처리 - TradeService.confirmPurchase()와 동일한 뼈대(주문 조회 → 소유자/상태/금액
+    // 검증 → 토스 승인 → 실패 시 REQUIRES_NEW로 FAILED 기록)이지만, 구매입찰은 잠글 기존 리소스가
+    // 없으므로 승인 후 경쟁 상태 재검증(markAsTrading 상당)이나 승인-후-취소 분기가 없다.
+    // 포인트 사용액이 있으면 토스 승인보다 먼저 차감한다 - 이후 토스 승인이 실패해 예외가 다시
+    // 던져지면 이 메서드의 트랜잭션 전체가 롤백되므로(pointService.use()도 같은 트랜잭션에 참여),
+    // 별도 환불 호출 없이도 방금 차감한 포인트가 함께 되돌아간다.
+    @Transactional
+    public BuyOfferResponse confirmBuyOfferPurchase(Long buyerId, String paymentKey, String orderId, long amount) {
+        BuyOfferOrder order = buyOfferOrderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUY_OFFER_ORDER_NOT_FOUND));
+
+        if (!order.getBuyerId().equals(buyerId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        if (order.getStatus() != BuyOfferOrderStatus.PENDING) {
+            throw new BusinessException(ErrorCode.BUY_OFFER_ORDER_ALREADY_PROCESSED);
+        }
+        if (order.getPaymentAmount() != amount) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "요청 금액이 일치하지 않습니다.");
+        }
+        if (order.getPaymentAmount() > 0 && (paymentKey == null || paymentKey.isBlank())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "paymentKey는 필수입니다.");
+        }
+
+        try {
+            if (order.getPointsUsed() > 0) {
+                pointService.use(buyerId, order.getPointsUsed(), null);
+            }
+            if (order.getPaymentAmount() > 0) {
+                tossPaymentClient.confirmPayment(paymentKey, orderId, order.getPaymentAmount());
+            }
+        } catch (BusinessException e) {
+            buyOfferOrderRepository.markFailedIfPending(orderId);
+            throw e;
+        }
+
+        BuyOffer buyOffer = BuyOffer.builder()
+                .cardId(order.getCardId())
+                .buyerId(buyerId)
+                .variantId(order.getVariantId())
+                .price(order.getPrice())
+                .grade(order.getGrade())
+                .recipientName(order.getRecipientName())
+                .recipientPhone(order.getRecipientPhone())
+                .recipientAddress(order.getRecipientAddress())
+                .tossPaymentKey(order.getPaymentAmount() > 0 ? paymentKey : null)
+                .build();
+        BuyOffer saved = buyOfferRepository.save(buyOffer);
+
+        order.markConfirmed();
+
+        return BuyOfferResponse.of(saved);
     }
 
     public List<TradeSummaryResponse> getRecentTrades(Long cardId) {
