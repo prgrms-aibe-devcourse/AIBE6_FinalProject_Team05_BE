@@ -93,4 +93,11 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
     @Query("UPDATE Listing l SET l.status = com.pokade.domain.listing.entity.ListingStatus.EXPIRED "
             + "WHERE l.status = com.pokade.domain.listing.entity.ListingStatus.ACTIVE AND l.createdAt < :cutoff")
     int expireActiveListingsCreatedBefore(@Param("cutoff") LocalDateTime cutoff);
+
+    // 거래 취소 시 매물을 다시 판매 가능 상태로 되돌린다. TRADING 상태일 때만 되돌리므로,
+    // 그 사이 관리자가 숨김 처리했거나 만료된 매물을 되살리지 않는다. 반환값 0 = 되돌릴 필요 없음(정상 케이스).
+    @Modifying
+    @Query("UPDATE Listing l SET l.status = com.pokade.domain.listing.entity.ListingStatus.ACTIVE "
+            + "WHERE l.id = :id AND l.status = com.pokade.domain.listing.entity.ListingStatus.TRADING")
+    int revertToActiveIfTrading(@Param("id") Long listingId);
 }
