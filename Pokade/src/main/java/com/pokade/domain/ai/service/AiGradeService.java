@@ -82,6 +82,8 @@ public class AiGradeService {
     private final Counter localQualityFailCounter;
     // ai.grade.vision.duration — Vision API 호출 시간 (Grafana: p95 레이턴시, 이상 탐지)
     private final Timer visionTimer;
+    // ai.grade.vision.retries — Vision API 재시도 횟수 (Grafana: Vision 불안정 탐지용 경보 기준)
+    private final Counter visionRetryCounter;
 
     public AiGradeService(ChatClient chatClient, S3FileStorage s3FileStorage,
                           ImageQualityChecker imageQualityChecker,
@@ -116,6 +118,9 @@ public class AiGradeService {
                 .register(meterRegistry);
         this.visionTimer = Timer.builder("ai.grade.vision.duration")
                 .description("OpenAI Vision API 호출 시간")
+                .register(meterRegistry);
+        this.visionRetryCounter = Counter.builder("ai.grade.vision.retries")
+                .description("Vision API 재시도 횟수 — 높으면 Vision 불안정 신호")
                 .register(meterRegistry);
     }
 
@@ -308,6 +313,7 @@ public class AiGradeService {
                 return callVisionApi(request);
             } catch (AiServiceUnavailableException e) {
                 if (attempt >= VISION_MAX_ATTEMPTS) throw e;
+                visionRetryCounter.increment();
                 log.warn("Vision API 호출 실패, 재시도 ({}/{})...", attempt, VISION_MAX_ATTEMPTS);
             }
         }
