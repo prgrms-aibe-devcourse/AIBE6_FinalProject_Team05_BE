@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class WatchlistTargetPriceNoticeService {
+public class WatchlistTargetPriceNoticeScheduler {
 
     private final WatchlistRepository watchlistRepository;
     private final CardRepository cardRepository;

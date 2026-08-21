@@ -47,14 +47,14 @@ import jakarta.persistence.EntityManager;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({ListingService.class, WatchlistListingAvailableNoticeListener.class, NotificationService.class,
         CardNameKoResolver.class, PokedexKoNameCache.class, UserAccessGuard.class, SseEmitterStore.class,
-        WatchlistListingNotifiedResetService.class, WatchlistListingNotifiedResetProcessor.class})
+        WatchlistListingNotifiedResetScheduler.class, WatchlistListingNotifiedResetProcessor.class})
 class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private ListingService listingService;
 
     @Autowired
-    private WatchlistListingNotifiedResetService watchlistListingNotifiedResetService;
+    private WatchlistListingNotifiedResetScheduler watchlistListingNotifiedResetScheduler;
 
     @Autowired
     private WatchlistRepository watchlistRepository;
@@ -213,7 +213,7 @@ class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegration
         runInNewTransaction(() -> listingService.deleteListing(sellerId, listingId));
         assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isTrue();
 
-        watchlistListingNotifiedResetService.resetListingNotifiedIfSoldOut();
+        watchlistListingNotifiedResetScheduler.resetListingNotifiedIfSoldOut();
         assertThat(watchlistRepository.findById(watchlistId).orElseThrow().isListingNotified()).isFalse();
 
         // 리셋됐으니 재입고 매물 등록 시 다시 알림이 간다.
