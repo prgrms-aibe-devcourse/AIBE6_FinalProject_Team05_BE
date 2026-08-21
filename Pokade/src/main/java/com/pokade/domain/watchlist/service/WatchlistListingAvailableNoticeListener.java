@@ -30,7 +30,7 @@ import java.util.Objects;
 // "대표 변형에 관심 있다"고 등록한 워치리스트가 구체적 variantId로 올라온 재입고 매물을 놓친다.
 //
 // listingNotified 리셋(매물이 다시 소진되면 다음 재입고 때 또 알릴 수 있게 false로 되돌리는 것)은 이
-// 리스너가 아니라 별도 배치(WatchlistListingNotifiedResetService, #300 후속)가 담당한다 - 매물이 ACTIVE를
+// 리스너가 아니라 별도 배치(WatchlistListingNotifiedResetScheduler, #300 후속)가 담당한다 - 매물이 ACTIVE를
 // 벗어나는 지점이 listing/trade/admin 3개 도메인에 흩어져 있어 이벤트 기반보다 배치가 결합이 적다.
 //
 // 스코프 제한(이번 범위에서 의도적으로 제외):

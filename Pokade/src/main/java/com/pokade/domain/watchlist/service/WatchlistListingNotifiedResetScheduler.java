@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class WatchlistListingNotifiedResetService {
+public class WatchlistListingNotifiedResetScheduler {
 
     private final WatchlistRepository watchlistRepository;
     private final CardVariantRepository cardVariantRepository;
@@ -41,7 +41,7 @@ public class WatchlistListingNotifiedResetService {
         }
 
         // variantId가 null(대표 변형 관심)인 워치리스트가 여러 개여도 카드별로 한 번만 조회하도록
-        // 배치 조회한다(WatchlistTargetPriceNoticeService의 cardById/allTimeRangeByCardId와 동일한 패턴).
+        // 배치 조회한다(WatchlistTargetPriceNoticeScheduler의 cardById/allTimeRangeByCardId와 동일한 패턴).
         List<Long> cardIds = watchlists.stream().map(Watchlist::getCardId).distinct().toList();
         Map<Long, Long> primaryVariantIdByCardId = cardVariantRepository.findPrimaryVariantIdsByCardIds(cardIds).stream()
                 .collect(Collectors.toMap(CardVariantRepository.PrimaryVariantIdView::getCardId,

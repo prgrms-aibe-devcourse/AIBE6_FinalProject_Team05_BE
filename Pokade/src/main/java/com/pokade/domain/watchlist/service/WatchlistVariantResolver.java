@@ -4,7 +4,7 @@ package com.pokade.domain.watchlist.service;
 // CardVariantRepository.findGradesByCardId의 COALESCE(variant_id, primary_id) 관례와도 일치) - #300.
 //
 // WatchlistListingAvailableNoticeListener(단건 - 이벤트 하나당 CardVariantRepository.findPrimaryVariantId
-// 1회 조회)와 WatchlistListingNotifiedResetService(배치 - findPrimaryVariantIdsByCardIds로 여러 카드를
+// 1회 조회)와 WatchlistListingNotifiedResetScheduler(배치 - findPrimaryVariantIdsByCardIds로 여러 카드를
 // 한 번에 조회해 Map으로 보관)는 대표 variant ID를 구하는 방법이 서로 다르다(단건 조회 성능 특성이 달라
 // 하나로 통일하면 한쪽이 손해를 본다). 이 클래스는 그 차이를 신경 쓰지 않고, "이미 구해온 대표 variant
 // ID"와 "이 워치리스트/매물이 가진 variantId"를 합치는 규칙만 공용화한다.

@@ -97,6 +97,17 @@ class WatchlistRepositoryTest {
     }
 
     @Test
+    void findByIsNotifiedFalse는_목표가가_둘_다_없는_미알림_항목은_제외한다() {
+        Long userId = insertUser("no-target-price@test.com");
+        Long cardId = insertCard("watch-no-target-price");
+        Watchlist noTargetPrice = saveWatchlist(userId, cardId, null, null);
+
+        List<Watchlist> found = watchlistRepository.findByIsNotifiedFalse();
+
+        assertThat(found).extracting(Watchlist::getId).doesNotContain(noTargetPrice.getId());
+    }
+
+    @Test
     void findByListingNotifiedTrue는_재입고_알림을_보낸_항목만_조회한다() {
         Long userId = insertUser("listing-notified@test.com");
         Long notifiedCardId = insertCard("watch-listing-notified-a");
