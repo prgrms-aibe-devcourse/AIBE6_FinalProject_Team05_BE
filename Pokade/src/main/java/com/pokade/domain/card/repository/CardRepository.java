@@ -185,6 +185,19 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
 
     /**
+     * 정확 검색(부분일치)이 0건일 때만 시도하는 오타 허용 폴백 검색(#187) - pg_trgm의 similarity()로
+     * name과의 유사도가 threshold 이상인 카드를 유사도 내림차순으로 조회한다. V4 마이그레이션에서
+     * 추가한 pg_trgm 확장 + GIN 인덱스(idx_cards_name_trgm)를 전제로 한다.
+     */
+    @Query(value = """
+            SELECT c.* FROM cards c WHERE similarity(c.name, :keyword) >= :threshold
+            ORDER BY similarity(c.name, :keyword) DESC, c.id ASC
+            """,
+            countQuery = "SELECT COUNT(*) FROM cards c WHERE similarity(c.name, :keyword) >= :threshold",
+            nativeQuery = true)
+    Page<Card> findByNameSimilarTo(@Param("keyword") String keyword, @Param("threshold") double threshold, Pageable pageable);
+
+    /**
      * 한글 검색어를 도감번호 목록으로 변환한 뒤(PokedexKoNameRepository, 부분일치/초성 검색이라 여러 건일 수 있음)
      * 조회하는 용도 - 배열 컬럼이라 unnest+IN으로 매칭한다(CARD_SEARCH_BASE의 types 필터와 동일한 패턴).
      */

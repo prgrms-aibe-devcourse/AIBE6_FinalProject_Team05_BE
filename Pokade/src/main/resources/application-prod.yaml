@@ -71,6 +71,11 @@ scrydex:
   base-url: https://api.scrydex.com
   page-size: 100
 
+toss:
+  client-key: ${TOSS_CLIENT_KEY:}
+  secret-key: ${TOSS_SECRET_KEY:}
+  base-url: https://api.tosspayments.com
+
 pokade:
   ai:
     grade:
