@@ -137,7 +137,7 @@ public class NotificationService {
         Notification notification = Notification.builder()
                 .userId(watchlist.getUserId())
                 .type(NotificationType.LISTING_AVAILABLE)
-                .message(String.format("%s 카드에 매물이 새로 등록됐어요. 지금 확인해보세요!", cardName))
+                .message(String.format("%s 카드에 상품이 새로 등록됐어요. 지금 확인해보세요!", cardName))
                 .cardId(watchlist.getCardId())
                 .build();
 
