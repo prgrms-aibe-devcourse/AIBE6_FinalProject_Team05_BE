@@ -14,6 +14,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.support.CardSearchFilterResolver;
 
 public interface CardRepository extends JpaRepository<Card, Long> {
 
@@ -123,30 +124,22 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     /** #263: language(언어 코드, 예 EN/JA) 필터가 추가된 검색. types/rarities와 동일한 방식(바인드 IN절, 값 화이트리스트 없음). */
     default Page<Card> search(List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
-        // 빈 문자열("")이 섞여 들어오면 실제 필터 조건 없이 IN ('') 비교만 남아 매칭이 전혀 안 되므로
-        // hasTypes/hasRarities/hasLanguages 판단 전에 제거한다.
-        List<String> filteredTypes = types == null ? null
-                : types.stream().filter(v -> v != null && !v.isBlank()).toList();
-        List<String> filteredRarities = rarities == null ? null
-                : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
-        List<String> filteredLanguages = languages == null ? null
-                : languages.stream().filter(v -> v != null && !v.isBlank()).toList();
-
-        boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
-        boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
-        boolean hasLanguages = filteredLanguages != null && !filteredLanguages.isEmpty();
-        boolean hasPrice = minPrice != null || maxPrice != null;
+        // 필터 5종 유무 판단(blank 제거→hasX)과 IN절/overlap 바인딩용 안전값 대체는 CardQueryService의
+        // 키워드+필터 결합 검색과 완전히 동일한 규칙이라 CardSearchFilterResolver로 공용화했다(#308 후속).
+        CardSearchFilterResolver.Resolved resolved =
+                CardSearchFilterResolver.resolve(types, rarities, languages, minPrice, maxPrice);
+        boolean hasTypes = resolved.hasTypes();
+        String[] safeTypes = resolved.types();
+        boolean hasRarities = resolved.hasRarities();
+        List<String> safeRarities = resolved.rarities();
+        boolean hasLanguages = resolved.hasLanguages();
+        List<String> safeLanguages = resolved.languages();
+        boolean hasPrice = resolved.hasPrice();
         // Pageable에 담긴 Sort는 버린다: Spring의 Pageable 리졸버가 우리와 같은 "sort" 파라미터명을
         // 공유하기 때문에(예: ?sort=latest) 정렬 프로퍼티로 오인해 파싱해 넣을 수 있고, 그 값을 그대로
         // 네이티브 쿼리에 넘기면 이미 고정된 ORDER BY와 충돌한다. 정렬은 아래 화이트리스트로만 결정한다.
         Pageable unsortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         String resolvedSort = sort != null && SORT_COLUMN_WHITELIST.contains(sort) ? sort : SORT_LATEST;
-
-        // types는 c.types && :types(overlap 연산자, GIN 인덱스 idx_cards_types_gin 활용)로 바인딩되므로
-        // rarity/language처럼 "IN ('')로 무의미하게 채우는" 트릭이 아니라 실제 빈 배열을 넘긴다.
-        String[] safeTypes = (hasTypes ? filteredTypes : List.<String>of()).toArray(String[]::new);
-        List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
-        List<String> safeLanguages = hasLanguages ? filteredLanguages : List.of("");
 
         if (SORT_NAME.equals(resolvedSort)) {
             return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);

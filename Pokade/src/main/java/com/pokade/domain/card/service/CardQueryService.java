@@ -16,6 +16,7 @@ import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.repository.PokedexKoNameRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.card.support.CardRarityResolver;
+import com.pokade.domain.card.support.CardSearchFilterResolver;
 import com.pokade.domain.card.support.CardTypeEnResolver;
 import com.pokade.domain.card.support.KoreanTextUtil;
 import com.pokade.global.exception.BusinessException;
@@ -198,27 +199,9 @@ public class CardQueryService {
     private record NameSearchResult(Page<Card> cards, boolean fuzzyMatch) {
     }
 
-    // #308: search()의 필터 전처리(CardRepository.search() 기본 메서드가 하던 것과 동일한 규칙:
-    // blank 제거 → hasX 판단 → IN절/overlap용 안전값 대체)를 키워드+필터 결합 쿼리 호출부에서도
-    // 그대로 적용하기 위한 값 홀더. 필터 전용 경로(cardRepository.search())는 건드리지 않고 그대로
-    // 둬서 이미 검증된 로직에 회귀 위험을 만들지 않는 대신, 이 부분은 의도적으로 그 로직을 다시 구현했다.
-    private record ResolvedFilters(boolean hasTypes, String[] types, boolean hasRarities, List<String> rarities,
-                                    boolean hasLanguages, List<String> languages, boolean hasPrice) {
-    }
-
-    private ResolvedFilters resolveFilters(List<String> types, List<String> rarities, List<String> languages, Integer minPrice, Integer maxPrice) {
-        List<String> filteredTypes = types == null ? null : types.stream().filter(v -> v != null && !v.isBlank()).toList();
-        List<String> filteredRarities = rarities == null ? null : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
-        List<String> filteredLanguages = languages == null ? null : languages.stream().filter(v -> v != null && !v.isBlank()).toList();
-        boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
-        boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
-        boolean hasLanguages = filteredLanguages != null && !filteredLanguages.isEmpty();
-        boolean hasPrice = minPrice != null || maxPrice != null;
-        String[] safeTypes = (hasTypes ? filteredTypes : List.<String>of()).toArray(String[]::new);
-        List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
-        List<String> safeLanguages = hasLanguages ? filteredLanguages : List.of("");
-        return new ResolvedFilters(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice);
-    }
+    // #308 후속: 필터 전처리(blank 제거 → hasX 판단 → IN절/overlap용 안전값 대체)는 CardRepository.search()
+    // 기본 메서드와 완전히 동일한 규칙이라 CardSearchFilterResolver로 공용화했다 - 더 이상 이 클래스에
+    // 따로 구현을 두지 않는다.
 
     /** CardRepository.search()와 동일한 이유로 Pageable의 Sort를 버린다 - ?sort= 파라미터명 충돌 방지. */
     private Pageable stripSort(Pageable pageable) {
@@ -248,7 +231,7 @@ public class CardQueryService {
      */
     private NameSearchResult searchByName(String keyword, List<String> types, List<String> rarities, List<String> languages,
                                            String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
-        ResolvedFilters f = resolveFilters(types, rarities, languages, minPrice, maxPrice);
+        CardSearchFilterResolver.Resolved f = CardSearchFilterResolver.resolve(types, rarities, languages, minPrice, maxPrice);
         Pageable unsortedPageable = stripSort(pageable);
         Page<Card> filteredExact = dispatchNameExact(sort, keyword, f, expansionId, minPrice, maxPrice, unsortedPageable);
         if (filteredExact.getTotalElements() > 0 || keyword.length() < MIN_KEYWORD_LENGTH_FOR_SIMILARITY) {
@@ -263,7 +246,7 @@ public class CardQueryService {
         return new NameSearchResult(similar, similar.getTotalElements() > 0);
     }
 
-    private Page<Card> dispatchNameExact(String sort, String keyword, ResolvedFilters f, String expansionId,
+    private Page<Card> dispatchNameExact(String sort, String keyword, CardSearchFilterResolver.Resolved f, String expansionId,
                                           Integer minPrice, Integer maxPrice, Pageable pageable) {
         String resolvedSort = resolveSort(sort);
         if (CardRepository.SORT_NAME.equals(resolvedSort)) {
@@ -308,13 +291,13 @@ public class CardQueryService {
             return new NameSearchResult(Page.empty(pageable), false);
         }
         List<Integer> pokedexNumbers = matches.stream().map(PokedexKoName::getPokedexNumber).toList();
-        ResolvedFilters f = resolveFilters(types, rarities, languages, minPrice, maxPrice);
+        CardSearchFilterResolver.Resolved f = CardSearchFilterResolver.resolve(types, rarities, languages, minPrice, maxPrice);
         Pageable unsortedPageable = stripSort(pageable);
         Page<Card> cards = dispatchPokedexExact(sort, pokedexNumbers, f, expansionId, minPrice, maxPrice, unsortedPageable);
         return new NameSearchResult(cards, fuzzyMatch);
     }
 
-    private Page<Card> dispatchPokedexExact(String sort, List<Integer> pokedexNumbers, ResolvedFilters f, String expansionId,
+    private Page<Card> dispatchPokedexExact(String sort, List<Integer> pokedexNumbers, CardSearchFilterResolver.Resolved f, String expansionId,
                                              Integer minPrice, Integer maxPrice, Pageable pageable) {
         String resolvedSort = resolveSort(sort);
         if (CardRepository.SORT_NAME.equals(resolvedSort)) {
