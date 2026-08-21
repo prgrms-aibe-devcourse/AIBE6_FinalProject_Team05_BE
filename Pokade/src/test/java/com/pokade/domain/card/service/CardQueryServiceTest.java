@@ -361,6 +361,9 @@ class CardQueryServiceTest {
         assertThat(result.variants().get(0).grades()).containsExactly("A");
         assertThat(result.variants().get(1).grades()).containsExactly("B");
         verify(cardRepository).incrementViewCount(1L);
+        // #308 후속: incrementViewCount()는 벌크 UPDATE라 메모리상 card.viewCount(0)에는 반영되지
+        // 않는데, 응답은 "이번 방문으로 증가된 값"(0+1=1)을 보여줘야 한다 - 증가 전 값(0)이 아니라야 한다.
+        assertThat(result.viewCount()).isEqualTo(1);
     }
 
     @Test

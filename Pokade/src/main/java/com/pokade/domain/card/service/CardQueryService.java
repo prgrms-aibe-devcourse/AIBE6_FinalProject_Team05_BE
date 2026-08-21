@@ -151,10 +151,16 @@ public class CardQueryService {
         cardRepository.incrementViewCount(id);
         // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
         meterRegistry.counter("card.view.increment.calls").increment();
+        // incrementViewCount()는 벌크 UPDATE라 위에서 조회해 둔 card 엔티티의 메모리 값에는 반영되지
+        // 않는다(영속성 컨텍스트를 거치지 않음) - 그래서 "이번 방문으로 +1된" 값을 직접 계산해서 응답에
+        // 쓴다. card.setViewCount()로 엔티티 자체를 고치지 않는 이유는 CardDetailResponse.of() 주석 참고 -
+        // 영속 엔티티를 mutate하면 커밋 시 dirty checking으로 별도 UPDATE가 나가면서 동시 요청의 원자적
+        // 증가를 덮어쓸 수 있다. 추가 쿼리 없이(재조회 없이) 계산만으로 처리하는 게 가장 저렴하다.
+        Integer displayedViewCount = card.getViewCount() + 1;
         List<CardVariant> variants = cardVariantRepository.findByCardIdOrderByPrimaryDescVariantNameAsc(id);
         Map<Long, List<String>> gradesByVariantId = groupByKey(cardVariantRepository.findGradesByCardId(id, GRADE_WHITELIST_LIST),
                 CardVariantRepository.VariantGradeView::getVariantId, CardVariantRepository.VariantGradeView::getGrade);
-        return CardDetailResponse.of(card, variants, gradesByVariantId, cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()));
+        return CardDetailResponse.of(card, variants, gradesByVariantId, cardNameKoResolver.resolve(card), CardTypeEnResolver.resolve(card.getTypes()), CardRarityResolver.resolve(card.getRarityCode(), card.getRarity()), displayedViewCount);
     }
 
     private <T, K> Map<K, List<String>> groupByKey(List<T> views, Function<T, K> keyFn, Function<T, String> gradeFn) {

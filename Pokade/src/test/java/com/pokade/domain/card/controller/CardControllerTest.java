@@ -223,7 +223,7 @@ class CardControllerTest {
                 1L, "unlimitedHolofoil", true, null, null, List.of("S", "A"));
         CardDetailResponse detail = new CardDetailResponse(
                 1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
+                List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null, 15,
                 expansion, List.of(variant));
         given(cardService.getDetail(1L)).willReturn(detail);
 
@@ -235,6 +235,7 @@ class CardControllerTest {
         result.bodyJson().extractingPath("$.data.expansion.id").isEqualTo("base1");
         result.bodyJson().extractingPath("$.data.variants[0].variantName").isEqualTo("unlimitedHolofoil");
         result.bodyJson().extractingPath("$.data.variants[0].grades").asList().containsExactly("S", "A");
+        result.bodyJson().extractingPath("$.data.viewCount").isEqualTo(15);
     }
 
     @Test
@@ -244,7 +245,7 @@ class CardControllerTest {
                 "base1", "Base", "Base", "BS", 102, LocalDate.of(1999, 1, 9), null, null);
         CardDetailResponse detail = new CardDetailResponse(
                 1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null,
+                List.of("Fire"), "Mitsuhiro Arita", "4/102", null, null, null, 0,
                 expansion, List.of());
         given(cardService.getDetail(1L)).willReturn(detail);
 
