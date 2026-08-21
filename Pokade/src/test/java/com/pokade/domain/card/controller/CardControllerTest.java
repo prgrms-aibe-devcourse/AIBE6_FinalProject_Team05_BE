@@ -58,7 +58,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), isNull(), eq("base1"), isNull(), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), eq(List.of("Fire")), eq(List.of("Rare Holo")), isNull(), eq("base1"), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         var result = mockMvcTester.get()
@@ -76,7 +76,7 @@ class CardControllerTest {
                 List.of("Grass"), null, null, "sv10_ja", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(isNull(), isNull(), eq(List.of("EN", "JA")), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), eq(List.of("EN", "JA")), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -93,7 +93,7 @@ class CardControllerTest {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
         given(cardService.search(
-                eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+                isNull(), eq(List.of("Fire", "Water")), eq(List.of("Common", "Rare Holo")), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -107,7 +107,7 @@ class CardControllerTest {
     void t2() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -123,7 +123,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -138,7 +138,7 @@ class CardControllerTest {
     @DisplayName("t15 size가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t15() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "size는 최대 100까지 요청할 수 있습니다."))
-                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
 
         mockMvcTester.get()
                 .uri("/api/cards?size=101")
@@ -152,7 +152,7 @@ class CardControllerTest {
     @DisplayName("t16 types 개수가 상한을 초과하면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t16() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "types는 최대 20개까지 지정할 수 있습니다."))
-                .given(cardService).search(any(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+                .given(cardService).search(isNull(), any(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
 
         String query = java.util.stream.IntStream.range(0, 21)
                 .mapToObj(i -> "types=type" + i)
@@ -174,7 +174,7 @@ class CardControllerTest {
                 List.of("Fire"), null, null, "base1", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardService.search(isNull(), isNull(), isNull(), isNull(), eq(10000), eq(50000), isNull(), any(Pageable.class)))
+        given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), eq(10000), eq(50000), isNull(), any(Pageable.class)))
                 .willReturn(page);
 
         mockMvcTester.get()
@@ -189,7 +189,7 @@ class CardControllerTest {
     @DisplayName("t21 minPrice가 maxPrice보다 크면 서비스의 INVALID_INPUT 예외가 400으로 응답된다")
     void t21() {
         willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "minPrice는 maxPrice보다 클 수 없습니다."))
-                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), eq(50000), eq(10000), isNull(), any(Pageable.class));
+                .given(cardService).search(isNull(), isNull(), isNull(), isNull(), isNull(), eq(50000), eq(10000), isNull(), any(Pageable.class));
 
         mockMvcTester.get()
                 .uri("/api/cards?minPrice=50000&maxPrice=10000")

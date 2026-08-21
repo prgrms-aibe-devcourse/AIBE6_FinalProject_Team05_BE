@@ -38,6 +38,11 @@ public class CardService {
         return cardQueryService.search(types, rarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
     }
 
+    /** #308: q(키워드)가 추가된 오버로드 - GET /api/cards?q=... 필터+키워드 통합 검색이 이 메서드로 들어온다. */
+    public Page<CardResponse> search(String q, List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+        return cardQueryService.search(q, types, rarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
+    }
+
     public CardDetailResponse getDetail(Long id) {
         return cardQueryService.getDetail(id);
     }
