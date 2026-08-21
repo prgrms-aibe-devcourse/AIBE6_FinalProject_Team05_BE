@@ -143,6 +143,24 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("t31 오타(Charizrd)와 유사도가 threshold 이상인 카드를 유사도 내림차순으로 조회한다(#187, pg_trgm)")
+    void t31() {
+        Page<Card> result = cardRepository.findByNameSimilarTo("Charizrd", 0.14, PageRequest.of(0, 10));
+
+        assertThat(result.getContent())
+                .extracting(Card::getName)
+                .containsExactly("Charizard", "Charizard ex");
+    }
+
+    @Test
+    @DisplayName("t32 threshold 미달이면 조회되지 않는다(#187, pg_trgm)")
+    void t32() {
+        Page<Card> result = cardRepository.findByNameSimilarTo("전혀다른키워드입니다", 0.14, PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).isEmpty();
+    }
+
+    @Test
     @DisplayName("t2 types 배열에 검색 타입이 포함된 카드만 조회한다")
     void t2() {
         Page<Card> result = cardRepository.search(List.of("Fire"), null, null, null, null, null, PageRequest.of(0, 10));

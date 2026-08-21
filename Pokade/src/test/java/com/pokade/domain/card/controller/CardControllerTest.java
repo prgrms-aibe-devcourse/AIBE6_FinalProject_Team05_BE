@@ -55,7 +55,7 @@ class CardControllerTest {
     @DisplayName("t1 쿼리 파라미터로 카드를 검색하면 200과 페이지 결과를 반환한다")
     void t1() {
         CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, "base1", List.of());
+                List.of("Fire"), null, null, "base1", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.search(eq(List.of("Fire")), eq(List.of("Rare Holo")), isNull(), eq("base1"), isNull(), isNull(), isNull(), any(Pageable.class)))
@@ -73,7 +73,7 @@ class CardControllerTest {
     @DisplayName("t27 languages 쿼리 파라미터를 서비스에 그대로 위임한다(#263)")
     void t27() {
         CardResponse card = new CardResponse(1L, "sv10_ja-1", "クヌギダマ", "피콘", "JA", "サンダー", "Common", "Pokémon",
-                List.of("Grass"), null, null, "sv10_ja", List.of());
+                List.of("Grass"), null, null, "sv10_ja", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.search(isNull(), isNull(), eq(List.of("EN", "JA")), isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
@@ -120,7 +120,7 @@ class CardControllerTest {
     @DisplayName("t12 sort 쿼리 파라미터를 서비스에 그대로 위임한다")
     void t12() {
         CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, "base1", List.of());
+                List.of("Fire"), null, null, "base1", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq("name"), any(Pageable.class)))
@@ -171,7 +171,7 @@ class CardControllerTest {
     @DisplayName("t20 minPrice/maxPrice 쿼리 파라미터를 서비스에 그대로 위임한다")
     void t20() {
         CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, "base1", List.of());
+                List.of("Fire"), null, null, "base1", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.search(isNull(), isNull(), isNull(), isNull(), eq(10000), eq(50000), isNull(), any(Pageable.class)))
@@ -275,7 +275,7 @@ class CardControllerTest {
     @DisplayName("t6 검색어로 카드 이름 키워드 검색을 하면 200과 페이지 결과를 반환한다")
     void t6() {
         CardResponse card = new CardResponse(1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, "base1", List.of());
+                List.of("Fire"), null, null, "base1", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.searchByKeyword(eq("char"), any(Pageable.class))).willReturn(page);
@@ -306,7 +306,7 @@ class CardControllerTest {
     @DisplayName("t8 존재하는 카드 id로 유사 카드를 조회하면 200과 목록을 반환한다")
     void t8() {
         CardResponse related = new CardResponse(2L, "sv3pt5-6", "Charizard ex", null, "EN", "151", "Double Rare", "Pokémon",
-                List.of("Fire"), null, null, "sv3pt5", List.of());
+                List.of("Fire"), null, null, "sv3pt5", List.of(), false);
         given(cardService.getRelated(1L)).willReturn(List.of(related));
 
         mockMvcTester.get()
@@ -370,7 +370,7 @@ class CardControllerTest {
     @DisplayName("t24 한글 검색어로 요청하면 서비스에 그대로 위임하고 200과 페이지 결과를 반환한다")
     void t24() {
         CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", null, "JA", "151", "Common", "Pokémon",
-                List.of("Lightning"), null, null, "sv3pt5", List.of());
+                List.of("Lightning"), null, null, "sv3pt5", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.searchByKeyword(eq("피카츄"), any(Pageable.class))).willReturn(page);
@@ -388,7 +388,7 @@ class CardControllerTest {
     @DisplayName("t25 초성 검색어도 판별 없이 서비스에 그대로 위임한다")
     void t25() {
         CardResponse card = new CardResponse(1L, "sv3pt5-25", "피카츄", null, "JA", "151", "Common", "Pokémon",
-                List.of("Lightning"), null, null, "sv3pt5", List.of());
+                List.of("Lightning"), null, null, "sv3pt5", List.of(), false);
         Pageable pageable = PageRequest.of(0, 20);
         Page<CardResponse> page = new PageImpl<>(List.of(card), pageable, 1);
         given(cardService.searchByKeyword(eq("ㅍㅋㅊ"), any(Pageable.class))).willReturn(page);
