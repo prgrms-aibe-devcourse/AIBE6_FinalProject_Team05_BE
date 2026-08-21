@@ -9,11 +9,15 @@ import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.point.service.PointService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
 import com.pokade.global.web.PageableValidator;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -29,28 +33,33 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AiGradeService {
 
     private static final int FREE_LIMIT = 3;
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int VISION_MAX_ATTEMPTS = 3;
 
     // OpenAI Vision이 실제로 지원하는 이미지 포맷 (ImageIO는 디코딩되지만 Vision은 거부하는 bmp/tiff 등을 사전 차단)
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
             Set.of("image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp");
 
-    // TODO: User 파트 개발 완료 후 포인트 차감 연동 예정
-    // private static final int GRADE_COST = 100;
+    // 매 요청마다 new로 생성하지 않도록 공유 인스턴스 사용 (ObjectMapper는 thread-safe)
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final int GRADE_COST = 100;
 
     private final ChatClient chatClient;
     private final S3FileStorage s3FileStorage;
@@ -58,16 +67,61 @@ public class AiGradeService {
     private final GradeResultRepository gradeResultRepository;
     private final GradeResultImageRepository gradeResultImageRepository;
     private final CardRepository cardRepository;
-
-    // TODO: User 파트 개발 완료 후 아래 Repository 주입 및 포인트 차감 로직 연동 예정
-    // private final UserRepository userRepository;
-    // private final PointTransactionRepository pointTransactionRepository;
+    private final PointService pointService;
+    private final MeterRegistry meterRegistry;
 
     @Value("${pokade.ai.grade.model}")
     private String gradeModel;
 
+    // Micrometer 메트릭
+    // ai.grade.result{status, free} — 결과별 카운터 (Grafana: 성공률, 품질실패율, 유/무료 비율)
+    private final Counter successFreeCounter;
+    private final Counter successPaidCounter;
+    private final Counter qualityFailCounter;
+    // ai.grade.local_fail — 로컬 품질 검사에서 Vision 호출 없이 걸러진 횟수 (토큰 절약량 추적)
+    private final Counter localQualityFailCounter;
+    // ai.grade.vision.duration — Vision API 호출 시간 (Grafana: p95 레이턴시, 이상 탐지)
+    private final Timer visionTimer;
+
+    public AiGradeService(ChatClient chatClient, S3FileStorage s3FileStorage,
+                          ImageQualityChecker imageQualityChecker,
+                          GradeResultRepository gradeResultRepository,
+                          GradeResultImageRepository gradeResultImageRepository,
+                          CardRepository cardRepository,
+                          PointService pointService,
+                          MeterRegistry meterRegistry) {
+        this.chatClient = chatClient;
+        this.s3FileStorage = s3FileStorage;
+        this.imageQualityChecker = imageQualityChecker;
+        this.gradeResultRepository = gradeResultRepository;
+        this.gradeResultImageRepository = gradeResultImageRepository;
+        this.cardRepository = cardRepository;
+        this.pointService = pointService;
+        this.meterRegistry = meterRegistry;
+
+        this.successFreeCounter  = Counter.builder("ai.grade.result")
+                .tag("status", "SUCCESS").tag("free", "true")
+                .description("AI 등급 진단 성공(무료)")
+                .register(meterRegistry);
+        this.successPaidCounter  = Counter.builder("ai.grade.result")
+                .tag("status", "SUCCESS").tag("free", "false")
+                .description("AI 등급 진단 성공(유료)")
+                .register(meterRegistry);
+        this.qualityFailCounter  = Counter.builder("ai.grade.result")
+                .tag("status", "QUALITY_FAIL").tag("free", "true")
+                .description("AI 등급 진단 품질 실패")
+                .register(meterRegistry);
+        this.localQualityFailCounter = Counter.builder("ai.grade.local_fail")
+                .description("로컬 품질 검사 실패로 Vision API 호출 생략된 횟수")
+                .register(meterRegistry);
+        this.visionTimer = Timer.builder("ai.grade.vision.duration")
+                .description("OpenAI Vision API 호출 시간")
+                .register(meterRegistry);
+    }
+
     // S3 업로드·Vision API 호출은 느린 외부 I/O라 DB 트랜잭션 밖에서 실행 — 커넥션을 오래 점유하지 않도록
     // DB 쓰기(재업로드 마킹·결과 저장)만 필요한 지점에서 별도로 처리한다.
+    @Timed(value = "ai.grade.duration", description = "AI 등급 진단 전체 처리 시간")
     public GradeResponse grade(Long userId, GradeRequest request) {
         validateImageFormats(request);
 
@@ -75,12 +129,9 @@ public class AiGradeService {
         GradeResult originalResult = null;
         boolean isFreeRetry = false;
         if (request.retryOfId() != null) {
-            boolean retryable = gradeResultRepository.existsRetryableResult(request.retryOfId(), userId);
+            boolean retryable = gradeResultRepository.existsRetryableResult(request.retryOfId(), userId, GradeStatus.QUALITY_FAIL);
             if (retryable) {
                 originalResult = gradeResultRepository.findById(request.retryOfId()).orElseThrow();
-                originalResult.markRetryUsed(); // retry_used = true (재사용 방지)
-                // @Transactional 밖이라 영속성 컨텍스트가 없음 — 변경사항이 자동 flush되지 않으므로 명시적으로 save
-                gradeResultRepository.save(originalResult);
                 isFreeRetry = true;
             }
             // retryable하지 않으면 새 요청으로 처리 (유료 가능)
@@ -90,43 +141,64 @@ public class AiGradeService {
         long successCount = gradeResultRepository.countByUserIdAndStatus(userId, GradeStatus.SUCCESS);
         boolean isFree = isFreeRetry || successCount < FREE_LIMIT;
 
-        // TODO: User 파트 개발 완료 후 포인트 차감 연동 예정
-        // 유료(isFree=false)인 경우 users.point_balance에서 GRADE_COST(100) 차감 후
-        // point_transactions에 type=USE 이력 저장 필요.
-        // 동시 요청 방지를 위해 UserRepository.findByIdWithLock(userId) 사용할 것.
-        // if (!isFree) {
-        //     User user = userRepository.findByIdWithLock(userId).orElseThrow();
-        //     user.deductPoints(GRADE_COST);
-        //     pointTransactionRepository.save(PointTransaction.builder()
-        //             .userId(userId)
-        //             .type("USE")
-        //             .amount(GRADE_COST)
-        //             .balanceAfter(user.getPointBalance())
-        //             .relatedGradeResultId(savedResult.getId())
-        //             .build());
-        // }
+        // 유료 요청 사전 잔액 확인 (비관적 락 없이 빠른 실패 — Vision API 호출 전에 잔액 부족을 먼저 잡는다)
+        // 실제 차감은 grade_result 저장 후 PointService.useForGrade()가 락을 잡고 재검증한다.
+        if (!isFree) {
+            pointService.verifyBalance(userId, GRADE_COST);
+        }
 
-        // ── S3 이미지 업로드 (imageKeys는 S3 key — 버킷이 프라이빗이라 조회 시 presigned URL로 변환 필요) ──
+        // ── S3 이미지 업로드 — Java 21 가상 스레드로 6개 파일 병렬 업로드 ─────
+        // (imageKeys는 S3 key — 버킷이 프라이빗이라 조회 시 presigned URL로 변환 필요)
         Map<PhotoType, String> imageKeys = uploadImages(request);
 
-        // ── Vision API 호출 → 등급 산출 ──────────────────────────────────────
+        // ── Vision API 호출 → 등급 산출 (최대 3회 재시도) ──────────────────────
         VisionResult visionResult = evaluateQuality(request);
 
         // ── 결과 저장 ────────────────────────────────────────────────────────
+        // Vision API 성공 확인 후 재업로드 마킹 — 이전에 하면 Vision 실패 시 기회 소멸 버그 발생
+        if (originalResult != null) {
+            originalResult.markRetryUsed();
+            gradeResultRepository.save(originalResult);
+        }
+
         GradeResult gradeResult = buildGradeResult(
                 userId, visionResult, isFree,
                 isFreeRetry ? request.retryOfId() : null);
         gradeResultRepository.save(gradeResult);
 
-        // 이미지 key 연결 저장 (imageUrl 컬럼에는 S3 key를 저장 — 프라이빗 버킷이라 고정 URL이 아님)
-        imageKeys.forEach((type, key) ->
-                gradeResultImageRepository.save(GradeResultImage.builder()
+        // 이미지 key 연결 저장 — saveAll로 배치 INSERT
+        List<GradeResultImage> images = new ArrayList<>();
+        imageKeys.forEach((type, key) -> images.add(
+                GradeResultImage.builder()
                         .gradeResultId(gradeResult.getId())
                         .photoType(type)
                         .imageUrl(key)
                         .build()));
+        gradeResultImageRepository.saveAll(images);
 
-        return GradeResponse.from(gradeResult, resolveCard(gradeResult));
+        // ── 포인트 차감 (유료 요청) ──────────────────────────────────────────
+        // grade_result.id를 relatedGradeResultId로 기록하므로 반드시 저장 후 호출
+        Integer remainingPoints = null;
+        if (!isFree && gradeResult.getStatus() == GradeStatus.SUCCESS) {
+            remainingPoints = pointService.useForGrade(userId, GRADE_COST, gradeResult.getId());
+        }
+
+        // ── 메트릭 기록 ─────────────────────────────────────────────────────
+        recordResultMetric(visionResult, isFree);
+
+        // ── presigned URL 생성 후 응답 ───────────────────────────────────────
+        Map<String, String> imageUrls = toPresignedUrls(imageKeys);
+        return GradeResponse.from(gradeResult, resolveCard(gradeResult), imageUrls, remainingPoints);
+    }
+
+    private void recordResultMetric(VisionResult visionResult, boolean isFree) {
+        if (visionResult.qualityIssue()) {
+            qualityFailCounter.increment();
+        } else if (isFree) {
+            successFreeCounter.increment();
+        } else {
+            successPaidCounter.increment();
+        }
     }
 
     public GradeResponse getGradeResult(Long userId, Long resultId) {
@@ -137,7 +209,13 @@ public class AiGradeService {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
 
-        return GradeResponse.from(gradeResult, resolveCard(gradeResult));
+        List<GradeResultImage> images = gradeResultImageRepository.findByGradeResultId(resultId);
+        Map<String, String> imageUrls = images.stream()
+                .collect(Collectors.toMap(
+                        img -> img.getPhotoType().name(),
+                        img -> s3FileStorage.generatePresignedUrl(img.getImageUrl())));
+
+        return GradeResponse.from(gradeResult, resolveCard(gradeResult), imageUrls, null);
     }
 
     // vision_card_id(externalId)가 자체 DB에 없거나(신규 세트 동기화 지연 등) 아예 인식 실패면 null —
@@ -163,8 +241,10 @@ public class AiGradeService {
                 : cardRepository.findByExternalIdIn(externalIds).stream()
                         .collect(Collectors.toMap(Card::getExternalId, c -> c));
 
+        // 이미지 URL·remainingPoints는 목록에서 제공하지 않음
         return results.map(r -> GradeResponse.from(r,
-                r.getVisionCardId() != null ? cardByExternalId.get(r.getVisionCardId()) : null));
+                r.getVisionCardId() != null ? cardByExternalId.get(r.getVisionCardId()) : null,
+                null, null));
     }
 
     private void validateImageFormats(GradeRequest request) {
@@ -182,28 +262,55 @@ public class AiGradeService {
         }
     }
 
+    // Java 21 가상 스레드로 6개 파일을 병렬 업로드 — 직렬 대비 약 1/6 시간 단축
     private Map<PhotoType, String> uploadImages(GradeRequest request) {
-        Map<PhotoType, MultipartFile> files = new LinkedHashMap<>();
-        files.put(PhotoType.FRONT,     request.front());
-        files.put(PhotoType.BACK,      request.back());
-        files.put(PhotoType.CORNER_TL, request.cornerTl());
-        files.put(PhotoType.CORNER_TR, request.cornerTr());
-        files.put(PhotoType.CORNER_BL, request.cornerBl());
-        files.put(PhotoType.CORNER_BR, request.cornerBr());
+        List<PhotoType> types = List.of(
+                PhotoType.FRONT, PhotoType.BACK,
+                PhotoType.CORNER_TL, PhotoType.CORNER_TR,
+                PhotoType.CORNER_BL, PhotoType.CORNER_BR);
+        List<MultipartFile> files = List.of(
+                request.front(), request.back(),
+                request.cornerTl(), request.cornerTr(),
+                request.cornerBl(), request.cornerBr());
 
-        Map<PhotoType, String> urls = new LinkedHashMap<>();
-        files.forEach((type, file) ->
-                urls.put(type, s3FileStorage.upload(file, "ai-grade")));
-        return urls;
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<CompletableFuture<String>> futures = files.stream()
+                    .map(file -> CompletableFuture.supplyAsync(
+                            () -> s3FileStorage.upload(file, "ai-grade"), executor))
+                    .toList();
+
+            Map<PhotoType, String> keys = new LinkedHashMap<>();
+            for (int i = 0; i < types.size(); i++) {
+                keys.put(types.get(i), futures.get(i).join());
+            }
+            return keys;
+        }
+    }
+
+    private Map<String, String> toPresignedUrls(Map<PhotoType, String> imageKeys) {
+        return imageKeys.entrySet().stream()
+                .collect(Collectors.toMap(
+                        e -> e.getKey().name(),
+                        e -> s3FileStorage.generatePresignedUrl(e.getValue())));
     }
 
     private VisionResult evaluateQuality(GradeRequest request) {
         Optional<String> localFailReason = imageQualityChecker.checkAll(request);
         if (localFailReason.isPresent()) {
             log.info("로컬 이미지 품질 사전 검사 실패로 Vision 호출 생략(토큰 절약): {}", localFailReason.get());
+            localQualityFailCounter.increment();
             return VisionResult.localQualityFail(localFailReason.get());
         }
-        return callVisionApi(request);
+
+        // Vision API 일시 장애 대비 최대 3회 재시도 (새 의존성 없이 단순 루프)
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return callVisionApi(request);
+            } catch (AiServiceUnavailableException e) {
+                if (attempt >= VISION_MAX_ATTEMPTS) throw e;
+                log.warn("Vision API 호출 실패, 재시도 ({}/{})...", attempt, VISION_MAX_ATTEMPTS);
+            }
+        }
     }
 
     private VisionResult callVisionApi(GradeRequest request) {
@@ -213,19 +320,23 @@ public class AiGradeService {
                 request.cornerBl(), request.cornerBr());
 
         try {
-            String response = chatClient.prompt()
-                    .user(u -> {
-                        u.text(buildPrompt());
-                        files.forEach(file -> u.media(
-                                mimeTypeOf(file),
-                                toResource(file)));
-                    })
-                    .options(OpenAiChatOptions.builder().model(gradeModel))
-                    .call()
-                    .content();
+            return visionTimer.recordCallable(() -> {
+                String response = chatClient.prompt()
+                        .user(u -> {
+                            u.text(buildPrompt());
+                            files.forEach(file -> u.media(
+                                    mimeTypeOf(file),
+                                    toResource(file)));
+                        })
+                        .options(OpenAiChatOptions.builder().model(gradeModel))
+                        .call()
+                        .content();
 
-            return new ObjectMapper().readValue(extractJson(response), VisionResult.class);
+                return OBJECT_MAPPER.readValue(extractJson(response), VisionResult.class);
+            });
 
+        } catch (AiServiceUnavailableException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Vision API 호출 실패", e);
             throw new AiServiceUnavailableException("AI 등급 진단 서비스에 일시적인 오류가 발생했습니다.");
@@ -294,12 +405,12 @@ public class AiGradeService {
                     .status(GradeStatus.QUALITY_FAIL)
                     .isFree(true)        // 품질 실패는 과금하지 않음
                     .pointUsed(0)
-                    .retryAllowed(true)  // 무료 재업로드 1회 부여
+                    // 재업로드의 재업로드는 허용하지 않음 — 무한 무료 체인 방지
+                    .retryAllowed(retryOfId == null)
                     .retryOfId(retryOfId)
                     .build();
         }
 
-        // TODO: User 파트 개발 완료 후 isFree=false 시 pointUsed=GRADE_COST 로 변경 예정
         return GradeResult.builder()
                 .userId(userId)
                 .status(GradeStatus.SUCCESS)
@@ -312,7 +423,7 @@ public class AiGradeService {
                 .visionCardId(vision.cardExternalId())
                 .visionConfidence(vision.cardConfidence())
                 .isFree(isFree)
-                .pointUsed(0) // TODO: User 파트 완료 후 !isFree 시 GRADE_COST 로 교체
+                .pointUsed(isFree ? 0 : GRADE_COST)
                 .retryAllowed(false)
                 .retryOfId(retryOfId)
                 .build();
