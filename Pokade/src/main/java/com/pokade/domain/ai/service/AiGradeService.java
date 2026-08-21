@@ -68,7 +68,6 @@ public class AiGradeService {
     private final GradeResultImageRepository gradeResultImageRepository;
     private final CardRepository cardRepository;
     private final PointService pointService;
-    private final MeterRegistry meterRegistry;
 
     @Value("${pokade.ai.grade.model}")
     private String gradeModel;
@@ -99,7 +98,6 @@ public class AiGradeService {
         this.gradeResultImageRepository = gradeResultImageRepository;
         this.cardRepository = cardRepository;
         this.pointService = pointService;
-        this.meterRegistry = meterRegistry;
 
         this.successFreeCounter  = Counter.builder("ai.grade.result")
                 .tag("status", "SUCCESS").tag("free", "true")
@@ -131,12 +129,13 @@ public class AiGradeService {
         validateImageFormats(request);
 
         // ── 재업로드 요청 검증 ───────────────────────────────────────────────
-        GradeResult originalResult = null;
+        // claimRetry: 조건 확인 + retryUsed=true 마킹을 단일 UPDATE로 원자 처리 (check-then-act 경쟁 방지).
+        // Vision 호출 전에 클레임하므로 Vision 3회 실패 시 재시도 기회가 소멸되는 트레이드오프가 있으나,
+        // 경쟁 조건으로 인한 무제한 무료 이용보다 안전하다.
         boolean isFreeRetry = false;
         if (request.retryOfId() != null) {
-            boolean retryable = gradeResultRepository.existsRetryableResult(request.retryOfId(), userId, GradeStatus.QUALITY_FAIL);
-            if (retryable) {
-                originalResult = gradeResultRepository.findById(request.retryOfId()).orElseThrow();
+            int claimed = gradeResultRepository.claimRetry(request.retryOfId(), userId, GradeStatus.QUALITY_FAIL);
+            if (claimed > 0) {
                 isFreeRetry = true;
             }
             // retryable하지 않으면 새 요청으로 처리 (유료 가능)
@@ -160,12 +159,6 @@ public class AiGradeService {
         VisionResult visionResult = evaluateQuality(request);
 
         // ── 결과 저장 ────────────────────────────────────────────────────────
-        // Vision API 성공 확인 후 재업로드 마킹 — 이전에 하면 Vision 실패 시 기회 소멸 버그 발생
-        if (originalResult != null) {
-            originalResult.markRetryUsed();
-            gradeResultRepository.save(originalResult);
-        }
-
         GradeResult gradeResult = buildGradeResult(
                 userId, visionResult, isFree,
                 isFreeRetry ? request.retryOfId() : null);
@@ -218,7 +211,8 @@ public class AiGradeService {
         Map<String, String> imageUrls = images.stream()
                 .collect(Collectors.toMap(
                         img -> img.getPhotoType().name(),
-                        img -> s3FileStorage.generatePresignedUrl(img.getImageUrl())));
+                        img -> s3FileStorage.generatePresignedUrl(img.getImageUrl()),
+                        (existing, replacement) -> existing));
 
         return GradeResponse.from(gradeResult, resolveCard(gradeResult), imageUrls, null);
     }
@@ -253,12 +247,7 @@ public class AiGradeService {
     }
 
     private void validateImageFormats(GradeRequest request) {
-        List<MultipartFile> files = List.of(
-                request.front(), request.back(),
-                request.cornerTl(), request.cornerTr(),
-                request.cornerBl(), request.cornerBr());
-
-        for (MultipartFile file : files) {
+        for (MultipartFile file : request.files()) {
             String contentType = file.getContentType();
             if (contentType == null || !SUPPORTED_IMAGE_TYPES.contains(contentType.toLowerCase())) {
                 throw new IllegalArgumentException(
@@ -273,10 +262,7 @@ public class AiGradeService {
                 PhotoType.FRONT, PhotoType.BACK,
                 PhotoType.CORNER_TL, PhotoType.CORNER_TR,
                 PhotoType.CORNER_BL, PhotoType.CORNER_BR);
-        List<MultipartFile> files = List.of(
-                request.front(), request.back(),
-                request.cornerTl(), request.cornerTr(),
-                request.cornerBl(), request.cornerBr());
+        List<MultipartFile> files = request.files();
 
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             List<CompletableFuture<String>> futures = files.stream()
@@ -320,10 +306,7 @@ public class AiGradeService {
     }
 
     private VisionResult callVisionApi(GradeRequest request) {
-        List<MultipartFile> files = List.of(
-                request.front(), request.back(),
-                request.cornerTl(), request.cornerTr(),
-                request.cornerBl(), request.cornerBr());
+        List<MultipartFile> files = request.files();
 
         try {
             return visionTimer.recordCallable(() -> {
