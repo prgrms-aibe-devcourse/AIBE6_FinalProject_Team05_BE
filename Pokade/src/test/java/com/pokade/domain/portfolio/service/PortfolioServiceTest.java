@@ -461,17 +461,18 @@ class PortfolioServiceTest {
     }
 
     @Test
-    @DisplayName("구성비율: 모든 항목의 시세가 없으면 빈 목록 반환")
-    void getAnalytics_noPriceData() {
+    @DisplayName("구성비율: 카드 정보를 찾을 수 없으면 '미분류' 수량으로 집계된다")
+    void getAnalytics_cardNotFound() {
         PortfolioItem item = stubItem(1L, 10L, null);
         given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(item));
-        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(anyList())).willReturn(List.of());
+        given(cardRepository.findAllById(any())).willReturn(List.of());
 
         PortfolioAnalyticsResponse result = portfolioService.getAnalytics(1L);
 
-        assertThat(result.bySet()).isEmpty();
-        assertThat(result.byRarity()).isEmpty();
-        then(cardRepository).should(never()).findAllById(any());
+        assertThat(result.bySet()).containsExactly(
+                new PortfolioAnalyticsItemResponse("미분류", BigDecimal.ONE, new BigDecimal("100.00")));
+        assertThat(result.byRarity()).containsExactly(
+                new PortfolioAnalyticsItemResponse("미분류", BigDecimal.ONE, new BigDecimal("100.00")));
     }
 
     @Test
@@ -485,22 +486,20 @@ class PortfolioServiceTest {
                 .build();
         ReflectionTestUtils.setField(item, "id", 100L);
         given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(item));
-        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
-                .willReturn(List.of(variantMarketPriceView(5L, new BigDecimal("10000"), "KRW", null)));
         given(cardRepository.findAllById(any())).willReturn(List.of(stubCard(10L, null, null)));
 
         PortfolioAnalyticsResponse result = portfolioService.getAnalytics(1L);
 
         assertThat(result.bySet()).containsExactly(
-                new PortfolioAnalyticsItemResponse("미분류", new BigDecimal("10000"), new BigDecimal("100.00")));
+                new PortfolioAnalyticsItemResponse("미분류", BigDecimal.ONE, new BigDecimal("100.00")));
         assertThat(result.byRarity()).containsExactly(
-                new PortfolioAnalyticsItemResponse("미분류", new BigDecimal("10000"), new BigDecimal("100.00")));
+                new PortfolioAnalyticsItemResponse("미분류", BigDecimal.ONE, new BigDecimal("100.00")));
     }
 
     @Test
-    @DisplayName("구성비율: 세트별·레어도별 평가액 비중을 내림차순으로 반환한다")
+    @DisplayName("구성비율: 세트별·레어도별 보유 수량 비중을 내림차순으로 반환한다")
     void getAnalytics_success() {
-        // item1: 세트 A / 레어도 R, 평가액 30000(qty3*10000) / item2: 세트 B / 레어도 R, 평가액 10000
+        // item1: 세트 A / 레어도 R, 수량 3 / item2: 세트 B / 레어도 R, 수량 1
         PortfolioItem item1 = PortfolioItem.builder()
                 .userId(1L).cardId(10L).variantId(5L).quantity(3).build();
         ReflectionTestUtils.setField(item1, "id", 100L);
@@ -509,23 +508,19 @@ class PortfolioServiceTest {
         ReflectionTestUtils.setField(item2, "id", 200L);
 
         given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(item1, item2));
-        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
-                .willReturn(List.of(
-                        variantMarketPriceView(5L, new BigDecimal("10000"), "KRW", null),
-                        variantMarketPriceView(6L, new BigDecimal("10000"), "KRW", null)));
         given(cardRepository.findAllById(any())).willReturn(List.of(
                 stubCard(10L, "세트A", "레어도R"),
                 stubCard(20L, "세트B", "레어도R")));
 
         PortfolioAnalyticsResponse result = portfolioService.getAnalytics(1L);
 
-        // 총 평가액=40000, 세트A=30000(75%), 세트B=10000(25%) → 내림차순
+        // 총 수량=4, 세트A=3(75%), 세트B=1(25%) → 내림차순
         assertThat(result.bySet()).containsExactly(
-                new PortfolioAnalyticsItemResponse("세트A", new BigDecimal("30000"), new BigDecimal("75.00")),
-                new PortfolioAnalyticsItemResponse("세트B", new BigDecimal("10000"), new BigDecimal("25.00")));
+                new PortfolioAnalyticsItemResponse("세트A", new BigDecimal("3"), new BigDecimal("75.00")),
+                new PortfolioAnalyticsItemResponse("세트B", BigDecimal.ONE, new BigDecimal("25.00")));
         // 레어도는 둘 다 "레어도R"로 합산되어 100%
         assertThat(result.byRarity()).containsExactly(
-                new PortfolioAnalyticsItemResponse("레어도R", new BigDecimal("40000"), new BigDecimal("100.00")));
+                new PortfolioAnalyticsItemResponse("레어도R", new BigDecimal("4"), new BigDecimal("100.00")));
     }
 
     // ===== addFromGradeResult =====

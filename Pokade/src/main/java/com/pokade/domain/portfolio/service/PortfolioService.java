@@ -106,6 +106,8 @@ public class PortfolioService {
 
     @Transactional
     public void deleteItem(Long userId, Long itemId) {
+        userAccessChecker.assertWritable(userId);
+
         PortfolioItem item = portfolioItemRepository.findByIdAndUserId(itemId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_ITEM_NOT_FOUND));
 
@@ -293,9 +295,11 @@ public class PortfolioService {
                     int ownedCount = entry.getValue().size();
                     Integer total = expansion != null ? expansion.getTotal() : null;
                     int totalCount = total != null ? total : dbCountByExpansion.getOrDefault(expansionId, 0L).intValue();
+                    // Expansion.total은 외부 동기화 값이라 실제 적재된 카드 수보다 작게 들어올 수 있다 -
+                    // 그 경우에도 완성도가 100%를 넘지 않도록 ownedCount를 totalCount로 clamp한다.
                     BigDecimal completionRate = totalCount <= 0
                             ? BigDecimal.ZERO
-                            : BigDecimal.valueOf(ownedCount)
+                            : BigDecimal.valueOf(Math.min(ownedCount, totalCount))
                                     .divide(BigDecimal.valueOf(totalCount), 4, RoundingMode.HALF_UP)
                                     .multiply(BigDecimal.valueOf(100))
                                     .setScale(2, RoundingMode.HALF_UP);

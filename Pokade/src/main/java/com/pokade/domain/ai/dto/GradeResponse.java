@@ -25,7 +25,8 @@ public record GradeResponse(
         boolean retryAllowed,    // QUALITY_FAIL 시 무료 재업로드 가능 여부
         String notice,           // 법적 고지 문구
         LocalDateTime createdAt,
-        // vision_card_id(externalId)로 해석된 카드 — 자체 DB에 없는 카드거나 인식 실패 시 전부 null.
+        // vision_card_id(externalId)로 해석된 카드 — 자체 DB에 없는 카드거나 인식 실패 시
+        // cardId/cardName/cardImageSmall만 전부 null(cardConfidence는 별도로 채워질 수 있음).
         // FR-AI-04(도감 등록) 진입 가능 여부를 FE가 판단하는 기준이기도 하다.
         Long cardId,
         String cardName,
