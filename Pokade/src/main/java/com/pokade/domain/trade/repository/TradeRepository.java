@@ -44,6 +44,10 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
             + "WHERE t.status IN :statuses ORDER BY t.createdAt ASC")
     List<Trade> findByStatusInOrderByCreatedAtAsc(@Param("statuses") List<TradeStatus> statuses);
 
+    // 내 상품관리 화면에서 매물별 연결된 거래(있다면)를 보여주기 위한 배치 조회.
+    // 매물 1건당 거래는 최대 1건이라고 가정한다(취소돼도 매물 상태가 되돌아가지 않아 재구매가 불가능하기 때문 — 별도 버그로 인지 중).
+    List<Trade> findByListingIdIn(List<Long> listingIds);
+
     // 마이페이지 거래 내역: 구매/판매 역할,상태,기간 필터 + 페이징
     @Query(value = "SELECT t FROM Trade t JOIN FETCH t.listing l "
             + "WHERE ((:includeBuy = true AND t.buyerId = :userId) "

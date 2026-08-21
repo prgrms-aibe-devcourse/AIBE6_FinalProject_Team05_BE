@@ -24,6 +24,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -37,6 +39,8 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
@@ -136,7 +140,7 @@ class ListingControllerTest {
     @Test
     void 활성_매물이_있으면_200과_가격순_목록을_반환한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
+                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now(), null);
 
         given(listingService.getActiveListings(1L)).willReturn(List.of(summary));
 
@@ -216,37 +220,40 @@ class ListingControllerTest {
     @Test
     void 내_매물이_있으면_200과_목록을_반환한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
+                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now(), null);
 
-        given(listingService.getMyListings(100L, null)).willReturn(List.of(summary));
+        given(listingService.getMyListings(eq(100L), isNull(), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(summary)));
 
         mockMvc.perform(get("/api/listings/me").with(userId(100L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].id").value(1L));
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(1L));
     }
 
     @Test
     void 등록한_매물이_없으면_200과_빈_목록을_반환한다() throws Exception {
-        given(listingService.getMyListings(100L, null)).willReturn(List.of());
+        given(listingService.getMyListings(eq(100L), isNull(), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/listings/me").with(userId(100L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
+                .andExpect(jsonPath("$.data.content.length()").value(0));
     }
 
     @Test
     void status_파라미터로_필터링해서_조회한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                2L, 100L, 2L, "테스트카드2", 5000, ListingGrade.B, ListingStatus.SOLD, LocalDateTime.now());
+                2L, 100L, 2L, "테스트카드2", 5000, ListingGrade.B, ListingStatus.SOLD, LocalDateTime.now(), null);
 
-        given(listingService.getMyListings(100L, ListingStatus.SOLD)).willReturn(List.of(summary));
+        given(listingService.getMyListings(eq(100L), eq(ListingStatus.SOLD), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(summary)));
 
         mockMvc.perform(get("/api/listings/me")
                         .with(userId(100L))
                         .param("status", "SOLD"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].status").value("SOLD"));
+                .andExpect(jsonPath("$.data.content[0].status").value("SOLD"));
     }
 
     @Test

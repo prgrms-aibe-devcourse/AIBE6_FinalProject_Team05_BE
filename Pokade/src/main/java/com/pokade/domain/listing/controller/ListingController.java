@@ -14,6 +14,10 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -62,13 +66,18 @@ public class ListingController {
         return ApiResponse.ok(listingService.getOrderbook(cardId, variantId, grade));
     }
 
-    @Operation(summary = "내 매물 목록 조회", description = "로그인한 사용자가 판매자로 등록한 매물 목록을 상태별로 조회합니다.")
+    @Operation(
+            summary = "내 매물 목록 조회",
+            description = "로그인한 사용자가 판매자로 등록한 매물 목록을 상태별로 페이징 조회합니다. "
+                    + "기본 정렬은 등록일 최신순이며 ?sort=price,asc 형태로 정렬 기준을 바꿀 수 있습니다."
+    )
     @GetMapping("/me")
-    public ApiResponse<List<ListingSummaryResponse>> getMyListings(
+    public ApiResponse<Page<ListingSummaryResponse>> getMyListings(
             @AuthenticationPrincipal Long sellerId,
-            @Parameter(description = "매물 상태 필터 (선택)") @RequestParam(required = false) ListingStatus status
+            @Parameter(description = "매물 상태 필터 (선택)") @RequestParam(required = false) ListingStatus status,
+            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return ApiResponse.ok(listingService.getMyListings(sellerId, status));
+        return ApiResponse.ok(listingService.getMyListings(sellerId, status, pageable));
     }
 
     @Operation(summary = "매물 가격 수정", description = "판매자 본인의 매물 가격을 수정합니다. 판매 중(ACTIVE) 상태가 아니면 실패합니다.")
