@@ -1,6 +1,7 @@
 package com.pokade.domain.card.service;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,35 +81,67 @@ public class CardQueryService {
 
     /**
      * languages 없이 호출하는 기존 오버로드 - #263 이전부터 있던 호출부(테스트 다수 포함)가
-     * 인자 개수 때문에 깨지지 않도록 유지한다. 실제 검색은 8-인자 오버로드로 위임한다.
+     * 인자 개수 때문에 깨지지 않도록 유지한다. 실제 검색은 9-인자(키워드 포함) 오버로드로 위임한다.
      */
     public Page<CardResponse> search(List<String> types, List<String> rarities, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         return search(types, rarities, null, expansionId, minPrice, maxPrice, sort, pageable);
+    }
+
+    /**
+     * q(키워드) 없이 호출하는 기존 오버로드 - #308 이전부터 있던 호출부(테스트 다수 포함)가 인자
+     * 개수 때문에 깨지지 않도록 유지한다. 실제 검색은 9-인자(키워드 포함) 오버로드로 위임하며,
+     * q=null이면 그 메서드 안에서 기존과 동일하게 필터 전용 경로(cardRepository.search())를 탄다 -
+     * 동작은 완전히 그대로다.
+     */
+    public Page<CardResponse> search(List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+        return search(null, types, rarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
     }
 
     // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
     // #263: language(언어 코드, 예 EN/JA) 필터 추가 - types/rarity와 동일하게 값 화이트리스트 없이
     // 사이즈 검증만 한다(바인드 IN절이라 애초에 인젝션 여지가 없고, DB에 실제 존재하는 값과 무관하게
     // 빈 결과로 안전하게 좁혀지므로 신규 언어코드가 추가돼도 서비스가 깨지지 않는다).
+    // #308: q(키워드)가 추가된 실제 구현 메서드 - GET /api/cards?q=... 필터+키워드 통합 검색의 진입점.
+    // q가 없으면(null/blank) 기존 필터 전용 로직을 그대로 타고(회귀 없음), q가 있으면 필터+키워드
+    // 결합 검색(searchByKeywordAndFilters)으로 분기한다.
     @Timed(value = "card.search.duration")
     @Transactional(readOnly = true)
-    public Page<CardResponse> search(List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+    public Page<CardResponse> search(String q, List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
         validateFilterSize(types, "types");
         validateFilterSize(rarities, "rarity");
         validateFilterSize(languages, "languages");
         validatePriceRange(minPrice, maxPrice);
+        String keyword = normalizeOptionalKeyword(q);
         List<String> expandedTypes = CardTypeEnResolver.resolveOriginalValues(types);
         List<String> expandedRarities = CardRarityResolver.resolveOriginalValues(rarities);
-        // languages가 없으면 리포지토리의 기존 7-인자 search()를 그대로 호출한다 - #263 이전부터 있던
-        // CardServiceTest의 cardRepository.search(...) 스텁(7-인자 시그니처)이 계속 매칭되게 하기 위함.
-        // 두 오버로드는 리포지토리 쪽에서 동일한 로직으로 수렴하므로(7-인자는 8-인자에 languages=null로
-        // 위임) 동작 자체는 완전히 같다 - 순전히 테스트 호환을 위한 분기다.
-        Page<Card> cards = languages == null
-                ? cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable)
-                : cardRepository.search(expandedTypes, expandedRarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
-        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(cards.getContent());
-        return cards.map(card -> toCardResponse(card, gradesByCardId, false));
+
+        NameSearchResult result = keyword == null
+                // 키워드 없음: 기존 그대로 - languages가 없으면 리포지토리의 기존 7-인자 search()를
+                // 그대로 호출한다 - #263 이전부터 있던 CardServiceTest의 cardRepository.search(...)
+                // 스텁(7-인자 시그니처)이 계속 매칭되게 하기 위함(두 오버로드는 리포지토리 쪽에서
+                // languages=null로 수렴해 동작은 동일).
+                ? new NameSearchResult(languages == null
+                        ? cardRepository.search(expandedTypes, expandedRarities, expansionId, minPrice, maxPrice, sort, pageable)
+                        : cardRepository.search(expandedTypes, expandedRarities, languages, expansionId, minPrice, maxPrice, sort, pageable),
+                        false)
+                : searchByKeywordAndFilters(keyword, expandedTypes, expandedRarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
+
+        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(result.cards().getContent());
+        return result.cards().map(card -> toCardResponse(card, gradesByCardId, result.fuzzyMatch()));
+    }
+
+    /** q가 null/blank면 "키워드 없음"으로 취급해 null을 반환한다(예외 아님) - searchByKeyword()의 필수 검증과 다른 지점. */
+    private String normalizeOptionalKeyword(String q) {
+        if (q == null || q.isBlank()) {
+            return null;
+        }
+        String keyword = q.trim();
+        if (keyword.length() > MAX_KEYWORD_LENGTH) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
+        }
+        return keyword;
     }
 
     @Transactional
@@ -134,24 +167,24 @@ public class CardQueryService {
         return result;
     }
 
-    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+    /**
+     * #308: q(키워드)가 필수인 기존 전용 엔드포인트(GET /api/cards/search, PriceChatTools 하위 호환
+     * 필수) - 시그니처를 절대 바꾸지 않고 실제 검색은 9-인자 search()로 위임한다. 필터 없이(모두 null)
+     * 호출하고, sort는 SORT_NAME으로 고정한다 - 이 엔드포인트는 원래 sort 파라미터 자체가 없었고
+     * 항상 "이름 오름차순"(영문 정확일치)/"도감번호 매칭 후 이름 오름차순"(한글)으로 동작했으므로,
+     * 9-인자 쪽 기본값인 latest로 흘러가면 이 엔드포인트의 기본 정렬이 조용히 바뀌는 회귀가 된다.
+     * @Timed/@Transactional을 이 메서드에도 그대로 유지하는 이유: self-invocation으로 search()를
+     * 호출하면 그쪽 애노테이션은 AOP 프록시를 안 거쳐 적용되지 않으므로, "card.search.keyword.duration"
+     * 지표와 트랜잭션 경계는 이 메서드 자신의 애노테이션이 책임진다(기존 7→8인자 오버로드 위임 패턴과
+     * 동일하게, 위임만 하는 메서드는 호출 대상 메서드의 애노테이션에 의존하지 않는다).
+     */
     @Timed(value = "card.search.keyword.duration")
     @Transactional(readOnly = true)
     public Page<CardResponse> searchByKeyword(String q, Pageable pageable) {
         if (q == null || q.isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
-        PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
-        String keyword = q.trim();
-        if (keyword.length() > MAX_KEYWORD_LENGTH) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT,
-                    "검색어는 최대 " + MAX_KEYWORD_LENGTH + "자까지 입력할 수 있습니다.");
-        }
-        NameSearchResult result = (KoreanTextUtil.isKorean(keyword) || KoreanTextUtil.isChosungOnly(keyword))
-                ? searchByPokedexKoName(keyword, pageable)
-                : searchByName(keyword, pageable);
-        Map<Long, List<String>> gradesByCardId = fetchGradesByCardIds(result.cards().getContent());
-        return result.cards().map(card -> toCardResponse(card, gradesByCardId, result.fuzzyMatch()));
+        return search(q, null, null, null, null, null, null, CardRepository.SORT_NAME, pageable);
     }
 
     // searchByName()/searchByPokedexKoName()이 정확 검색과 유사도 폴백 중 어느 쪼을 탔는지(#187 fuzzyMatch
@@ -159,15 +192,84 @@ public class CardQueryService {
     private record NameSearchResult(Page<Card> cards, boolean fuzzyMatch) {
     }
 
-    // 영문 등 이름 검색 - 정확 검색(부분일치)이 0건이고 키워드가 최소 길이 이상일 때만 pg_trgm 유사도
-    // 검색으로 폴백한다(#187). 오타 없는 대다수 검색은 기존 LIKE 부분일치 그대로 동작/성능 유지.
-    private NameSearchResult searchByName(String keyword, Pageable pageable) {
-        Page<Card> exact = cardRepository.findByNameContainingIgnoreCase(keyword, pageable);
-        if (exact.getTotalElements() > 0 || keyword.length() < MIN_KEYWORD_LENGTH_FOR_SIMILARITY) {
-            return new NameSearchResult(exact, false);
+    // #308: search()의 필터 전처리(CardRepository.search() 기본 메서드가 하던 것과 동일한 규칙:
+    // blank 제거 → hasX 판단 → IN절/overlap용 안전값 대체)를 키워드+필터 결합 쿼리 호출부에서도
+    // 그대로 적용하기 위한 값 홀더. 필터 전용 경로(cardRepository.search())는 건드리지 않고 그대로
+    // 둬서 이미 검증된 로직에 회귀 위험을 만들지 않는 대신, 이 부분은 의도적으로 그 로직을 다시 구현했다.
+    private record ResolvedFilters(boolean hasTypes, String[] types, boolean hasRarities, List<String> rarities,
+                                    boolean hasLanguages, List<String> languages, boolean hasPrice) {
+    }
+
+    private ResolvedFilters resolveFilters(List<String> types, List<String> rarities, List<String> languages, Integer minPrice, Integer maxPrice) {
+        List<String> filteredTypes = types == null ? null : types.stream().filter(v -> v != null && !v.isBlank()).toList();
+        List<String> filteredRarities = rarities == null ? null : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
+        List<String> filteredLanguages = languages == null ? null : languages.stream().filter(v -> v != null && !v.isBlank()).toList();
+        boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
+        boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
+        boolean hasLanguages = filteredLanguages != null && !filteredLanguages.isEmpty();
+        boolean hasPrice = minPrice != null || maxPrice != null;
+        String[] safeTypes = (hasTypes ? filteredTypes : List.<String>of()).toArray(String[]::new);
+        List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
+        List<String> safeLanguages = hasLanguages ? filteredLanguages : List.of("");
+        return new ResolvedFilters(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice);
+    }
+
+    /** CardRepository.search()와 동일한 이유로 Pageable의 Sort를 버린다 - ?sort= 파라미터명 충돌 방지. */
+    private Pageable stripSort(Pageable pageable) {
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+    }
+
+    private String resolveSort(String sort) {
+        return sort != null && CardRepository.SORT_COLUMN_WHITELIST.contains(sort) ? sort : CardRepository.SORT_LATEST;
+    }
+
+    // #308: 한글/초성이면 도감번호 매핑 경로, 아니면 영문 ILIKE 경로로 분기한다 - 기존 searchByKeyword()의
+    // 분기 조건을 그대로 옮겼다.
+    private NameSearchResult searchByKeywordAndFilters(String keyword, List<String> types, List<String> rarities,
+                                                         List<String> languages, String expansionId, Integer minPrice, Integer maxPrice,
+                                                         String sort, Pageable pageable) {
+        return (KoreanTextUtil.isKorean(keyword) || KoreanTextUtil.isChosungOnly(keyword))
+                ? searchByPokedexKoName(keyword, types, rarities, languages, expansionId, minPrice, maxPrice, sort, pageable)
+                : searchByName(keyword, types, rarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
+    }
+
+    /**
+     * #308: 영문 등 이름 검색 + 필터 결합. 폴백 판단 3단계(설계 승인안):
+     * ① 필터+정확일치 1건 이상 → 그대로 반환.
+     * ② 필터+정확일치 0건이지만 필터 없는 정확일치는 존재(existsByNameContainingIgnoreCase) →
+     *    "필터가 세서 없는 것"으로 보고 빈 페이지 반환, 유사도 폴백을 태우지 않는다.
+     * ③ 필터 없는 정확일치도 없음(키워드 자체가 애매함) → 기존처럼(#187) 유사도 폴백, 필터도 동일하게 적용.
+     */
+    private NameSearchResult searchByName(String keyword, List<String> types, List<String> rarities, List<String> languages,
+                                           String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
+        ResolvedFilters f = resolveFilters(types, rarities, languages, minPrice, maxPrice);
+        Pageable unsortedPageable = stripSort(pageable);
+        Page<Card> filteredExact = dispatchNameExact(sort, keyword, f, expansionId, minPrice, maxPrice, unsortedPageable);
+        if (filteredExact.getTotalElements() > 0 || keyword.length() < MIN_KEYWORD_LENGTH_FOR_SIMILARITY) {
+            return new NameSearchResult(filteredExact, false);
         }
-        Page<Card> similar = cardRepository.findByNameSimilarTo(keyword, SIMILARITY_THRESHOLD, pageable);
+        if (cardRepository.existsByNameContainingIgnoreCase(keyword)) {
+            return new NameSearchResult(Page.empty(pageable), false);
+        }
+        Page<Card> similar = cardRepository.searchByNameSimilarToWithFilters(keyword, SIMILARITY_THRESHOLD,
+                f.hasTypes(), f.types(), f.hasRarities(), f.rarities(), f.hasLanguages(), f.languages(),
+                f.hasPrice(), minPrice, maxPrice, expansionId, unsortedPageable);
         return new NameSearchResult(similar, similar.getTotalElements() > 0);
+    }
+
+    private Page<Card> dispatchNameExact(String sort, String keyword, ResolvedFilters f, String expansionId,
+                                          Integer minPrice, Integer maxPrice, Pageable pageable) {
+        String resolvedSort = resolveSort(sort);
+        if (CardRepository.SORT_NAME.equals(resolvedSort)) {
+            return cardRepository.searchByNameOrderByName(keyword, f.hasTypes(), f.types(), f.hasRarities(), f.rarities(),
+                    f.hasLanguages(), f.languages(), f.hasPrice(), minPrice, maxPrice, expansionId, pageable);
+        }
+        if (CardRepository.SORT_POPULAR.equals(resolvedSort)) {
+            return cardRepository.searchByNameOrderByPopular(keyword, f.hasTypes(), f.types(), f.hasRarities(), f.rarities(),
+                    f.hasLanguages(), f.languages(), f.hasPrice(), minPrice, maxPrice, expansionId, pageable);
+        }
+        return cardRepository.searchByNameOrderByLatest(keyword, f.hasTypes(), f.types(), f.hasRarities(), f.rarities(),
+                f.hasLanguages(), f.languages(), f.hasPrice(), minPrice, maxPrice, expansionId, pageable);
     }
 
     // 한글 검색어를 도감번호 목록으로 변환해 조회한다. 매핑이 없으면 예외 대신 빈 페이지를 반환한다.
@@ -175,7 +277,13 @@ public class CardQueryService {
     // 한글/초성 검색은 도감번호(national_pokedex_numbers) 매핑 기반이라 포켓몬 카드만 지원한다.
     // 도감번호가 없는 트레이너/에너지 카드는 이 경로로 검색되지 않는다 - 의도된 한계
     // (PokeAPI 도감번호 매핑 방식의 알려진 제약).
-    private NameSearchResult searchByPokedexKoName(String keyword, Pageable pageable) {
+    //
+    // #308: 필터 적용 여부는 "정확 도감번호 매핑이 존재하는가"(matches.isEmpty() 이전 단계)로 이미
+    // 판가름난다 - 영문 경로처럼 별도 existsBy 확인이 필요 없다. 매핑이 존재하는데 카드 필터 결합
+    // 후 0건이면 그게 곧 "필터가 세서 없는 것"(②)이고, 매핑 자체가 없어 유사도로 넘어간 경우(③)엔
+    // fuzzyMatch가 이미 그 단계에서 true로 정해져 있으므로 이후 필터 결과 건수와 무관하게 유지한다.
+    private NameSearchResult searchByPokedexKoName(String keyword, List<String> types, List<String> rarities, List<String> languages,
+                                                    String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
         List<PokedexKoName> matches;
         boolean fuzzyMatch = false;
         if (KoreanTextUtil.isChosungOnly(keyword)) {
@@ -194,7 +302,25 @@ public class CardQueryService {
             return new NameSearchResult(Page.empty(pageable), false);
         }
         List<Integer> pokedexNumbers = matches.stream().map(PokedexKoName::getPokedexNumber).toList();
-        return new NameSearchResult(cardRepository.findByNationalPokedexNumbersIn(pokedexNumbers, pageable), fuzzyMatch);
+        ResolvedFilters f = resolveFilters(types, rarities, languages, minPrice, maxPrice);
+        Pageable unsortedPageable = stripSort(pageable);
+        Page<Card> cards = dispatchPokedexExact(sort, pokedexNumbers, f, expansionId, minPrice, maxPrice, unsortedPageable);
+        return new NameSearchResult(cards, fuzzyMatch);
+    }
+
+    private Page<Card> dispatchPokedexExact(String sort, List<Integer> pokedexNumbers, ResolvedFilters f, String expansionId,
+                                             Integer minPrice, Integer maxPrice, Pageable pageable) {
+        String resolvedSort = resolveSort(sort);
+        if (CardRepository.SORT_NAME.equals(resolvedSort)) {
+            return cardRepository.searchByPokedexNumbersOrderByName(pokedexNumbers, f.hasTypes(), f.types(), f.hasRarities(), f.rarities(),
+                    f.hasLanguages(), f.languages(), f.hasPrice(), minPrice, maxPrice, expansionId, pageable);
+        }
+        if (CardRepository.SORT_POPULAR.equals(resolvedSort)) {
+            return cardRepository.searchByPokedexNumbersOrderByPopular(pokedexNumbers, f.hasTypes(), f.types(), f.hasRarities(), f.rarities(),
+                    f.hasLanguages(), f.languages(), f.hasPrice(), minPrice, maxPrice, expansionId, pageable);
+        }
+        return cardRepository.searchByPokedexNumbersOrderByLatest(pokedexNumbers, f.hasTypes(), f.types(), f.hasRarities(), f.rarities(),
+                f.hasLanguages(), f.languages(), f.hasPrice(), minPrice, maxPrice, expansionId, pageable);
     }
 
     @Transactional(readOnly = true)

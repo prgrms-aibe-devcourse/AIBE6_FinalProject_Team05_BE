@@ -3,6 +3,8 @@ package com.pokade.domain.card.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -54,6 +56,12 @@ class CardQueryServiceTest {
 
     @InjectMocks
     private CardQueryService cardQueryService;
+
+    // #308: searchByKeyword()는 필터 없이(모두 false/빈 값) 9-인자 search()로 위임하므로,
+    // 키워드 전용 검색 테스트들이 새 필터+키워드 결합 리포지토리 메서드를 "필터 없음" 값으로 스텁할 때 재사용한다.
+    private static final String[] NO_TYPES = new String[0];
+    private static final List<String> NO_RARITIES = List.of("");
+    private static final List<String> NO_LANGUAGES = List.of("");
 
     @Test
     @DisplayName("t1 검색 조건을 리포지토리에 위임하고 결과를 응답 DTO 목록으로 변환한다")
@@ -377,7 +385,8 @@ class CardQueryServiceTest {
                 .build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
+        given(cardRepository.searchByNameOrderByName("char", false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("char", pageable);
 
@@ -427,7 +436,8 @@ class CardQueryServiceTest {
         String exactlyHundred = "a".repeat(100);
         Card card = Card.builder().id(1L).name("Charizard").types(List.of("Fire")).build();
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
-        given(cardRepository.findByNameContainingIgnoreCase(exactlyHundred, pageable)).willReturn(page);
+        given(cardRepository.searchByNameOrderByName(exactlyHundred, false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword(exactlyHundred, pageable);
 
@@ -452,7 +462,8 @@ class CardQueryServiceTest {
         Card blastoise = Card.builder().id(2L).name("Blastoise").types(List.of("Water")).build();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(charizard, blastoise), pageable, 2);
-        given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
+        given(cardRepository.searchByNameOrderByName("char", false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
         given(cardRepository.findGradesByCardIds(eq(List.of(1L, 2L)), any())).willReturn(List.of(
                 gradeView(1L, "B"),
                 gradeView(1L, "S")
@@ -470,9 +481,12 @@ class CardQueryServiceTest {
     void t38() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
-        given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
+        given(cardRepository.searchByNameOrderByName("char", false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
+        given(cardRepository.existsByNameContainingIgnoreCase("char")).willReturn(false);
         // #187: 정확 검색이 0건이면 유사도 폴백을 시도한다 - 폴백도 0건이어야 최종 결과가 비게 된다.
-        given(cardRepository.findByNameSimilarTo("char", 0.14, pageable)).willReturn(page);
+        given(cardRepository.searchByNameSimilarToWithFilters("char", 0.14, false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("char", pageable);
 
@@ -492,14 +506,15 @@ class CardQueryServiceTest {
         Card card = Card.builder().id(1L).name("Pikachu").nationalPokedexNumbers(List.of(25)).build();
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
         given(pokedexKoNameRepository.findByNameKoContaining("피카")).willReturn(List.of(pikachu));
-        given(cardRepository.findByNationalPokedexNumbersIn(List.of(25), pageable)).willReturn(page);
+        given(cardRepository.searchByPokedexNumbersOrderByName(List.of(25), false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("피카", pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Pikachu");
         assertThat(result.getContent().get(0).fuzzyMatch()).isFalse();
-        verify(cardRepository).findByNationalPokedexNumbersIn(List.of(25), pageable);
+        verify(cardRepository).searchByPokedexNumbersOrderByName(List.of(25), false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable);
     }
 
     @Test
@@ -514,7 +529,8 @@ class CardQueryServiceTest {
         Card card = Card.builder().id(1L).name("Pikachu").nationalPokedexNumbers(List.of(25)).build();
         Page<Card> page = new PageImpl<>(List.of(card), pageable, 1);
         given(pokedexKoNameRepository.findByNameKoChosungContaining("ㅍㅋㅊ")).willReturn(List.of(pikachu));
-        given(cardRepository.findByNationalPokedexNumbersIn(List.of(25), pageable)).willReturn(page);
+        given(cardRepository.searchByPokedexNumbersOrderByName(List.of(25), false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("ㅍㅋㅊ", pageable);
 
@@ -547,14 +563,17 @@ class CardQueryServiceTest {
         Page<Card> emptyPage = new PageImpl<>(List.of(), pageable, 0);
         Card charizard = Card.builder().id(1L).name("Charizard").build();
         Page<Card> similarPage = new PageImpl<>(List.of(charizard), pageable, 1);
-        given(cardRepository.findByNameContainingIgnoreCase("Charizrd", pageable)).willReturn(emptyPage);
-        given(cardRepository.findByNameSimilarTo("Charizrd", 0.14, pageable)).willReturn(similarPage);
+        given(cardRepository.searchByNameOrderByName("Charizrd", false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(emptyPage);
+        given(cardRepository.existsByNameContainingIgnoreCase("Charizrd")).willReturn(false);
+        given(cardRepository.searchByNameSimilarToWithFilters("Charizrd", 0.14, false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(similarPage);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("Charizrd", pageable);
 
         assertThat(result.getContent()).extracting(CardResponse::name).containsExactly("Charizard");
         assertThat(result.getContent()).extracting(CardResponse::fuzzyMatch).containsExactly(true);
-        verify(cardRepository).findByNameSimilarTo("Charizrd", 0.14, pageable);
+        verify(cardRepository).searchByNameSimilarToWithFilters("Charizrd", 0.14, false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable);
     }
 
     @Test
@@ -563,13 +582,14 @@ class CardQueryServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         Card charizard = Card.builder().id(1L).name("Charizard").build();
         Page<Card> page = new PageImpl<>(List.of(charizard), pageable, 1);
-        given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
+        given(cardRepository.searchByNameOrderByName("char", false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("char", pageable);
 
         assertThat(result.getContent()).extracting(CardResponse::name).containsExactly("Charizard");
         assertThat(result.getContent()).extracting(CardResponse::fuzzyMatch).containsExactly(false);
-        verify(cardRepository, never()).findByNameSimilarTo(any(), any(Double.class), any());
+        verify(cardRepository, never()).searchByNameSimilarToWithFilters(any(), anyDouble(), anyBoolean(), any(), anyBoolean(), any(), anyBoolean(), any(), anyBoolean(), any(), any(), any(), any());
     }
 
     @Test
@@ -577,12 +597,13 @@ class CardQueryServiceTest {
     void t48() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> emptyPage = new PageImpl<>(List.of(), pageable, 0);
-        given(cardRepository.findByNameContainingIgnoreCase("c", pageable)).willReturn(emptyPage);
+        given(cardRepository.searchByNameOrderByName("c", false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(emptyPage);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("c", pageable);
 
         assertThat(result.getContent()).isEmpty();
-        verify(cardRepository, never()).findByNameSimilarTo(any(), any(Double.class), any());
+        verify(cardRepository, never()).searchByNameSimilarToWithFilters(any(), anyDouble(), anyBoolean(), any(), anyBoolean(), any(), anyBoolean(), any(), anyBoolean(), any(), any(), any(), any());
     }
 
     @Test
@@ -598,7 +619,8 @@ class CardQueryServiceTest {
         given(pokedexKoNameRepository.findByNameKoContaining("리자옹")).willReturn(List.of());
         given(pokedexKoNameRepository.findByNameKoSimilarTo("리자옹", 0.14))
                 .willReturn(List.of(charizard, charmeleon));
-        given(cardRepository.findByNationalPokedexNumbersIn(List.of(6, 5), pageable)).willReturn(page);
+        given(cardRepository.searchByPokedexNumbersOrderByName(List.of(6, 5), false, NO_TYPES, false, NO_RARITIES, false, NO_LANGUAGES, false, null, null, null, pageable))
+                .willReturn(page);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("리자옹", pageable);
 
