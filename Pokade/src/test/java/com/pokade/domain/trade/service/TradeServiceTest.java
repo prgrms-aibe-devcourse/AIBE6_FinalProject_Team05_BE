@@ -5,6 +5,7 @@ import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.point.client.TossPaymentClient;
 import com.pokade.domain.point.service.PointService;
+import com.pokade.domain.portfolio.service.PortfolioService;
 import com.pokade.domain.trade.dto.TradeReadyRequest;
 import com.pokade.domain.trade.dto.TradeReadyResponse;
 import com.pokade.domain.trade.dto.TradeResponse;
@@ -66,6 +67,9 @@ class TradeServiceTest {
 
     @Mock
     private PointService pointService;
+
+    @Mock
+    private PortfolioService portfolioService;
 
     @InjectMocks
     private TradeService tradeService;

@@ -7,6 +7,8 @@ import com.pokade.domain.ai.dto.VisionResult;
 import com.pokade.domain.ai.entity.*;
 import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
@@ -30,8 +32,10 @@ import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -53,6 +57,7 @@ public class AiGradeService {
     private final ImageQualityChecker imageQualityChecker;
     private final GradeResultRepository gradeResultRepository;
     private final GradeResultImageRepository gradeResultImageRepository;
+    private final CardRepository cardRepository;
 
     // TODO: User 파트 개발 완료 후 아래 Repository 주입 및 포인트 차감 로직 연동 예정
     // private final UserRepository userRepository;
@@ -121,7 +126,7 @@ public class AiGradeService {
                         .imageUrl(key)
                         .build()));
 
-        return GradeResponse.from(gradeResult);
+        return GradeResponse.from(gradeResult, resolveCard(gradeResult));
     }
 
     public GradeResponse getGradeResult(Long userId, Long resultId) {
@@ -132,13 +137,34 @@ public class AiGradeService {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
 
-        return GradeResponse.from(gradeResult);
+        return GradeResponse.from(gradeResult, resolveCard(gradeResult));
+    }
+
+    // vision_card_id(externalId)가 자체 DB에 없거나(신규 세트 동기화 지연 등) 아예 인식 실패면 null —
+    // FE는 cardId=null을 "도감 등록 불가"로 취급한다(FR-AI-04).
+    private Card resolveCard(GradeResult gradeResult) {
+        return gradeResult.getVisionCardId() != null
+                ? cardRepository.findByExternalId(gradeResult.getVisionCardId()).orElse(null)
+                : null;
     }
 
     public Page<GradeResponse> getGradeHistory(Long userId, Pageable pageable) {
         PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
-        return gradeResultRepository.findByUserId(userId, pageable)
-                .map(GradeResponse::from);
+        Page<GradeResult> results = gradeResultRepository.findByUserId(userId, pageable);
+
+        // 페이지 안에서 같은 카드가 여러 번 나올 수 있어 externalId 기준으로 배치 조회(N+1 방지).
+        List<String> externalIds = results.getContent().stream()
+                .map(GradeResult::getVisionCardId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<String, Card> cardByExternalId = externalIds.isEmpty()
+                ? Map.of()
+                : cardRepository.findByExternalIdIn(externalIds).stream()
+                        .collect(Collectors.toMap(Card::getExternalId, c -> c));
+
+        return results.map(r -> GradeResponse.from(r,
+                r.getVisionCardId() != null ? cardByExternalId.get(r.getVisionCardId()) : null));
     }
 
     private void validateImageFormats(GradeRequest request) {
