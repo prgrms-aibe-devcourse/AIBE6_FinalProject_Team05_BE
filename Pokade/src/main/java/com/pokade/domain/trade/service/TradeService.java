@@ -266,6 +266,10 @@ public class TradeService {
 
         trade.cancel();
 
+        // 취소된 거래의 매물을 다시 판매 가능(ACTIVE) 상태로 되돌린다 — 안 그러면 TRADING에 영원히
+        // 묶여서 마켓/호가창 어디서도 조회되지 않는 좀비 매물이 된다.
+        listingRepository.revertToActiveIfTrading(trade.getListing().getId());
+
         // 구매 시점에 이미 토스로 실제 결제가 완료돼 에스크로로 잡혀있으므로, 취소 성공 시
         // 저장해둔 paymentKey로 토스 결제취소(환불) API를 실제로 호출한다.
         Payment payment = paymentRepository.findByTradeId(trade.getId())
