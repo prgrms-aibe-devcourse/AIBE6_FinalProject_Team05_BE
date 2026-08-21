@@ -5,6 +5,7 @@ import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
 import com.pokade.domain.portfolio.dto.PortfolioItemPnlResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemUpdateRequest;
+import com.pokade.domain.portfolio.dto.PortfolioSetCompletionResponse;
 import com.pokade.domain.portfolio.dto.PortfolioSummaryResponse;
 import com.pokade.domain.portfolio.service.PortfolioService;
 import com.pokade.global.response.ApiResponse;
@@ -64,6 +65,14 @@ public class PortfolioController {
             @AuthenticationPrincipal Long userId
     ) {
         return ApiResponse.ok(portfolioService.getAnalytics(userId));
+    }
+
+    // FR-PORT-07: 세트 완성도 - 보유한 세트별로 전체 카드 중 몇 %를 모았는지.
+    @GetMapping("/set-completion")
+    public ApiResponse<List<PortfolioSetCompletionResponse>> getSetCompletion(
+            @AuthenticationPrincipal Long userId
+    ) {
+        return ApiResponse.ok(portfolioService.getSetCompletion(userId));
     }
 
     // FR-AI-04: AI 등급 진단 결과를 바탕으로 도감에 카드 즉시 등록.

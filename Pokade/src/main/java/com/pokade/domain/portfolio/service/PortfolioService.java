@@ -5,15 +5,18 @@ import com.pokade.domain.ai.entity.GradeStatus;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
+import com.pokade.domain.card.entity.Expansion;
 import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.repository.ExpansionRepository;
 import com.pokade.domain.portfolio.dto.PortfolioAnalyticsItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioAnalyticsResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
 import com.pokade.domain.portfolio.dto.PortfolioItemPnlResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemUpdateRequest;
+import com.pokade.domain.portfolio.dto.PortfolioSetCompletionResponse;
 import com.pokade.domain.portfolio.dto.PortfolioSummaryResponse;
 import com.pokade.domain.portfolio.entity.PortfolioItem;
 import com.pokade.domain.portfolio.repository.PortfolioItemRepository;
@@ -30,6 +33,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +54,7 @@ public class PortfolioService {
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
     private final CardPriceRepository cardPriceRepository;
+    private final ExpansionRepository expansionRepository;
     private final GradeResultRepository gradeResultRepository;
     private final UserAccessChecker userAccessChecker;
 
@@ -201,72 +206,108 @@ public class PortfolioService {
                 price.getMarket(), price.getCurrency(), pnlAmount, pnlRate);
     }
 
-    // FR-PORT-06: 평가액(FR-PORT-02와 동일한 raw NM 시세) 기준으로 세트별·레어도별 구성 비율을 계산한다.
-    // 시세 없는 항목은 평가액에 못 넣으므로 getSummary()와 동일하게 계산에서 제외한다.
+    // FR-PORT-06: 세트별·레어도별 구성 비율을 계산한다. 시세 유무와 무관하게 항상 계산 가능하도록
+    // 평가액이 아닌 보유 수량(quantity) 기준으로 집계한다 - 시세가 없는 카드도 세트/레어도는
+    // 이미 알고 있으므로, 시세 없는 항목만 있을 때 결과가 통째로 비어버리는 걸 막는다.
     public PortfolioAnalyticsResponse getAnalytics(Long userId) {
         List<PortfolioItem> items = portfolioItemRepository.findByUserIdOrderByIdDesc(userId);
         if (items.isEmpty()) {
             return new PortfolioAnalyticsResponse(List.of(), List.of());
         }
 
-        Map<Long, Long> variantIdByItemId = resolveVariantIdsByItemId(items);
-        Set<Long> variantIds = Set.copyOf(variantIdByItemId.values());
-
-        Map<Long, CardPriceRepository.VariantMarketPriceView> priceMap = variantIds.isEmpty()
-                ? Map.of()
-                : cardPriceRepository.findMarketPricesByVariantIds(
-                        new ArrayList<>(variantIds), RAW_PRICE_TYPE, EMPTY_GRADE, EMPTY_COMPANY)
-                        .stream()
-                        .collect(Collectors.toMap(
-                                CardPriceRepository.VariantMarketPriceView::getVariantId, v -> v));
-
-        // 시세 있는 항목만 남긴다 - 없는 카드는 cardRepository 조회 대상에서도 제외한다(불필요한 배치 조회 방지).
-        Map<PortfolioItem, BigDecimal> valueByPricedItem = new LinkedHashMap<>();
-        BigDecimal totalValue = BigDecimal.ZERO;
-        for (PortfolioItem item : items) {
-            Long variantId = variantIdByItemId.get(item.getId());
-            CardPriceRepository.VariantMarketPriceView price = variantId != null ? priceMap.get(variantId) : null;
-            if (price == null || price.getMarket() == null) {
-                continue;
-            }
-            BigDecimal value = price.getMarket().multiply(BigDecimal.valueOf(item.getQuantity()));
-            valueByPricedItem.put(item, value);
-            totalValue = totalValue.add(value);
-        }
-
-        if (valueByPricedItem.isEmpty()) {
-            return new PortfolioAnalyticsResponse(List.of(), List.of());
-        }
-
-        Set<Long> cardIds = valueByPricedItem.keySet().stream().map(PortfolioItem::getCardId).collect(Collectors.toSet());
+        Set<Long> cardIds = items.stream().map(PortfolioItem::getCardId).collect(Collectors.toSet());
         Map<Long, Card> cardMap = cardRepository.findAllById(cardIds).stream()
                 .collect(Collectors.toMap(Card::getId, c -> c));
 
-        Map<String, BigDecimal> valueBySet = new LinkedHashMap<>();
-        Map<String, BigDecimal> valueByRarity = new LinkedHashMap<>();
-        for (Map.Entry<PortfolioItem, BigDecimal> entry : valueByPricedItem.entrySet()) {
-            Card card = cardMap.get(entry.getKey().getCardId());
+        Map<String, BigDecimal> countBySet = new LinkedHashMap<>();
+        Map<String, BigDecimal> countByRarity = new LinkedHashMap<>();
+        BigDecimal totalCount = BigDecimal.ZERO;
+        for (PortfolioItem item : items) {
+            Card card = cardMap.get(item.getCardId());
             String setKey = card != null && card.getSetName() != null ? card.getSetName() : UNCLASSIFIED;
             String rarityKey = card != null && card.getRarity() != null ? card.getRarity() : UNCLASSIFIED;
+            BigDecimal quantity = BigDecimal.valueOf(item.getQuantity());
 
-            valueBySet.merge(setKey, entry.getValue(), BigDecimal::add);
-            valueByRarity.merge(rarityKey, entry.getValue(), BigDecimal::add);
+            countBySet.merge(setKey, quantity, BigDecimal::add);
+            countByRarity.merge(rarityKey, quantity, BigDecimal::add);
+            totalCount = totalCount.add(quantity);
         }
 
         return new PortfolioAnalyticsResponse(
-                toAnalyticsItems(valueBySet, totalValue),
-                toAnalyticsItems(valueByRarity, totalValue));
+                toAnalyticsItems(countBySet, totalCount),
+                toAnalyticsItems(countByRarity, totalCount));
     }
 
-    private List<PortfolioAnalyticsItemResponse> toAnalyticsItems(Map<String, BigDecimal> valueByLabel, BigDecimal totalValue) {
-        return valueByLabel.entrySet().stream()
+    private List<PortfolioAnalyticsItemResponse> toAnalyticsItems(Map<String, BigDecimal> countByLabel, BigDecimal totalCount) {
+        return countByLabel.entrySet().stream()
                 .map(entry -> new PortfolioAnalyticsItemResponse(
                         entry.getKey(),
-                        entry.getValue().setScale(0, RoundingMode.HALF_UP),
-                        entry.getValue().divide(totalValue, 4, RoundingMode.HALF_UP)
+                        entry.getValue(),
+                        entry.getValue().divide(totalCount, 4, RoundingMode.HALF_UP)
                                 .multiply(BigDecimal.valueOf(100))
                                 .setScale(2, RoundingMode.HALF_UP)))
                 .sorted(Comparator.comparing(PortfolioAnalyticsItemResponse::value).reversed())
+                .toList();
+    }
+
+    // FR-PORT-07: 세트 완성도 - 사용자가 보유한 서로 다른 카드가 각 세트 전체 카드 중 몇 %인지 계산한다.
+    // 수량(quantity)은 완성도와 무관하므로(같은 카드를 여러 장 가져도 완성도는 그대로) distinct cardId 기준으로 센다.
+    // expansion이 없는 카드(비정규화된 setName만 있는 구버전 데이터 등)는 전체 카드 수를 알 수 없어 제외한다.
+    public List<PortfolioSetCompletionResponse> getSetCompletion(Long userId) {
+        List<PortfolioItem> items = portfolioItemRepository.findByUserIdOrderByIdDesc(userId);
+        if (items.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Long> cardIds = items.stream().map(PortfolioItem::getCardId).collect(Collectors.toSet());
+        Map<Long, Card> cardMap = cardRepository.findAllById(cardIds).stream()
+                .collect(Collectors.toMap(Card::getId, c -> c));
+
+        Map<String, Set<Long>> ownedCardIdsByExpansion = new LinkedHashMap<>();
+        for (Long cardId : cardIds) {
+            Card card = cardMap.get(cardId);
+            Expansion expansion = card != null ? card.getExpansion() : null;
+            if (expansion == null) {
+                continue;
+            }
+            ownedCardIdsByExpansion.computeIfAbsent(expansion.getId(), k -> new HashSet<>()).add(cardId);
+        }
+
+        if (ownedCardIdsByExpansion.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, Expansion> expansionMap = expansionRepository.findAllById(ownedCardIdsByExpansion.keySet()).stream()
+                .collect(Collectors.toMap(Expansion::getId, e -> e));
+
+        // Expansion.total이 비어 있는(동기화 누락) 세트는 실제 DB에 적재된 카드 수로 대신한다.
+        Map<String, Long> dbCountByExpansion = cardRepository.findCardCountsByExpansion().stream()
+                .collect(Collectors.toMap(
+                        CardRepository.ExpansionCardCountView::getExpansionId,
+                        CardRepository.ExpansionCardCountView::getCount));
+
+        return ownedCardIdsByExpansion.entrySet().stream()
+                .map(entry -> {
+                    String expansionId = entry.getKey();
+                    Expansion expansion = expansionMap.get(expansionId);
+                    int ownedCount = entry.getValue().size();
+                    Integer total = expansion != null ? expansion.getTotal() : null;
+                    int totalCount = total != null ? total : dbCountByExpansion.getOrDefault(expansionId, 0L).intValue();
+                    BigDecimal completionRate = totalCount <= 0
+                            ? BigDecimal.ZERO
+                            : BigDecimal.valueOf(ownedCount)
+                                    .divide(BigDecimal.valueOf(totalCount), 4, RoundingMode.HALF_UP)
+                                    .multiply(BigDecimal.valueOf(100))
+                                    .setScale(2, RoundingMode.HALF_UP);
+
+                    return new PortfolioSetCompletionResponse(
+                            expansionId,
+                            expansion != null ? expansion.getName() : UNCLASSIFIED,
+                            ownedCount,
+                            totalCount,
+                            completionRate);
+                })
+                .sorted(Comparator.comparing(PortfolioSetCompletionResponse::completionRate).reversed())
                 .toList();
     }
 
