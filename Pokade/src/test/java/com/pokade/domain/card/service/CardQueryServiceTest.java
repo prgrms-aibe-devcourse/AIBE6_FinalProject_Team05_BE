@@ -498,7 +498,7 @@ class CardQueryServiceTest {
     }
 
     @Test
-    @DisplayName("t43 한글 부분일치 검색어는 도감번호 매핑 후 findByNationalPokedexNumbersIn으로 카드를 조회한다")
+    @DisplayName("t43 한글 부분일치 검색어는 도감번호 매핑 후 searchByPokedexNumbersOrderByName으로 카드를 조회한다")
     void t43() {
         Pageable pageable = PageRequest.of(0, 20);
         PokedexKoName pikachu = PokedexKoName.builder()
@@ -554,7 +554,8 @@ class CardQueryServiceTest {
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isEqualTo(0);
-        verify(cardRepository, never()).findByNationalPokedexNumbersIn(any(), any());
+        verify(cardRepository, never()).searchByPokedexNumbersOrderByName(
+                any(), anyBoolean(), any(), anyBoolean(), any(), anyBoolean(), any(), anyBoolean(), any(), any(), any(), any());
     }
 
     // ===== #187: 오타 허용(유사도) 검색 폴백 =====
