@@ -14,10 +14,12 @@ import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.repository.TradeRepository;
+import com.pokade.global.event.ListingCreatedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,7 @@ public class ListingService {
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
     private final UserAccessChecker userAccessChecker;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public ListingResponse createListing(Long sellerId, ListingCreateRequest request) {
@@ -52,6 +55,7 @@ public class ListingService {
                 .build();
 
         Listing saved = listingRepository.save(listing);
+        eventPublisher.publishEvent(new ListingCreatedEvent(saved.getCardId(), saved.getVariantId()));
         return ListingResponse.of(saved);
     }
 

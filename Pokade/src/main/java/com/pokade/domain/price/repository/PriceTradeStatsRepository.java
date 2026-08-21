@@ -100,4 +100,39 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
                                                             @Param("grade") ListingGrade grade,
                                                             @Param("status") TradeStatus status,
                                                             @Param("from") LocalDateTime from);
+
+    /**
+     * 워치리스트 "목표가 도달" 판정용(#275): 여러 워치리스트를 배치로 조회할 때, 카드마다 서로 다른
+     * 등록(createdAt) 시점을 각각 적용해서 최저/최고가를 구한다. cardIds[i]와 sinceList[i]가 짝을
+     * 이룬다(같은 인덱스끼리 매칭) - 길이가 다르면 안 된다.
+     *
+     * 네이티브 쿼리에서 enum 파라미터를 그대로 바인딩하면 Hibernate가 ordinal(숫자)로 보내
+     * "character varying = smallint" 타입 오류가 난다(#275 스파이크로 실측 확인) - 그래서 이 default
+     * 메서드가 enum을 문자열로 변환해 실제 네이티브 쿼리 메서드에 넘긴다. 호출부는 기존 메서드들과
+     * 동일하게 enum을 그대로 넘기면 된다.
+     */
+    default List<CardPriceRangeView> findPriceRangesByCardIdsSincePerCard(List<Long> cardIds,
+                                                                           List<LocalDateTime> sinceList,
+                                                                           ListingGrade grade,
+                                                                           TradeStatus status) {
+        return findPriceRangesByCardIdsSincePerCardNative(
+                cardIds.toArray(Long[]::new),
+                sinceList.toArray(LocalDateTime[]::new),
+                grade == null ? null : grade.name(),
+                status.name());
+    }
+
+    @Query(value = """
+            SELECT pairs.card_id AS cardId, MIN(t.price) AS minPrice, MAX(t.price) AS maxPrice
+            FROM unnest(:cardIds, :sinceList) AS pairs(card_id, since)
+            JOIN listings l ON l.card_id = pairs.card_id
+            JOIN trades t ON t.listing_id = l.id
+            WHERE t.status = :status AND t.confirmed_at >= pairs.since
+              AND (:grade IS NULL OR l.grade = :grade)
+            GROUP BY pairs.card_id
+            """, nativeQuery = true)
+    List<CardPriceRangeView> findPriceRangesByCardIdsSincePerCardNative(@Param("cardIds") Long[] cardIds,
+                                                                         @Param("sinceList") LocalDateTime[] sinceList,
+                                                                         @Param("grade") String grade,
+                                                                         @Param("status") String status);
 }

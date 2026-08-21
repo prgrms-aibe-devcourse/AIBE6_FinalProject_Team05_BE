@@ -51,9 +51,13 @@ class WatchlistConcurrencyTest {
     private EntityManager entityManager;
 
     private WatchlistService newWatchlistService() {
+        CardRepository cardRepository = mock(CardRepository.class);
+        CardNameKoResolver cardNameKoResolver = mock(CardNameKoResolver.class);
+        NotificationService notificationService = mock(NotificationService.class);
+        WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator =
+                new WatchlistTargetPriceEvaluator(watchlistRepository, cardRepository, notificationService, cardNameKoResolver);
         return new WatchlistService(watchlistRepository, mock(PriceService.class),
-                mock(CardRepository.class), mock(PriceTradeStatsRepository.class), mock(CardNameKoResolver.class),
-                mock(NotificationService.class));
+                cardRepository, mock(PriceTradeStatsRepository.class), cardNameKoResolver, watchlistTargetPriceEvaluator);
     }
 
     @Test
@@ -193,8 +197,8 @@ class WatchlistConcurrencyTest {
 
     private Long insertUser(String email) {
         return ((Number) entityManager.createNativeQuery(
-                        "INSERT INTO users (email, nickname, provider, role, status, terms_agreed_at) "
-                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE', now()) RETURNING id")
+                        "INSERT INTO users (email, nickname, provider, role, status) "
+                                + "VALUES (:email, :nickname, 'LOCAL', 'USER', 'ACTIVE') RETURNING id")
                 .setParameter("email", email)
                 .setParameter("nickname", email.substring(0, email.indexOf('@')))
                 .getSingleResult()).longValue();

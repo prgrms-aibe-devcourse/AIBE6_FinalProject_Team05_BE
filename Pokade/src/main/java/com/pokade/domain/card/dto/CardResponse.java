@@ -9,6 +9,7 @@ public record CardResponse(
         String externalId,
         String name,
         String nameKo,
+        String languageCode,
         String setName,
         String rarity,
         String supertype,
@@ -16,15 +17,19 @@ public record CardResponse(
         String imageSmall,
         String imageMedium,
         String expansionId,
-        List<String> grades
+        List<String> grades,
+        // #187: 정확 검색(부분일치) 결과가 아니라 pg_trgm 유사도 폴백으로 찾은 카드인지 여부.
+        // 필터/연관 카드 조회처럼 폴백이 없는 경로에서는 항상 false다.
+        boolean fuzzyMatch
 ) {
 
-    public static CardResponse from(Card card, List<String> grades, String nameKo, List<String> types, String rarity) {
+    public static CardResponse from(Card card, List<String> grades, String nameKo, List<String> types, String rarity, boolean fuzzyMatch) {
         return new CardResponse(
                 card.getId(),
                 card.getExternalId(),
                 card.getName(),
                 nameKo,
+                card.getLanguageCode(),
                 card.getSetName(),
                 rarity,
                 card.getSupertype(),
@@ -32,7 +37,8 @@ public record CardResponse(
                 card.getImageSmall(),
                 card.getImageMedium(),
                 card.getExpansion() != null ? card.getExpansion().getId() : null,
-                grades
+                grades,
+                fuzzyMatch
         );
     }
 }

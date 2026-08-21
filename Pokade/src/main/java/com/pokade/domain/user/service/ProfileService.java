@@ -21,6 +21,7 @@ public class ProfileService {
     private final UserRepository userRepository;
     private final TradeCountPort tradeCountPort;
     private final ListingCountPort listingCountPort;
+    private final UserAgreementService userAgreementService;
 
     // 공개 프로필을 조회한다 ( 확정 탈퇴 계정은 없는 것을 전제로 한다)
     public PublicProfileResponse getPublicProfile(Long userId) {
@@ -36,10 +37,9 @@ public class ProfileService {
     }
 
     // 본인 상세 프로필을 조회한다
-
     public MyProfileResponse getMyProfile(Long userId) {
         return userRepository.findById(userId)
-                .map(MyProfileResponse::from)
+                .map(user -> MyProfileResponse.of(user, userAgreementService.isMarketingAgreed(userId)))
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 }

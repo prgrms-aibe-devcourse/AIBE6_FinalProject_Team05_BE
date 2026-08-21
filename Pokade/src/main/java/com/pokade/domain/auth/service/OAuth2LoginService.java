@@ -2,9 +2,12 @@ package com.pokade.domain.auth.service;
 
 import com.pokade.domain.auth.dto.OAuth2Outcome;
 import com.pokade.domain.auth.dto.TokenPair;
+import com.pokade.domain.auth.dto.request.OAuth2RegisterRequest;
 import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.entity.type.AgreementType;
 import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.domain.user.service.UserAgreementService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtTokenProvider;
@@ -22,6 +25,7 @@ public class OAuth2LoginService {
     private final UserRepository userRepository;
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final UserAgreementService userAgreementService;
 
     private static final Duration SIGNUP_TICKET_TTL = Duration.ofMinutes(5);
     private static final String CLAIM_PROVIDER = "provider";
@@ -56,9 +60,9 @@ public class OAuth2LoginService {
 
     // 서명 티켓을 검증하고 신규 소셜 유저를 생성한 뒤 토큰을 발급한다.
     @Transactional
-    public TokenPair register(String ticket, String nickname) {
-        String providerName = jwtTokenProvider.parseSignedTicket(ticket, CLAIM_PROVIDER);
-        String email = jwtTokenProvider.parseSignedTicket(ticket, CLAIM_EMAIL);
+    public TokenPair register(OAuth2RegisterRequest request) {
+        String providerName = jwtTokenProvider.parseSignedTicket(request.ticket(), CLAIM_PROVIDER);
+        String email = jwtTokenProvider.parseSignedTicket(request.ticket(), CLAIM_EMAIL);
 
         if (providerName == null || email == null) {   // 위조·만료 티켓
             throw new BusinessException(ErrorCode.INVALID_OAUTH2_TICKET);
@@ -68,12 +72,20 @@ public class OAuth2LoginService {
             throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
 
-        if (userRepository.existsByNickname(nickname)) {
+        if (userRepository.existsByNickname(request.nickname())) {
             throw new BusinessException(ErrorCode.DUPLICATE_NICKNAME);
         }
 
         User user = userRepository.save(
-                User.createSocialUser(email, nickname, Provider.valueOf(providerName)));
+                User.createSocialUser(email, request.nickname(), Provider.valueOf(providerName)));
+
+        userAgreementService.recordSignupAgreements(user.getId(), Map.of(
+                AgreementType.TERMS_OF_SERVICE, request.termsOfService(),
+                AgreementType.PRIVACY_POLICY, request.privacyPolicy(),
+                AgreementType.THIRD_PARTY_SHARING, request.thirdPartySharing(),
+                AgreementType.MARKETING, request.marketing()
+        ));
+
         return authService.issueToken(user);
     }
 }

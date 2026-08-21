@@ -30,7 +30,7 @@ import jakarta.persistence.EntityManager;
  */
 @DataJpaTest
 @Import({PokedexKoNameJdbcRepository.class, PokedexKoNameInitializer.class, PokedexKoNameCache.class,
-        CardNameKoResolver.class, CardService.class})
+        CardNameKoResolver.class, CardService.class, CardQueryService.class, CardFacetService.class})
 class CardNameKoIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired

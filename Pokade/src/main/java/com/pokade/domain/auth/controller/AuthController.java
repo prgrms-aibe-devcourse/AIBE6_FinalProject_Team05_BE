@@ -75,7 +75,7 @@ public class AuthController {
             @Valid @RequestBody OAuth2RegisterRequest request,
             HttpServletResponse response
     ) {
-        TokenPair tokens = oauth2LoginService.register(request.ticket(), request.nickname());
+        TokenPair tokens = oauth2LoginService.register(request);
         response.addHeader(HttpHeaders.SET_COOKIE,
                 refreshTokenCookieFactory.create(tokens.refreshToken()).toString());
         return ApiResponse.ok("소셜 회원가입이 완료되었습니다.", LoginResponse.of(tokens.accessToken()));

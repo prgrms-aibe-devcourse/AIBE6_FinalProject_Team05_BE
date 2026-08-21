@@ -46,6 +46,10 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
 
     long countBySellerIdAndStatus(Long sellerId, ListingStatus status);
 
+    // #300: 워치리스트 재입고 알림 판단용 - 이번에 등록된 매물이 해당 (카드, variant)의 "유일한" 활성
+    // 매물인지 확인한다. variantId가 null이면 Spring Data가 자동으로 "IS NULL" 비교로 처리한다.
+    long countByCardIdAndVariantIdAndStatus(Long cardId, Long variantId, ListingStatus status);
+
     boolean existsBySellerIdAndCardIdAndVariantIdAndStatus(
             Long sellerId, Long cardId, Long variantId, ListingStatus status);
 

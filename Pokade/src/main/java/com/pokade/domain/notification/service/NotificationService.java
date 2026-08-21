@@ -1,5 +1,7 @@
 package com.pokade.domain.notification.service;
 
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.notification.dto.NotificationResponse;
 import com.pokade.domain.notification.entity.Notification;
 import com.pokade.domain.notification.entity.NotificationType;
@@ -9,12 +11,15 @@ import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.web.PageableValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -24,7 +29,12 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,7 +49,11 @@ public class NotificationService {
     // 보내 연결이 유휴 상태로 조기 종료되지 않도록 한다.
     private static final long HEARTBEAT_INTERVAL_MILLIS = 15_000L;
 
+    // #162: 다른 페이징 API(AiGradeService/CardQueryService/ChatService)와 동일한 상한
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final NotificationRepository notificationRepository;
+    private final CardRepository cardRepository;
     private final SseEmitterStore sseEmitterStore;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -48,11 +62,26 @@ public class NotificationService {
     @Autowired(required = false)
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
-    public List<NotificationResponse> getNotifications(Long userId) {
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId)
-                .stream()
-                .map(NotificationResponse::of)
+    public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {
+        PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);
+        Page<Notification> notifications = notificationRepository.findByUserId(userId, pageable);
+
+        // cardId별로 각각 조회하면 페이지당(최대 MAX_PAGE_SIZE건) N+1이 되므로, distinct cardId로 한 번에
+        // 배치 조회한다(WatchlistService.getWatchlist()와 동일한 패턴). cardId가 없는 알림(INQUIRY_HANDLED 등)은
+        // 애초에 이 목록에서 제외되므로 cardById.get(null)이 자연스럽게 null을 반환한다.
+        List<Long> cardIds = notifications.stream()
+                .map(Notification::getCardId)
+                .filter(Objects::nonNull)
+                .distinct()
                 .toList();
+        // Map.of()는 null 키 조회 시 NPE를 던지므로(cardId가 없는 알림에서 cardById.get(null) 호출 시 문제),
+        // 빈 맵 폴백도 null 키 조회가 안전한 Collections.emptyMap()을 쓴다.
+        Map<Long, Card> cardById = cardIds.isEmpty()
+                ? Collections.emptyMap()
+                : cardRepository.findAllById(cardIds).stream()
+                        .collect(Collectors.toMap(Card::getId, Function.identity()));
+
+        return notifications.map(notification -> NotificationResponse.of(notification, cardById.get(notification.getCardId())));
     }
 
     @Transactional
@@ -69,22 +98,51 @@ public class NotificationService {
         throw new BusinessException(ErrorCode.NOTIFICATION_ALREADY_READ);
     }
 
-    // 워치리스트 목표가 도달 알림 생성 (reachedTargetPrice: 도달한 것으로 판정된 목표가 - 구매/판매 목표가 중 실제로 도달한 쪽)
+    // #162: 본인 소유 알림만 삭제 가능 - 조건부 원자적 DELETE(WHERE id=:id AND userId=:userId)가 0건이면
+    // 존재하지 않거나 본인 소유가 아닌 것이므로 구분 없이 NOTIFICATION_NOT_FOUND로 처리한다.
     @Transactional
-    public void createPriceTargetNotification(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
+    public void deleteNotification(Long userId, Long notificationId) {
+        int deleted = notificationRepository.deleteByIdAndUserId(notificationId, userId);
+        if (deleted == 0) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND);
+        }
+    }
+
+    // 워치리스트 목표가 도달 알림 생성 (reachedTargetPrice: 도달한 것으로 판정된 목표가 - 구매/판매 목표가 중 실제로 도달한 쪽)
+    // card: 호출자(WatchlistTargetPriceEvaluator/WatchlistTargetPriceNoticeProcessor)가 목표가 판정을 위해
+    // 이미 조회해 둔 카드 - 여기서 다시 조회하지 않고 그대로 재사용해 SSE 즉시 푸시에도 카드 이미지를 채운다.
+    @Transactional
+    public void createPriceTargetNotification(Watchlist watchlist, String cardName, Card card, Integer reachedTargetPrice) {
         Notification notification = Notification.builder()
                 .userId(watchlist.getUserId())
                 .type(NotificationType.PRICE_TARGET)
                 .message(buildPriceTargetMessage(watchlist, cardName, reachedTargetPrice))
+                .cardId(watchlist.getCardId())
                 .build();
 
         notificationRepository.save(notification);
-        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification));
+        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification, card));
     }
 
     private String buildPriceTargetMessage(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
         String targetLabel = reachedTargetPrice.equals(watchlist.getTargetBuyPrice()) ? "구매" : "판매";
         return String.format("%s 카드가 %s 목표가 %,d원에 도달했습니다.", cardName, targetLabel, reachedTargetPrice);
+    }
+
+    // #300: 워치리스트에 등록한 카드에 매물이 없다가 새로 등록됐을 때(재입고) 알림 생성.
+    // card: 호출자(WatchlistListingAvailableNoticeListener)가 이미 조회해 둔 카드 - createPriceTargetNotification과
+    // 동일하게 여기서 다시 조회하지 않고 재사용해 SSE 즉시 푸시에도 카드 이미지를 채운다.
+    @Transactional
+    public void createListingAvailableNotification(Watchlist watchlist, String cardName, Card card) {
+        Notification notification = Notification.builder()
+                .userId(watchlist.getUserId())
+                .type(NotificationType.LISTING_AVAILABLE)
+                .message(String.format("%s 카드에 매물이 새로 등록됐어요. 지금 확인해보세요!", cardName))
+                .cardId(watchlist.getCardId())
+                .build();
+
+        notificationRepository.save(notification);
+        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification, card));
     }
 
     // 1:1 문의 처리 완료 알림 생성 - 관리자의 답변 등록, 또는 상태를 HANDLED로 변경한 경우 호출된다.
@@ -100,7 +158,7 @@ public class NotificationService {
                 .build();
 
         notificationRepository.save(notification);
-        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification)));
+        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification, null)));
     }
 
     // 트랜잭션이 없는 컨텍스트(단위 테스트 등)에서도 그대로 실행되도록 fallbackExecution=true.

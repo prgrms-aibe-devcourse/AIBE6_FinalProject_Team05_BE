@@ -1,5 +1,7 @@
 package com.pokade.domain.notification.service;
 
+import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.notification.dto.NotificationResponse;
 import com.pokade.domain.notification.entity.Notification;
 import com.pokade.domain.notification.entity.NotificationType;
@@ -18,6 +20,10 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -39,6 +45,7 @@ import static org.mockito.Mockito.never;
 class NotificationServiceTest {
 
     @Mock NotificationRepository notificationRepository;
+    @Mock CardRepository cardRepository;
     @Mock SseEmitterStore sseEmitterStore;
     @Mock ApplicationEventPublisher eventPublisher;
     @InjectMocks NotificationService notificationService;
@@ -49,26 +56,88 @@ class NotificationServiceTest {
                 .build();
     }
 
+    private Card card() {
+        return Card.builder().id(10L).name("리자몽").imageMedium("medium.png").build();
+    }
+
     // ===== 목록 조회 =====
     @Test
-    @DisplayName("목록 조회: 알림이 없으면 빈 리스트 반환")
+    @DisplayName("목록 조회: 알림이 없으면 빈 페이지 반환")
     void getNotifications_empty() {
-        given(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L)).willReturn(List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        given(notificationRepository.findByUserId(1L, pageable)).willReturn(Page.empty(pageable));
 
-        List<NotificationResponse> result = notificationService.getNotifications(1L);
+        Page<NotificationResponse> result = notificationService.getNotifications(1L, pageable);
 
-        assertThat(result).isEmpty();
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
     }
 
     @Test
-    @DisplayName("목록 조회: 알림 개수만큼 NotificationResponse 리스트 반환")
+    @DisplayName("목록 조회: 알림 개수만큼 NotificationResponse 페이지 반환")
     void getNotifications_success() {
-        given(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L))
-                .willReturn(List.of(notification(1L), notification(1L)));
+        Pageable pageable = PageRequest.of(0, 20);
+        given(notificationRepository.findByUserId(1L, pageable))
+                .willReturn(new PageImpl<>(List.of(notification(1L), notification(1L)), pageable, 2));
 
-        List<NotificationResponse> result = notificationService.getNotifications(1L);
+        Page<NotificationResponse> result = notificationService.getNotifications(1L, pageable);
 
-        assertThat(result).hasSize(2);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("목록 조회: cardId가 없는 알림만 있으면 카드를 배치 조회하지 않고 cardImageUrl은 null이다")
+    void getNotifications_noCardId_skipsCardBatchFetch() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Notification inquiryHandled = Notification.builder()
+                .userId(1L).type(NotificationType.INQUIRY_HANDLED).message("메시지").build();
+        given(notificationRepository.findByUserId(1L, pageable))
+                .willReturn(new PageImpl<>(List.of(inquiryHandled), pageable, 1));
+
+        Page<NotificationResponse> result = notificationService.getNotifications(1L, pageable);
+
+        assertThat(result.getContent().get(0).cardImageUrl()).isNull();
+        then(cardRepository).should(never()).findAllById(any());
+    }
+
+    @Test
+    @DisplayName("목록 조회: 같은 페이지 안 여러 알림의 카드를 distinct cardId로 한 번만 배치 조회한다(N+1 방지)")
+    void getNotifications_batchFetchesCardsOnce() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Notification n1 = Notification.builder()
+                .userId(1L).type(NotificationType.PRICE_TARGET).message("메시지1").cardId(10L).build();
+        Notification n2 = Notification.builder()
+                .userId(1L).type(NotificationType.PRICE_TARGET).message("메시지2").cardId(10L).build();
+        Notification n3 = Notification.builder()
+                .userId(1L).type(NotificationType.PRICE_TARGET).message("메시지3").cardId(20L).build();
+        given(notificationRepository.findByUserId(1L, pageable))
+                .willReturn(new PageImpl<>(List.of(n1, n2, n3), pageable, 3));
+        Card card10 = Card.builder().id(10L).name("리자몽").imageMedium("medium-10.png").build();
+        Card card20 = Card.builder().id(20L).name("피카츄").imageSmall("small-20.png").build();
+        given(cardRepository.findAllById(List.of(10L, 20L))).willReturn(List.of(card10, card20));
+
+        Page<NotificationResponse> result = notificationService.getNotifications(1L, pageable);
+
+        assertThat(result.getContent().get(0).cardImageUrl()).isEqualTo("medium-10.png");
+        assertThat(result.getContent().get(1).cardImageUrl()).isEqualTo("medium-10.png");
+        // card20은 imageMedium이 없어 imageSmall로 폴백한다.
+        assertThat(result.getContent().get(2).cardImageUrl()).isEqualTo("small-20.png");
+        // cardId 3건(distinct 시 2건)에 대해 findAllById가 정확히 1번만 호출됐는지 - 개별 findById 호출이 없었는지 검증.
+        then(cardRepository).should(Mockito.times(1)).findAllById(any());
+        then(cardRepository).should(never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("목록 조회: 페이지 크기가 상한(100)을 초과하면 BusinessException(INVALID_INPUT)을 던진다")
+    void getNotifications_throwsWhenPageSizeExceedsLimit() {
+        Pageable pageable = PageRequest.of(0, 101);
+
+        assertThatThrownBy(() -> notificationService.getNotifications(1L, pageable))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+
+        then(notificationRepository).should(Mockito.never()).findByUserId(Mockito.any(), Mockito.any());
     }
 
     // ===== 읽음 처리 =====
@@ -107,29 +176,53 @@ class NotificationServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.NOTIFICATION_ALREADY_READ);
     }
 
+    // ===== 삭제 =====
+    // deleteByIdAndUserId()도 markAsReadIfUnread()와 같은 이유로 조건부 원자적 DELETE라, 존재하지 않는
+    // 알림과 본인 소유가 아닌 알림을 구분하지 않고 0건이면 그대로 NOTIFICATION_NOT_FOUND로 처리한다.
+    @Test
+    @DisplayName("삭제: 원자적 삭제가 1건이면 정상 처리된다")
+    void deleteNotification_success() {
+        given(notificationRepository.deleteByIdAndUserId(1L, 1L)).willReturn(1);
+
+        notificationService.deleteNotification(1L, 1L);
+
+        then(notificationRepository).should(Mockito.times(1)).deleteByIdAndUserId(1L, 1L);
+    }
+
+    @Test
+    @DisplayName("삭제: 삭제 0건이면(존재하지 않거나 본인 소유가 아님) NOTIFICATION_NOT_FOUND")
+    void deleteNotification_notFound() {
+        given(notificationRepository.deleteByIdAndUserId(1L, 1L)).willReturn(0);
+
+        assertThatThrownBy(() -> notificationService.deleteNotification(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
+    }
+
     // ===== 목표가 도달 알림 생성 =====
     @Test
     @DisplayName("목표가 도달 알림 생성: notificationRepository.save가 호출된다")
     void createPriceTargetNotification_saves() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
 
-        notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000);
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000);
 
         then(notificationRepository).should().save(Mockito.any(Notification.class));
     }
 
     @Test
-    @DisplayName("목표가 도달 알림 생성: PRICE_TARGET 타입과 워치리스트의 userId로 저장된다")
+    @DisplayName("목표가 도달 알림 생성: PRICE_TARGET 타입과 워치리스트의 userId/cardId로 저장된다")
     void createPriceTargetNotification_type() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
 
-        notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000);
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000);
 
         ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
         then(notificationRepository).should().save(captor.capture());
         Notification saved = captor.getValue();
         assertThat(saved.getUserId()).isEqualTo(1L);
         assertThat(saved.getType()).isEqualTo(NotificationType.PRICE_TARGET);
+        assertThat(saved.getCardId()).isEqualTo(10L);
     }
 
     @Test
@@ -137,7 +230,7 @@ class NotificationServiceTest {
     void createPriceTargetNotification_message_sell() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetSellPrice(150000).build();
 
-        notificationService.createPriceTargetNotification(watchlist, "리자몽", 150000);
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 150000);
 
         ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
         then(notificationRepository).should().save(captor.capture());
@@ -153,7 +246,7 @@ class NotificationServiceTest {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L)
                 .targetBuyPrice(100000).targetSellPrice(150000).build();
 
-        notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000);
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000);
 
         ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
         then(notificationRepository).should().save(captor.capture());
@@ -169,7 +262,7 @@ class NotificationServiceTest {
         SseEmitter emitter = mock(SseEmitter.class);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
-        notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000);
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000);
 
         then(emitter).should().send(any(SseEmitter.SseEventBuilder.class));
     }
@@ -180,7 +273,7 @@ class NotificationServiceTest {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of());
 
-        assertThatCode(() -> notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000))
+        assertThatCode(() -> notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000))
                 .doesNotThrowAnyException();
     }
 
@@ -192,7 +285,7 @@ class NotificationServiceTest {
         doThrow(new IOException("broken pipe")).when(emitter).send(any(SseEmitter.SseEventBuilder.class));
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
-        notificationService.createPriceTargetNotification(watchlist, "리자몽", 100000);
+        notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000);
 
         then(emitter).should().completeWithError(any(IOException.class));
     }
@@ -209,6 +302,7 @@ class NotificationServiceTest {
         assertThat(saved.getUserId()).isEqualTo(1L);
         assertThat(saved.getType()).isEqualTo(NotificationType.INQUIRY_HANDLED);
         assertThat(saved.getMessage()).contains("결제 문의");
+        assertThat(saved.getCardId()).isNull();
 
         ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
         then(eventPublisher).should().publishEvent(eventCaptor.capture());
@@ -223,7 +317,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 있으면 notification 이벤트를 전송한다")
     void onNotificationPush_pushes_to_subscriber() throws Exception {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", false, null);
+        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, false, null);
         SseEmitter emitter = mock(SseEmitter.class);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
@@ -235,7 +329,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 없으면 예외 없이 조용히 스킵된다")
     void onNotificationPush_no_subscriber_noop() {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", false, null);
+        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, false, null);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of());
 
         assertThatCode(() -> notificationService.onNotificationPush(new NotificationPushEvent(1L, response)))

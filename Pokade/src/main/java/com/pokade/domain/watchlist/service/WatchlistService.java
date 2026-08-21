@@ -3,11 +3,11 @@ package com.pokade.domain.watchlist.service;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
-import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.watchlist.dto.WatchlistCountResponse;
 import com.pokade.domain.watchlist.dto.WatchlistCreateRequest;
 import com.pokade.domain.watchlist.dto.WatchlistResponse;
 import com.pokade.domain.watchlist.dto.WatchlistUpdateRequest;
@@ -16,15 +16,13 @@ import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import io.micrometer.core.annotation.Timed;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -36,21 +34,15 @@ import java.util.stream.Collectors;
 public class WatchlistService {
 
     private static final long WATCHLIST_LIMIT = 20;
+    // CardQueryService.MAX_FILTER_VALUES와 같은 취지 - 한 번에 조회 가능한 카드 수 상한을 둬서 과도한 IN절을 막는다.
+    private static final int MAX_COUNT_CARD_IDS = 100;
 
     private final WatchlistRepository watchlistRepository;
     private final PriceService priceService;
     private final CardRepository cardRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final CardNameKoResolver cardNameKoResolver;
-    private final NotificationService notificationService;
-
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
-    // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
-    // required = false: @DataJpaTest 등 슬라이스 테스트엔 MeterRegistry 빈이 없어 NoSuchBeanDefinitionException으로
-    // 컨텍스트 로딩 자체가 깨졌다(#224). 매칭되는 빈이 없으면 Spring이 필드를 건드리지 않고 그대로 두므로
-    // 아래 기본값(SimpleMeterRegistry)이 계속 살아남아 null이 되지 않는다.
-    @Autowired(required = false)
-    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator;
 
     // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
     @Timed(value = "watchlist.add.duration")
@@ -82,47 +74,23 @@ public class WatchlistService {
         try {
             Watchlist saved = watchlistRepository.save(watchlist);
 
+            // TODO(#275): updateWatchlist()/getWatchlist()와 같은 원인(전체 기간 range 사용)을 공유하지만,
+            // "등록 시점에 이미 도달이면 배치를 기다리지 않고 즉시 알림"이라는 의도된 최적화(아래 주석)와
+            // 상충할 수 있어 이번엔 범위에서 제외함 - 등록 이후 스코프로 바꿀지는 별도 논의 필요.
             PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
                     .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
                     .stream()
                     .findFirst()
                     .orElse(null);
-            Integer reachedTargetPrice = resolveReachedTargetPrice(saved, range);
+            Integer reachedTargetPrice = watchlistTargetPriceEvaluator.resolveReachedTargetPrice(saved, range);
             boolean targetReached = reachedTargetPrice != null;
             // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
             // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
-            notifyIfNewlyReached(saved, reachedTargetPrice);
+            watchlistTargetPriceEvaluator.notifyIfNewlyReached(saved, reachedTargetPrice);
             return WatchlistResponse.of(saved, targetReached);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
-    }
-
-    // 목표가에 새로 도달한 경우(아직 알림 안 간 상태에서 도달)에만 markAsNotified + 실제 알림 생성을 한다.
-    // "이미 알림 갔는지"는 메모리 값이 아니라 markAsNotifiedIfNotYet()의 원자적 조건부 UPDATE(DB 기준)로
-    // 판정한다 - 배치(WatchlistTargetPriceNoticeProcessor)가 그 사이 먼저 선점했을 수 있어서, 메모리에 로드된
-    // isNotified만 믿으면 중복 알림이 생길 수 있다. claimed>0일 때만 엔티티도 true로 맞춰서, 이 메서드가
-    // 반환하는 WatchlistResponse의 isNotified가 실제 DB 상태와 일치하게 한다(배치는 응답 DTO가 없어서 이
-    // 동기화가 필요 없었던 것과 다른 점).
-    private void notifyIfNewlyReached(Watchlist watchlist, Integer reachedTargetPrice) {
-        if (reachedTargetPrice == null) {
-            return;
-        }
-        int claimed = watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId());
-        if (claimed == 0) {
-            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
-            meterRegistry.counter("watchlist.notify.already_claimed.calls").increment();
-            return;
-        }
-        // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
-        meterRegistry.counter("watchlist.notify.immediate.calls").increment();
-        watchlist.markAsNotified();
-        notifyIfTargetAlreadyReached(watchlist, reachedTargetPrice);
-    }
-
-    private void notifyIfTargetAlreadyReached(Watchlist watchlist, Integer reachedTargetPrice) {
-        cardRepository.findById(watchlist.getCardId())
-                .ifPresent(card -> notificationService.createPriceTargetNotification(watchlist, card.getName(), reachedTargetPrice));
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
@@ -139,8 +107,15 @@ public class WatchlistService {
                 .stream()
                 .collect(Collectors.toMap(Card::getId, Function.identity()));
 
+        // #275: 카드마다 "이 워치리스트가 등록된 시점(createdAt) 이후" 체결분만으로 도달을 판정해야 한다
+        // (전체 기간으로 보면 과거 어느 시점에 목표가 범위를 스쳤다는 이유만으로 잘못 판정될 수 있음 - 배치
+        // 판정 경로(WatchlistTargetPriceNoticeProcessor)와 동일한 스코프로 통일). 한 유저는 같은 카드를
+        // 중복 등록할 수 없어(cardId 유니크) cardIds와 sinceList를 같은 순서로 안전하게 페어링할 수 있다.
+        Map<Long, LocalDateTime> createdAtByCardId = watchlists.stream()
+                .collect(Collectors.toMap(Watchlist::getCardId, watchlistTargetPriceEvaluator::resolveWatchScopeStart, (a, b) -> a));
+        List<LocalDateTime> sinceList = cardIds.stream().map(createdAtByCardId::get).toList();
         Map<Long, PriceTradeStatsRepository.CardPriceRangeView> rangeByCardId =
-                priceTradeStatsRepository.findPriceRangesByCardIds(cardIds, null, TradeStatus.COMPLETED)
+                priceTradeStatsRepository.findPriceRangesByCardIdsSincePerCard(cardIds, sinceList, null, TradeStatus.COMPLETED)
                         .stream()
                         .collect(Collectors.toMap(PriceTradeStatsRepository.CardPriceRangeView::getCardId, Function.identity()));
         // "등락" 배지용 - 최근 7일 vs 이전 7일 S등급 평균 체결가 비교(%). getStats()/getRanking()과 같은 기준.
@@ -161,24 +136,7 @@ public class WatchlistService {
     }
 
     private boolean isTargetReached(Watchlist watchlist, PriceTradeStatsRepository.CardPriceRangeView range) {
-        return resolveReachedTargetPrice(watchlist, range) != null;
-    }
-
-    // 목표가(구매/판매) 도달 판정 - 도달한 목표가 값을 반환(없으면 null).
-    // isTargetReached()와 동일한 판정 로직을 재사용 가능한 형태로 추출한 것 (WatchlistTargetPriceNoticeService에서 재사용).
-    Integer resolveReachedTargetPrice(Watchlist watchlist, PriceTradeStatsRepository.CardPriceRangeView range) {
-        if (range == null || range.getMinPrice() == null || range.getMaxPrice() == null) {
-            return null;
-        }
-        Integer targetBuyPrice = watchlist.getTargetBuyPrice();
-        if (targetBuyPrice != null && range.getMinPrice() <= targetBuyPrice && targetBuyPrice <= range.getMaxPrice()) {
-            return targetBuyPrice;
-        }
-        Integer targetSellPrice = watchlist.getTargetSellPrice();
-        if (targetSellPrice != null && range.getMinPrice() <= targetSellPrice && targetSellPrice <= range.getMaxPrice()) {
-            return targetSellPrice;
-        }
-        return null;
+        return watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, range) != null;
     }
 
     // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
@@ -199,14 +157,18 @@ public class WatchlistService {
             watchlist.requestNotificationAgain();
         }
 
+        // #275: 전체 기간이 아니라 "이 워치리스트 등록 시점 이후" 체결분만으로 재판정한다 - 목표가를
+        // 수정해도 과거(등록 훨씬 전) 한때 그 가격대였다는 이유만으로 즉시 "도달"로 오판정되던 버그 수정.
+        // getWatchlist()/배치(WatchlistTargetPriceNoticeProcessor)와 동일한 스코프로 통일.
         PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
-                .findPriceRangesByCardIds(List.of(watchlist.getCardId()), null, TradeStatus.COMPLETED)
+                .findPriceRangesByCardIdsSincePerCard(
+                        List.of(watchlist.getCardId()), List.of(watchlistTargetPriceEvaluator.resolveWatchScopeStart(watchlist)), null, TradeStatus.COMPLETED)
                 .stream()
                 .findFirst()
                 .orElse(null);
-        Integer reachedTargetPrice = resolveReachedTargetPrice(watchlist, range);
+        Integer reachedTargetPrice = watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, range);
         boolean targetReached = reachedTargetPrice != null;
-        notifyIfNewlyReached(watchlist, reachedTargetPrice);
+        watchlistTargetPriceEvaluator.notifyIfNewlyReached(watchlist, reachedTargetPrice);
         return WatchlistResponse.of(watchlist, targetReached);
     }
 
@@ -214,6 +176,28 @@ public class WatchlistService {
         if (targetBuyPrice == null && targetSellPrice == null) {
             throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
         }
+    }
+
+    // 카드별 관심수(워치리스트 등록 수) 배치 조회 - 카드 수와 무관하게 쿼리 1회로 처리한다(getWatchlist()의
+    // IN절 + Map 그룹핑 패턴과 동일). 등록이 하나도 없는 카드는 응답에서 제외되지 않고 0으로 채워진다.
+    public List<WatchlistCountResponse> getWatchlistCounts(List<Long> cardIds) {
+        if (cardIds == null || cardIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "cardIds는 최소 1개 이상 지정해야 합니다.");
+        }
+        List<Long> distinctCardIds = cardIds.stream().distinct().toList();
+        if (distinctCardIds.size() > MAX_COUNT_CARD_IDS) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "cardIds는 최대 " + MAX_COUNT_CARD_IDS + "개까지 지정할 수 있습니다.");
+        }
+
+        Map<Long, Long> countByCardId = watchlistRepository.countGroupedByCardIdIn(distinctCardIds).stream()
+                .collect(Collectors.toMap(
+                        WatchlistRepository.WatchlistCardCountView::getCardId,
+                        WatchlistRepository.WatchlistCardCountView::getCount));
+
+        return distinctCardIds.stream()
+                .map(cardId -> new WatchlistCountResponse(cardId, countByCardId.getOrDefault(cardId, 0L)))
+                .toList();
     }
 
     @Transactional

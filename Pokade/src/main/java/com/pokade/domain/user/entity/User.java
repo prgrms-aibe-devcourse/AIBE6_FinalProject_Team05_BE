@@ -3,12 +3,13 @@ package com.pokade.domain.user.entity;
 import com.pokade.domain.user.entity.type.Provider;
 import com.pokade.domain.user.entity.type.Role;
 import com.pokade.domain.user.entity.type.UserStatus;
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -49,18 +50,6 @@ public class User {
     @Column(name = "profile_image_url")
     private String profileImageUrl;
 
-    @Column(name = "birth_date")
-    private LocalDate birthDate;
-
-    @Column(name = "phone_number", length = 20)
-    private String phoneNumber;
-
-    @Column(name = "terms_agreed_at", nullable = false)
-    private LocalDateTime termsAgreedAt;
-
-    @Column(name = "marketing_opt_in", nullable = false)
-    private boolean marketingOptIn;
-
     @Column(name = "point_balance", nullable = false)
     private Integer pointBalance;
 
@@ -90,8 +79,6 @@ public class User {
                 .provider(Provider.LOCAL)
                 .role(Role.USER)
                 .status(UserStatus.PENDING)
-                .termsAgreedAt(LocalDateTime.now())
-                .marketingOptIn(false)
                 .pointBalance(0)
                 .build();
     }
@@ -103,8 +90,6 @@ public class User {
                 .provider(provider)
                 .role(Role.USER)
                 .status(UserStatus.ACTIVE)
-                .termsAgreedAt(LocalDateTime.now())
-                .marketingOptIn(false)
                 .pointBalance(0)
                 .build();
     }
@@ -155,8 +140,6 @@ public class User {
         this.email = "deleted_" + anonToken + "@pokade.invalid";
         this.nickname = "deleted_" + anonToken;
         this.password = null;
-        this.phoneNumber = null;
-        this.birthDate = null;
         String previousKey = this.profileImageUrl;
         this.profileImageUrl = null;
         return previousKey;
@@ -174,5 +157,28 @@ public class User {
         String previousKey = this.profileImageUrl;
         this.profileImageUrl = null;
         return previousKey;
+    }
+
+    // 포인트를 충전한다 (토스페이먼츠 결제 승인 후 호출)
+    public void chargePoints(int amount) {
+        this.pointBalance += amount;
+    }
+
+    // 포인트를 차감한다 (매물 구매 등) - 잔액이 모자라면 거부
+    public void deductPoints(int amount) {
+        if (this.pointBalance < amount) {
+            throw new BusinessException(ErrorCode.INSUFFICIENT_POINT_BALANCE);
+        }
+        this.pointBalance -= amount;
+    }
+
+    // 계정을 정지한다 (관리자 제재)
+    public void suspend() {
+        this.status = UserStatus.SUSPENDED;
+    }
+
+    // 정지를 해제한다 (활성 상태로 복구)
+    public void unsuspend() {
+        this.status = UserStatus.ACTIVE;
     }
 }

@@ -101,8 +101,8 @@ class ListingRepositoryTest {
 
     private Long insertUser(String email) {
         return ((Number) entityManager.createNativeQuery(
-                        "INSERT INTO users (email, nickname, provider, role, status, terms_agreed_at) "
-                                + "VALUES (:email, 'tester', 'LOCAL', 'USER', 'ACTIVE', now()) RETURNING id")
+                        "INSERT INTO users (email, nickname, provider, role, status) "
+                                + "VALUES (:email, 'tester', 'LOCAL', 'USER', 'ACTIVE') RETURNING id")
                 .setParameter("email", email)
                 .getSingleResult()).longValue();
     }

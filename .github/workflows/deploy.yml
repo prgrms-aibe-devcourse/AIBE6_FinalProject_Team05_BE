@@ -27,6 +27,21 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/pokade-backend:latest
 
+  cleanup-old-images:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      # :latest 태그 하나만 쓰다 보니 push할 때마다 새 다이제스트가 쌓이고 이전 것은
+      # 태그 없이(untagged) 남아 GHCR 저장 용량을 계속 먹는다. 최신 4개만 남기고 정리.
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: pokade-backend
+          package-type: container
+          min-versions-to-keep: 4
+          token: ${{ secrets.GHCR_PAT }}
+
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
