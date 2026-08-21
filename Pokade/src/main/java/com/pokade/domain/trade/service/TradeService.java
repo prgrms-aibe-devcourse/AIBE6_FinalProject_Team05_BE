@@ -6,6 +6,7 @@ import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.point.client.TossPaymentClient;
 import com.pokade.domain.point.service.PointService;
+import com.pokade.domain.portfolio.service.PortfolioService;
 import com.pokade.domain.trade.dto.MyTradeResponse;
 import com.pokade.domain.trade.dto.MyTradeSearchCondition;
 import com.pokade.domain.trade.dto.TradeReadyRequest;
@@ -49,6 +50,7 @@ public class TradeService {
     private final TradeOrderRepository tradeOrderRepository;
     private final TossPaymentClient tossPaymentClient;
     private final PointService pointService;
+    private final PortfolioService portfolioService;
 
     private TradeResponse toResponse(Trade trade) {
         String cardName = cardRepository.findById(trade.getListing().getCardId())
@@ -199,6 +201,15 @@ public class TradeService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_FAILED));
         payment.settle();
         pointService.settle(trade.getListing().getSellerId(), trade.getPrice(), trade.getId());
+
+        Listing listing = trade.getListing();
+        portfolioService.addFromCompletedTrade(
+                buyerId,
+                trade.getId(),
+                listing.getCardId(),
+                listing.getVariantId(),
+                trade.getPrice()
+        );
 
         return toResponse(trade);
     }
