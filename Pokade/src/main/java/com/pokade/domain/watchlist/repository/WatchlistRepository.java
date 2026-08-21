@@ -37,6 +37,24 @@ public interface WatchlistRepository extends JpaRepository<Watchlist, Long> {
     @Query("UPDATE Watchlist w SET w.isNotified = true WHERE w.id = :id AND w.isNotified = false")
     int markAsNotifiedIfNotYet(@Param("id") Long id);
 
+    // #300: 매물 재입고 알림 대상 조회 - 이미 알림을 보낸(listingNotified=true) 워치리스트는 자동으로 제외된다.
+    List<Watchlist> findByCardIdAndListingNotifiedFalse(Long cardId);
+
+    // #300: markAsNotifiedIfNotYet과 동일한 이유로 조건부 원자적 UPDATE로 "알림 생성 권한"을 선점한다.
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE Watchlist w SET w.listingNotified = true WHERE w.id = :id AND w.listingNotified = false")
+    int markListingNotifiedIfNotYet(@Param("id") Long id);
+
+    // #300 후속: 재입고 알림을 이미 보낸(리셋 대상 후보) 워치리스트 전체 조회 - 리셋 배치가 이 목록을
+    // 훑어 실제로 매물이 소진됐는지(활성 매물 0개) 재확인한다.
+    List<Watchlist> findByListingNotifiedTrue();
+
+    // #300 후속: markListingNotifiedIfNotYet과 대칭 - 조건부 원자적 UPDATE로 listingNotified=true인
+    // 행만 false로 되돌린다. 그 사이 다른 트랜잭션이 이미 리셋했거나 삭제된 경우 0을 반환해 안전하게 스킵한다.
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE Watchlist w SET w.listingNotified = false WHERE w.id = :id AND w.listingNotified = true")
+    int resetListingNotifiedIfTrue(@Param("id") Long id);
+
     // 카드별 관심수(워치리스트 등록 수) 배치 조회 - 카드 수와 무관하게 쿼리 1회로 처리한다(CardRepository.findGradesByCardIds와 동일한 패턴).
     // 등록이 하나도 없는 카드는 결과 행 자체가 없으므로, 호출부에서 요청한 cardId 전체에 대해 0으로 채워야 한다.
     @Query("SELECT w.cardId AS cardId, COUNT(w) AS count FROM Watchlist w WHERE w.cardId IN :cardIds GROUP BY w.cardId")

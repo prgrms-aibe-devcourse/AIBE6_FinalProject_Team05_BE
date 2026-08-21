@@ -97,6 +97,46 @@ class WatchlistRepositoryTest {
     }
 
     @Test
+    void findByListingNotifiedTrue는_재입고_알림을_보낸_항목만_조회한다() {
+        Long userId = insertUser("listing-notified@test.com");
+        Long notifiedCardId = insertCard("watch-listing-notified-a");
+        Long unnotifiedCardId = insertCard("watch-listing-notified-b");
+        Watchlist notified = saveWatchlist(userId, notifiedCardId, 1000, null);
+        Watchlist unnotified = saveWatchlist(userId, unnotifiedCardId, 1000, null);
+        notified.markAsListingNotified();
+        watchlistRepository.save(notified);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<Watchlist> found = watchlistRepository.findByListingNotifiedTrue();
+
+        // 전역 조회라 다른 테스트/기존 데이터가 섞여 있을 수 있어, "이 테스트가 만든 항목이 기대한 대로
+        // 포함/제외되는지"만 검증한다(findByIsNotifiedFalse 테스트와 동일한 방식).
+        assertThat(found).extracting(Watchlist::getId)
+                .contains(notified.getId())
+                .doesNotContain(unnotified.getId());
+    }
+
+    @Test
+    void resetListingNotifiedIfTrue는_listingNotified가_true인_행만_false로_되돌리고_이미_false면_0을_반환한다() {
+        Long userId = insertUser("reset-listing-notified@test.com");
+        Watchlist notified = saveWatchlist(userId, insertCard("watch-reset-a"), 1000, null);
+        Watchlist unnotified = saveWatchlist(userId, insertCard("watch-reset-b"), 1000, null);
+        notified.markAsListingNotified();
+        watchlistRepository.save(notified);
+        entityManager.flush();
+
+        int resetCount = watchlistRepository.resetListingNotifiedIfTrue(notified.getId());
+        int noopCount = watchlistRepository.resetListingNotifiedIfTrue(unnotified.getId());
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(resetCount).isEqualTo(1);
+        assertThat(noopCount).isEqualTo(0);
+        assertThat(watchlistRepository.findById(notified.getId()).orElseThrow().isListingNotified()).isFalse();
+    }
+
+    @Test
     void countGroupedByCardIdIn은_카드별_등록수를_한번의_쿼리로_묶어서_반환한다() {
         Long userA = insertUser("count-grouped-a@test.com");
         Long userB = insertUser("count-grouped-b@test.com");

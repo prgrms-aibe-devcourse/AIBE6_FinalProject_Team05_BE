@@ -5,5 +5,6 @@ public enum NotificationType {
     PRICE_TARGET,
     TRADE_CONFIRMED,
     LISTING_STALE,
-    INQUIRY_HANDLED
+    INQUIRY_HANDLED,
+    LISTING_AVAILABLE
 }

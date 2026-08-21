@@ -383,6 +383,7 @@ class CardQueryServiceTest {
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Charizard");
+        assertThat(result.getContent().get(0).fuzzyMatch()).isFalse();
     }
 
     @Test
@@ -470,6 +471,8 @@ class CardQueryServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         Page<Card> page = new PageImpl<>(List.of(), pageable, 0);
         given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
+        // #187: 정확 검색이 0건이면 유사도 폴백을 시도한다 - 폴백도 0건이어야 최종 결과가 비게 된다.
+        given(cardRepository.findByNameSimilarTo("char", 0.14, pageable)).willReturn(page);
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("char", pageable);
 
@@ -495,6 +498,7 @@ class CardQueryServiceTest {
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Pikachu");
+        assertThat(result.getContent().get(0).fuzzyMatch()).isFalse();
         verify(cardRepository).findByNationalPokedexNumbersIn(List.of(25), pageable);
     }
 
@@ -524,12 +528,95 @@ class CardQueryServiceTest {
     void t45() {
         Pageable pageable = PageRequest.of(0, 20);
         given(pokedexKoNameRepository.findByNameKoContaining("존재안하는한글이름")).willReturn(List.of());
+        // #187: 정확 검색이 0건이면 유사도 폴백을 시도한다 - 폴백도 0건이어야 최종 결과가 비게 된다.
+        given(pokedexKoNameRepository.findByNameKoSimilarTo("존재안하는한글이름", 0.14)).willReturn(List.of());
 
         Page<CardResponse> result = cardQueryService.searchByKeyword("존재안하는한글이름", pageable);
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isEqualTo(0);
         verify(cardRepository, never()).findByNationalPokedexNumbersIn(any(), any());
+    }
+
+    // ===== #187: 오타 허용(유사도) 검색 폴백 =====
+
+    @Test
+    @DisplayName("t51 영문 정확 검색이 0건이고 키워드가 2글자 이상이면 유사도 검색으로 폴백한다")
+    void t51() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+        Card charizard = Card.builder().id(1L).name("Charizard").build();
+        Page<Card> similarPage = new PageImpl<>(List.of(charizard), pageable, 1);
+        given(cardRepository.findByNameContainingIgnoreCase("Charizrd", pageable)).willReturn(emptyPage);
+        given(cardRepository.findByNameSimilarTo("Charizrd", 0.14, pageable)).willReturn(similarPage);
+
+        Page<CardResponse> result = cardQueryService.searchByKeyword("Charizrd", pageable);
+
+        assertThat(result.getContent()).extracting(CardResponse::name).containsExactly("Charizard");
+        assertThat(result.getContent()).extracting(CardResponse::fuzzyMatch).containsExactly(true);
+        verify(cardRepository).findByNameSimilarTo("Charizrd", 0.14, pageable);
+    }
+
+    @Test
+    @DisplayName("t52 영문 정확 검색 결과가 있으면 유사도 검색으로 폴백하지 않는다(회귀 확인)")
+    void t52() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Card charizard = Card.builder().id(1L).name("Charizard").build();
+        Page<Card> page = new PageImpl<>(List.of(charizard), pageable, 1);
+        given(cardRepository.findByNameContainingIgnoreCase("char", pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardQueryService.searchByKeyword("char", pageable);
+
+        assertThat(result.getContent()).extracting(CardResponse::name).containsExactly("Charizard");
+        assertThat(result.getContent()).extracting(CardResponse::fuzzyMatch).containsExactly(false);
+        verify(cardRepository, never()).findByNameSimilarTo(any(), any(Double.class), any());
+    }
+
+    @Test
+    @DisplayName("t48 영문 키워드가 1글자면 정확 검색이 0건이어도 유사도 검색을 생략한다")
+    void t48() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Card> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+        given(cardRepository.findByNameContainingIgnoreCase("c", pageable)).willReturn(emptyPage);
+
+        Page<CardResponse> result = cardQueryService.searchByKeyword("c", pageable);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(cardRepository, never()).findByNameSimilarTo(any(), any(Double.class), any());
+    }
+
+    @Test
+    @DisplayName("t49 한글 정확 검색이 0건이고 키워드가 2글자 이상이면 유사도 검색으로 폴백한다")
+    void t49() {
+        Pageable pageable = PageRequest.of(0, 20);
+        PokedexKoName charizard = PokedexKoName.builder()
+                .pokedexNumber(6).nameKo("리자몽").nameKoChosung("ㄹㅈㅁ").build();
+        PokedexKoName charmeleon = PokedexKoName.builder()
+                .pokedexNumber(5).nameKo("리자드").nameKoChosung("ㄹㅈㄷ").build();
+        Card charizardCard = Card.builder().id(1L).name("Charizard").nationalPokedexNumbers(List.of(6)).build();
+        Page<Card> page = new PageImpl<>(List.of(charizardCard), pageable, 1);
+        given(pokedexKoNameRepository.findByNameKoContaining("리자옹")).willReturn(List.of());
+        given(pokedexKoNameRepository.findByNameKoSimilarTo("리자옹", 0.14))
+                .willReturn(List.of(charizard, charmeleon));
+        given(cardRepository.findByNationalPokedexNumbersIn(List.of(6, 5), pageable)).willReturn(page);
+
+        Page<CardResponse> result = cardQueryService.searchByKeyword("리자옹", pageable);
+
+        assertThat(result.getContent()).extracting(CardResponse::name).containsExactly("Charizard");
+        assertThat(result.getContent()).extracting(CardResponse::fuzzyMatch).containsExactly(true);
+        verify(pokedexKoNameRepository).findByNameKoSimilarTo("리자옹", 0.14);
+    }
+
+    @Test
+    @DisplayName("t50 한글 키워드가 1글자면 정확 검색이 0건이어도 유사도 검색을 생략한다")
+    void t50() {
+        Pageable pageable = PageRequest.of(0, 20);
+        given(pokedexKoNameRepository.findByNameKoContaining("리")).willReturn(List.of());
+
+        Page<CardResponse> result = cardQueryService.searchByKeyword("리", pageable);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(pokedexKoNameRepository, never()).findByNameKoSimilarTo(any(), any(Double.class));
     }
 
     @Test

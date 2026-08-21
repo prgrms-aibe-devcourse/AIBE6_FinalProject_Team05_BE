@@ -129,6 +129,22 @@ public class NotificationService {
         return String.format("%s 카드가 %s 목표가 %,d원에 도달했습니다.", cardName, targetLabel, reachedTargetPrice);
     }
 
+    // #300: 워치리스트에 등록한 카드에 매물이 없다가 새로 등록됐을 때(재입고) 알림 생성.
+    // card: 호출자(WatchlistListingAvailableNoticeListener)가 이미 조회해 둔 카드 - createPriceTargetNotification과
+    // 동일하게 여기서 다시 조회하지 않고 재사용해 SSE 즉시 푸시에도 카드 이미지를 채운다.
+    @Transactional
+    public void createListingAvailableNotification(Watchlist watchlist, String cardName, Card card) {
+        Notification notification = Notification.builder()
+                .userId(watchlist.getUserId())
+                .type(NotificationType.LISTING_AVAILABLE)
+                .message(String.format("%s 카드에 매물이 새로 등록됐어요. 지금 확인해보세요!", cardName))
+                .cardId(watchlist.getCardId())
+                .build();
+
+        notificationRepository.save(notification);
+        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification, card));
+    }
+
     // 1:1 문의 처리 완료 알림 생성 - 관리자의 답변 등록, 또는 상태를 HANDLED로 변경한 경우 호출된다.
     // 알림 저장은 호출자 트랜잭션에 그대로 포함시키되, SSE 푸시는 커밋이 실제로 성공한 뒤에만 보낸다 -
     // 커밋 전에 푸시하면 이후 같은 트랜잭션 안에서 다른 작업이 실패해 롤백되는 경우, 유저는 이미 알림을
