@@ -46,7 +46,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
      */
     String CARD_SEARCH_BASE = """
             SELECT c.* FROM cards c WHERE
-            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
+            (:hasTypes = false OR c.types && CAST(:types AS text[])) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
             (:hasLanguages = false OR c.language_code IN (:languages)) AND
             (:hasPrice = false OR EXISTS (
@@ -60,7 +60,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
     /** searchOrderBy* 3개 @Query가 공유하는 countQuery. ORDER BY가 없어 셋 다 동일하다. */
     String CARD_SEARCH_COUNT = """
             SELECT COUNT(*) FROM cards c WHERE
-            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
+            (:hasTypes = false OR c.types && CAST(:types AS text[])) AND
             (:hasRarities = false OR c.rarity IN (:rarities)) AND
             (:hasLanguages = false OR c.language_code IN (:languages)) AND
             (:hasPrice = false OR EXISTS (
@@ -75,7 +75,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             countQuery = CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByLatest(@Param("hasTypes") boolean hasTypes,
-                                    @Param("types") List<String> types,
+                                    @Param("types") String[] types,
                                     @Param("hasRarities") boolean hasRarities,
                                     @Param("rarities") List<String> rarities,
                                     @Param("hasLanguages") boolean hasLanguages,
@@ -90,7 +90,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             countQuery = CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByName(@Param("hasTypes") boolean hasTypes,
-                                  @Param("types") List<String> types,
+                                  @Param("types") String[] types,
                                   @Param("hasRarities") boolean hasRarities,
                                   @Param("rarities") List<String> rarities,
                                   @Param("hasLanguages") boolean hasLanguages,
@@ -105,7 +105,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             countQuery = CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByPopular(@Param("hasTypes") boolean hasTypes,
-                                     @Param("types") List<String> types,
+                                     @Param("types") String[] types,
                                      @Param("hasRarities") boolean hasRarities,
                                      @Param("rarities") List<String> rarities,
                                      @Param("hasLanguages") boolean hasLanguages,
@@ -169,7 +169,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
         Pageable unsortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         String resolvedSort = sort != null && SORT_COLUMN_WHITELIST.contains(sort) ? sort : SORT_LATEST;
 
-        List<String> safeTypes = hasTypes ? filteredTypes : List.of("");
+        // types는 c.types && :types(overlap 연산자, GIN 인덱스 idx_cards_types_gin 활용)로 바인딩되므로
+        // rarity/language처럼 "IN ('')로 무의미하게 채우는" 트릭이 아니라 실제 빈 배열을 넘긴다.
+        String[] safeTypes = (hasTypes ? filteredTypes : List.<String>of()).toArray(String[]::new);
         List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
         List<String> safeLanguages = hasLanguages ? filteredLanguages : List.of("");
 
@@ -199,7 +201,9 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     /**
      * 한글 검색어를 도감번호 목록으로 변환한 뒤(PokedexKoNameRepository, 부분일치/초성 검색이라 여러 건일 수 있음)
-     * 조회하는 용도 - 배열 컬럼이라 unnest+IN으로 매칭한다(CARD_SEARCH_BASE의 types 필터와 동일한 패턴).
+     * 조회하는 용도 - 배열 컬럼이라 unnest+IN으로 매칭한다. #300 전에는 CARD_SEARCH_BASE의 types 필터도
+     * 이 패턴이었으나, GIN 인덱스(idx_cards_types_gin)를 실제로 타게 하려고 types는 overlap 연산자(&&)로
+     * 재작성했다 - national_pokedex_numbers는 이번 변경 범위 밖이라 이 패턴을 그대로 유지한다.
      */
     String POKEDEX_SEARCH_BASE = """
             SELECT c.* FROM cards c
