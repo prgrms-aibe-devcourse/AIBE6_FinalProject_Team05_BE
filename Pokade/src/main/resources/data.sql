@@ -361,6 +361,32 @@ VALUES (
        );
 
 -- =========================================================
+-- 구매입찰 호가창(GET /api/prices/{cardId}/buy-offers) 검증용 추가 시드
+-- Charizard base1-4 : 기존 grade=NULL 2건에 등급별 3건을 추가 — 전체/등급 필터, 가격 내림차순 검증용
+-- =========================================================
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2950000, 'S', 'ACTIVE', now() + interval '30 days', now(), now(), now()
+       );
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3100000, 'S', 'ACTIVE', now() + interval '30 days', now(), now(), now()
+       );
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3900000, 'PSA10', 'ACTIVE', now() + interval '30 days', now(), now(), now()
+       );
+
+-- =========================================================
 -- FR-PRICE-03 검증용 시드 (chart — 30일/90일/1년 구간별 추이 확인용 체결 데이터 확장)
 -- Charizard base1-4 : 기존 3건(1일/3일/10일 전)에 13건을 추가해 총 16건.
 -- 30일 이내 6건, 90일 이내 10건, 1년 이내 16건이 조회되도록 confirmed_at을 스태거링하고,
