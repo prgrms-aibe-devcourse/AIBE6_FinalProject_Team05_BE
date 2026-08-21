@@ -83,7 +83,7 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
 
             runConcurrently(tasks);
 
-            List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+            List<Notification> notifications = notificationRepository.findAllByUserIdForTestVerification(userId);
             assertThat(notifications).hasSize(1);
             Watchlist reloaded = requiresNew.execute(status -> watchlistRepository.findById(watchlistId).orElseThrow());
             assertThat(reloaded.isNotified()).isTrue();
@@ -142,7 +142,7 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
     }
 
     private void cleanup(Long userId, Long watchlistId, Long cardId) {
-        notificationRepository.deleteAll(notificationRepository.findByUserIdOrderByCreatedAtDesc(userId));
+        notificationRepository.deleteAll(notificationRepository.findAllByUserIdForTestVerification(userId));
         watchlistRepository.deleteById(watchlistId);
         entityManager.flush();
         entityManager.createNativeQuery("DELETE FROM users WHERE id = :userId")
