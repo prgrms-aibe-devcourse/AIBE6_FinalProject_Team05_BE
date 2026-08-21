@@ -5,11 +5,14 @@ import com.pokade.domain.card.entity.Card;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
- * POST /api/ai/grade 응답 DTO
+ * POST /api/ai/grade 및 GET /api/ai/grade/{resultId} 응답 DTO
  *
- * TODO: User 파트 개발 완료 후 remainingPoints(차감 후 잔여 포인트) 필드 추가 예정
+ * imageUrls: PhotoType.name() → presigned URL (10분 유효).
+ *            이력 목록(GET /api/ai/grade/history)에서는 null — 목록에서 이미지 로딩은 과도한 S3 호출을 유발한다.
+ * remainingPoints: 포인트 차감 후 잔여 포인트. 무료 요청이거나 이력 목록에서는 null.
  */
 public record GradeResponse(
         Long gradeResultId,
@@ -32,12 +35,18 @@ public record GradeResponse(
         String cardName,
         String cardImageSmall,
         // 카드 인식 신뢰도(%) — 등급 산출 신뢰도(confidence)와는 별개 지표.
-        BigDecimal cardConfidence
+        BigDecimal cardConfidence,
+        // 제출 이미지 presigned URL — PhotoType.name() 키(FRONT/BACK/CORNER_TL/…).
+        // 이력 목록에서는 null.
+        Map<String, String> imageUrls,
+        // 포인트 차감 후 잔여 포인트. 무료 요청이거나 이력 목록에서는 null.
+        Integer remainingPoints
 ) {
     private static final String LEGAL_NOTICE =
             "본 결과는 AI 기반 참고용 예비진단이며, 정식 카드 감정을 대체하지 않습니다.";
 
-    public static GradeResponse from(GradeResult result, Card card) {
+    public static GradeResponse from(GradeResult result, Card card,
+                                      Map<String, String> imageUrls, Integer remainingPoints) {
         return new GradeResponse(
                 result.getId(),
                 result.getStatus().name(),
@@ -55,7 +64,9 @@ public record GradeResponse(
                 card != null ? card.getId() : null,
                 card != null ? card.getName() : null,
                 card != null ? card.getImageSmall() : null,
-                result.getVisionConfidence()
+                result.getVisionConfidence(),
+                imageUrls,
+                remainingPoints
         );
     }
 }
