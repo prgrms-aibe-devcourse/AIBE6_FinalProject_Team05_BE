@@ -80,14 +80,21 @@ class WatchlistServiceTest {
 
     // ===== 등록 =====
     @Test
-    @DisplayName("등록: 목표가 둘 다 null이면 TARGET_PRICE_REQUIRED")
-    void addWatchlist_targetPriceRequired() {
+    @DisplayName("등록: #308 목표가는 선택 입력 - 둘 다 null이어도 정상 등록된다")
+    void addWatchlist_bothTargetPricesNull_success() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, null, null);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
 
-        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.TARGET_PRICE_REQUIRED);
-        then(watchlistRepository).should(never()).save(any());
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        then(watchlistRepository).should().save(any(Watchlist.class));
+        assertThat(response.targetBuyPrice()).isNull();
+        assertThat(response.targetSellPrice()).isNull();
+        assertThat(response.targetReached()).isFalse();
+        assertThat(response.isNotified()).isFalse();
+        then(notificationService).should(never()).createPriceTargetNotification(any(), any(), any(), any());
     }
 
     @Test
