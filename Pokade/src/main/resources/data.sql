@@ -312,6 +312,14 @@ VALUES (
            (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
            3050000, 'S', 'ACTIVE', now(), now()
        );
+-- 같은 (등급, 가격) 조합 중복 1건 추가 — FE 판매입찰 탭의 "수량"(같은 가격에 몇 건 걸려있는지) 집계 검증용.
+INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller2@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           3050000, 'S', 'ACTIVE', now(), now()
+       );
 INSERT INTO listings (card_id, seller_id, variant_id, price, grade, status, created_at, updated_at)
 VALUES (
            (SELECT id FROM cards WHERE external_id = 'base1-4'),
@@ -384,6 +392,15 @@ VALUES (
            (SELECT id FROM users WHERE email = 'seller2@test.com'),
            (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
            3900000, 'PSA10', 'ACTIVE', now() + interval '30 days', now(), now(), now()
+       );
+
+-- 같은 (등급, 가격) 조합 중복 1건 추가 — FE 구매입찰 탭의 "수량"(같은 가격에 몇 건 걸려있는지) 집계 검증용.
+INSERT INTO buy_offers (card_id, buyer_id, variant_id, price, grade, status, expires_at, price_updated_at, created_at, updated_at)
+VALUES (
+           (SELECT id FROM cards WHERE external_id = 'base1-4'),
+           (SELECT id FROM users WHERE email = 'seller1@test.com'),
+           (SELECT id FROM card_variants WHERE card_id = (SELECT id FROM cards WHERE external_id = 'base1-4') AND variant_name = 'unlimitedHolofoil'),
+           2950000, 'S', 'ACTIVE', now() + interval '30 days', now(), now(), now()
        );
 
 -- =========================================================
