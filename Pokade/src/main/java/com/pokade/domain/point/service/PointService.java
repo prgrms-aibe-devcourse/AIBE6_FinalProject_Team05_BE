@@ -51,6 +51,33 @@ public class PointService {
         return user.getPointBalance();
     }
 
+    // AI 등급진단 유료 사용 - 잔액이 모자라면 BusinessException(INSUFFICIENT_POINT_BALANCE). 차감 후 잔액을 반환한다.
+    @Transactional
+    public int useForGrade(Long userId, int amount, Long relatedGradeResultId) {
+        User user = findUserWithLock(userId);
+        user.deductPoints(amount);
+
+        pointTransactionRepository.save(PointTransaction.builder()
+                .userId(userId)
+                .type(PointTransactionType.USE)
+                .amount(amount)
+                .balanceAfter(user.getPointBalance())
+                .relatedGradeResultId(relatedGradeResultId)
+                .build());
+
+        return user.getPointBalance();
+    }
+
+    // 잔액 사전 확인 (비관적 락 없음 — Vision API 호출 전 빠른 실패용).
+    // 실제 차감은 useForGrade()가 락을 잡고 처리하므로 여기서 통과해도 차감 시 재검증된다.
+    public void verifyBalance(Long userId, int amount) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (user.getPointBalance() < amount) {
+            throw new BusinessException(ErrorCode.INSUFFICIENT_POINT_BALANCE);
+        }
+    }
+
     // 매물 판매 정산 - 구매확정(배송완료 후 구매자 확정) 시 판매자에게 거래 금액만큼 포인트를 적립한다.
     // 실제 계좌 이체가 아니라 플랫폼 내부 포인트로 정산하는 방식 - relatedTradeId로 어떤 거래의
     // 정산인지 이력에 남긴다.
