@@ -9,11 +9,13 @@ import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
+import com.pokade.domain.price.entity.BuyOffer;
 import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
@@ -570,6 +572,59 @@ class PriceServiceTest {
 
         assertThat(result.changeRate()).isEqualByComparingTo("1.20");
         assertThat(result.changeAmount()).isNull();
+    }
+
+    @Test
+    @DisplayName("t33 구매입찰 호가창을 조회하면 리포지토리가 반환한 순서 그대로 응답으로 변환한다")
+    void t33() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        BuyOffer highest = BuyOffer.builder().id(1L).cardId(1L).variantId(10L).price(3100000).grade(ListingGrade.S).build();
+        BuyOffer lowest = BuyOffer.builder().id(2L).cardId(1L).variantId(10L).price(2700000).grade(null).build();
+        given(buyOfferRepository.findOrderbook(1L, 10L, null)).willReturn(List.of(highest, lowest));
+
+        List<BuyOfferOrderbookEntryResponse> result = priceService.getBuyOfferOrderbook(1L, 10L, null);
+
+        assertThat(result).containsExactly(
+                new BuyOfferOrderbookEntryResponse(1L, 3100000, ListingGrade.S),
+                new BuyOfferOrderbookEntryResponse(2L, 2700000, null));
+    }
+
+    @Test
+    @DisplayName("t34 존재하지 않는 카드면 CARD_NOT_FOUND 예외가 발생하고 리포지토리를 조회하지 않는다")
+    void t34() {
+        given(cardRepository.existsById(999L)).willReturn(false);
+
+        assertThatThrownBy(() -> priceService.getBuyOfferOrderbook(999L, 10L, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CARD_NOT_FOUND);
+        verify(buyOfferRepository, never()).findOrderbook(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("t35 variantId를 지정하지 않으면 대표 변형을 조회해 사용한다")
+    void t35() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(java.util.Optional.of(10L));
+        given(buyOfferRepository.findOrderbook(1L, 10L, ListingGrade.PSA10)).willReturn(List.of());
+
+        List<BuyOfferOrderbookEntryResponse> result = priceService.getBuyOfferOrderbook(1L, null, ListingGrade.PSA10);
+
+        assertThat(result).isEmpty();
+        verify(buyOfferRepository).findOrderbook(1L, 10L, ListingGrade.PSA10);
+    }
+
+    @Test
+    @DisplayName("t36 variantId 미지정이고 대표 변형이 없으면 PRIMARY_VARIANT_NOT_FOUND 예외가 발생한다")
+    void t36() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> priceService.getBuyOfferOrderbook(1L, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PRIMARY_VARIANT_NOT_FOUND);
+        verify(buyOfferRepository, never()).findOrderbook(any(), any(), any());
     }
 
     private PriceCardStatsRepository.CardPriceChangeView cardPriceChangeView(BigDecimal changePct, BigDecimal change7dAmount) {

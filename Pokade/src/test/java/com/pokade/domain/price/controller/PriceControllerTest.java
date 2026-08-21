@@ -1,6 +1,7 @@
 package com.pokade.domain.price.controller;
 
 import com.pokade.domain.listing.entity.ListingGrade;
+import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
@@ -49,6 +50,41 @@ class PriceControllerTest {
 
     @MockitoBean
     private TokenBlacklistStore tokenBlacklistStore;
+
+    @Test
+    void 구매입찰_호가창_조회시_가격_내림차순_목록을_반환한다() throws Exception {
+        List<BuyOfferOrderbookEntryResponse> entries = List.of(
+                new BuyOfferOrderbookEntryResponse(1L, 3100000, ListingGrade.S),
+                new BuyOfferOrderbookEntryResponse(2L, 2700000, null)
+        );
+        given(priceService.getBuyOfferOrderbook(1L, null, null)).willReturn(entries);
+
+        mockMvc.perform(get("/api/prices/1/buy-offers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].price").value(3100000))
+                .andExpect(jsonPath("$.data[0].grade").value("S"))
+                .andExpect(jsonPath("$.data[1].grade").value(nullValue()));
+    }
+
+    @Test
+    void 구매입찰_호가창_조회시_grade_variantId를_그대로_서비스에_전달한다() throws Exception {
+        given(priceService.getBuyOfferOrderbook(1L, 10L, ListingGrade.PSA10)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/prices/1/buy-offers").param("variantId", "10").param("grade", "PSA10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void 구매입찰_호가창_조회시_존재하지_않는_카드면_404를_반환한다() throws Exception {
+        given(priceService.getBuyOfferOrderbook(999L, null, null))
+                .willThrow(new BusinessException(ErrorCode.CARD_NOT_FOUND));
+
+        mockMvc.perform(get("/api/prices/999/buy-offers"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CARD_NOT_FOUND"));
+    }
 
     @Test
     void 체결_내역이_있으면_200과_최신순_목록을_반환한다() throws Exception {

@@ -11,6 +11,7 @@ import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.price.ChartPeriod;
 import com.pokade.domain.price.RankingType;
 import com.pokade.domain.price.StatsPeriod;
+import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
@@ -154,6 +155,25 @@ public class PriceService {
                             marketPrice != null ? marketPrice.getMarket() : null,
                             marketPrice != null ? marketPrice.getCurrency() : null);
                 })
+                .toList();
+    }
+
+    // 구매입찰 호가창 - domain.listing.getOrderbook()(매도)과 대응되는 매수 호가창 조회.
+    // BuyOffer는 domain.price가 소유한 엔티티라 이 서비스에 둔다.
+    public List<BuyOfferOrderbookEntryResponse> getBuyOfferOrderbook(Long cardId, Long variantId, ListingGrade grade) {
+        if (!cardRepository.existsById(cardId)) {
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+        }
+
+        Long resolvedVariantId = variantId != null
+                ? variantId
+                : cardVariantRepository.findPrimaryVariantId(cardId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PRIMARY_VARIANT_NOT_FOUND));
+
+        return buyOfferRepository
+                .findOrderbook(cardId, resolvedVariantId, grade)
+                .stream()
+                .map(BuyOfferOrderbookEntryResponse::of)
                 .toList();
     }
 
