@@ -61,9 +61,10 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                             refreshTokenCookieFactory.create(loggedIn.refreshToken()).toString());
                     redirect(response, "/oauth2/success");
                 }
-                case OAuth2Outcome.Conflict ignored -> redirect(response, "/login?error=email_conflict");
+                case OAuth2Outcome.Conflict conflict -> redirect(response,
+                        "/login?error=email_conflict&provider=" + conflict.provider().name());
                 case OAuth2Outcome.SignupRequired signup -> redirect(response, "/signup/social#ticket="
-                                + URLEncoder.encode(signup.ticket(), StandardCharsets.UTF_8));
+                        + URLEncoder.encode(signup.ticket(), StandardCharsets.UTF_8));
             }
         } catch (BusinessException e) {   // resolve의 상태 가드(정지 등) → 에러 페이지
             redirect(response, "/login?error=" + e.getErrorCode().name().toLowerCase());
