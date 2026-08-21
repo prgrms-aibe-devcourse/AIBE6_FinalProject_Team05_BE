@@ -56,7 +56,7 @@ class CardServiceTest {
     void getDetailDelegatesToQueryService() {
         CardDetailResponse detail = new CardDetailResponse(
                 1L, "base1-4", "Charizard", null, "EN", "Base", "Rare Holo", "Pokémon",
-                List.of("Fire"), null, null, null, null, null, null, List.of());
+                List.of("Fire"), null, null, null, null, null, 0, null, List.of());
         given(cardQueryService.getDetail(1L)).willReturn(detail);
 
         CardDetailResponse result = cardService.getDetail(1L);

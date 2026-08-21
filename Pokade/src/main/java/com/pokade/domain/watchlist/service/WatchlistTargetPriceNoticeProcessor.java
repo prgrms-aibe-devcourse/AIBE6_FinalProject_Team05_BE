@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-// 워치리스트 1건 처리를 별도 빈으로 분리한 이유: WatchlistTargetPriceNoticeService의 스케줄러 메서드
+// 워치리스트 1건 처리를 별도 빈으로 분리한 이유: WatchlistTargetPriceNoticeScheduler의 스케줄러 메서드
 // 안에서 this.process(...)로 self-invocation하면 @Transactional이 AOP 프록시를 안 거쳐 전혀 적용되지
 // 않는다. 여기서 REQUIRES_NEW로 워치리스트 1건마다 독립된 새 트랜잭션을 열어, 한 건 처리 중 예외가 나도
 // "그 건만" 롤백되고 이전에 이미 커밋된 다른 건들은 영향받지 않도록 한다(같은 트랜잭션을 공유했다면, 참여

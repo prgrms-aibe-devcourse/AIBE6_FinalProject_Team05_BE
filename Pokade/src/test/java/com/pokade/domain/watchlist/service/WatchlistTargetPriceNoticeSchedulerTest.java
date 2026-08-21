@@ -26,13 +26,13 @@ import static org.mockito.Mockito.never;
 // 이 클래스는 이제 후보를 모아 WatchlistTargetPriceNoticeProcessor(별도 빈, REQUIRES_NEW)에 위임하는
 // 역할만 한다 - 실제 목표가 판정/알림 생성/권한 선점 로직은 WatchlistTargetPriceNoticeProcessorTest에서 검증한다.
 @ExtendWith(MockitoExtension.class)
-class WatchlistTargetPriceNoticeServiceTest {
+class WatchlistTargetPriceNoticeSchedulerTest {
 
     @Mock WatchlistRepository watchlistRepository;
     @Mock CardRepository cardRepository;
     @Mock PriceTradeStatsRepository priceTradeStatsRepository;
     @Mock WatchlistTargetPriceNoticeProcessor processor;
-    @InjectMocks WatchlistTargetPriceNoticeService noticeService;
+    @InjectMocks WatchlistTargetPriceNoticeScheduler scheduler;
 
     private record PriceRange(Long cardId, Integer minPrice, Integer maxPrice)
             implements PriceTradeStatsRepository.CardPriceRangeView {
@@ -46,7 +46,7 @@ class WatchlistTargetPriceNoticeServiceTest {
     void detect_noWatchlists_doesNothing() {
         given(watchlistRepository.findByIsNotifiedFalse()).willReturn(List.of());
 
-        noticeService.detectTargetPriceReached();
+        scheduler.detectTargetPriceReached();
 
         then(cardRepository).should(never()).findAllById(any());
         then(priceTradeStatsRepository).should(never()).findPriceRangesByCardIds(any(), any(), any());
@@ -65,7 +65,7 @@ class WatchlistTargetPriceNoticeServiceTest {
         given(priceTradeStatsRepository.findPriceRangesByCardIds(eq(List.of(10L)), isNull(), eq(TradeStatus.COMPLETED)))
                 .willReturn(List.of(allTimeRange));
 
-        noticeService.detectTargetPriceReached();
+        scheduler.detectTargetPriceReached();
 
         then(processor).should().process(watchlist.getId(), card, allTimeRange);
     }
@@ -87,7 +87,7 @@ class WatchlistTargetPriceNoticeServiceTest {
 
         doThrow(new RuntimeException("처리 중 오류")).when(processor).process(failing.getId(), failingCard, failingRange);
 
-        noticeService.detectTargetPriceReached();
+        scheduler.detectTargetPriceReached();
 
         then(processor).should().process(failing.getId(), failingCard, failingRange);
         then(processor).should().process(succeeding.getId(), succeedingCard, succeedingRange);

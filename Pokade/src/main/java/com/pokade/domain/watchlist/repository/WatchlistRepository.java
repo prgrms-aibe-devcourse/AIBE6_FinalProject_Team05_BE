@@ -19,6 +19,11 @@ public interface WatchlistRepository extends JpaRepository<Watchlist, Long> {
 
     Optional<Watchlist> findByIdAndUserId(Long id, Long userId);
 
+    /**
+     * 목표가(targetBuyPrice 또는 targetSellPrice)가 최소 1개 설정된 미알림 항목만 반환.
+     * 목표가가 둘 다 없는 워치리스트는 결과에서 제외됨.
+     */
+    @Query("SELECT w FROM Watchlist w WHERE w.isNotified = false AND (w.targetBuyPrice IS NOT NULL OR w.targetSellPrice IS NOT NULL)")
     List<Watchlist> findByIsNotifiedFalse();
 
     // 유저 단위 등록 직렬화용 트랜잭션 스코프 잠금(커밋/롤백 시 자동 해제). 동일 유저의 동시 addWatchlist() 요청을
