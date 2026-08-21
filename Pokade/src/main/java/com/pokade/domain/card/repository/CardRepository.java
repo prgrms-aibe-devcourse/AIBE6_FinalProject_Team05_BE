@@ -40,35 +40,12 @@ public interface CardRepository extends JpaRepository<Card, Long> {
      */
     Set<String> SORT_COLUMN_WHITELIST = Set.of(SORT_LATEST, SORT_NAME, SORT_POPULAR);
 
-    /**
-     * 필터 5종(types/rarity/language/price/expansionId) 조건절 본문("WHERE" 키워드 제외) - #308:
-     * 필터+키워드 통합을 위해 CARD_SEARCH_BASE에서 분리했다. 이 상수 하나만 고치면 CARD_SEARCH_BASE와
-     * 아래 키워드 결합 검색(NAME_EXACT_FILTER_BASE/NAME_TRGM_FILTER_BASE/POKEDEX_SEARCH_FILTER_BASE)
-     * 전체에 동일하게 반영된다.
-     */
-    String CARD_FILTER_CONDITIONS = """
-            (:hasTypes = false OR c.types && CAST(:types AS text[])) AND
-            (:hasRarities = false OR c.rarity IN (:rarities)) AND
-            (:hasLanguages = false OR c.language_code IN (:languages)) AND
-            (:hasPrice = false OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
-                AND (:minPrice IS NULL OR l.price >= :minPrice)
-                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
-            )) AND
-            (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            """;
+    // 필터 5종 조건절/검색 base·count SQL 원문은 CardSearchSql로 이동했다(#308 후속 - 상수가
+    // 11개까지 쌓여 메서드 시그니처와 뒤섞이는 문제를 줄이기 위함). 상수 간 관계는 CardSearchSql의
+    // 클래스 Javadoc에 정리돼 있다.
 
-    /**
-     * searchOrderBy* 3개 @Query가 공유하는 SELECT ~ WHERE 절 (ORDER BY 제외).
-     * ORDER BY는 인덱스 정렬 최적화를 위해 메서드별로 분리 유지한다.
-     */
-    String CARD_SEARCH_BASE = "SELECT c.* FROM cards c WHERE " + CARD_FILTER_CONDITIONS;
-
-    /** searchOrderBy* 3개 @Query가 공유하는 countQuery. ORDER BY가 없어 셋 다 동일하다. */
-    String CARD_SEARCH_COUNT = "SELECT COUNT(*) FROM cards c WHERE " + CARD_FILTER_CONDITIONS;
-
-    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
-            countQuery = CARD_SEARCH_COUNT,
+    @Query(value = CardSearchSql.CARD_SEARCH_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
+            countQuery = CardSearchSql.CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByLatest(@Param("hasTypes") boolean hasTypes,
                                     @Param("types") String[] types,
@@ -82,8 +59,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                     @Param("expansionId") String expansionId,
                                     Pageable pageable);
 
-    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
-            countQuery = CARD_SEARCH_COUNT,
+    @Query(value = CardSearchSql.CARD_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CardSearchSql.CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByName(@Param("hasTypes") boolean hasTypes,
                                   @Param("types") String[] types,
@@ -97,8 +74,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                   @Param("expansionId") String expansionId,
                                   Pageable pageable);
 
-    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.view_count DESC, c.id DESC",
-            countQuery = CARD_SEARCH_COUNT,
+    @Query(value = CardSearchSql.CARD_SEARCH_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+            countQuery = CardSearchSql.CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByPopular(@Param("hasTypes") boolean hasTypes,
                                      @Param("types") String[] types,
@@ -214,23 +191,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             nativeQuery = true)
     Page<Card> findByNameSimilarTo(@Param("keyword") String keyword, @Param("threshold") double threshold, Pageable pageable);
 
-    /**
-     * #308: 영문 키워드 정확일치(ILIKE 부분일치) + 필터 5종 결합 검색의 SELECT~WHERE(ORDER BY 제외).
-     * CARD_FILTER_CONDITIONS를 재사용해 CARD_SEARCH_BASE와 동일한 필터 조건을 적용한다.
-     */
-    String NAME_EXACT_FILTER_BASE = """
-            SELECT c.* FROM cards c WHERE
-            c.name ILIKE CONCAT('%', :keyword, '%') AND
-            """ + CARD_FILTER_CONDITIONS;
-
-    /** searchByNameOrderBy* 3개 @Query가 공유하는 countQuery. */
-    String NAME_EXACT_FILTER_COUNT = """
-            SELECT COUNT(*) FROM cards c WHERE
-            c.name ILIKE CONCAT('%', :keyword, '%') AND
-            """ + CARD_FILTER_CONDITIONS;
-
-    @Query(value = NAME_EXACT_FILTER_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
-            countQuery = NAME_EXACT_FILTER_COUNT,
+    @Query(value = CardSearchSql.NAME_EXACT_FILTER_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
+            countQuery = CardSearchSql.NAME_EXACT_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByNameOrderByLatest(@Param("keyword") String keyword,
                                           @Param("hasTypes") boolean hasTypes,
@@ -245,8 +207,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                           @Param("expansionId") String expansionId,
                                           Pageable pageable);
 
-    @Query(value = NAME_EXACT_FILTER_BASE + "ORDER BY c.name ASC, c.id ASC",
-            countQuery = NAME_EXACT_FILTER_COUNT,
+    @Query(value = CardSearchSql.NAME_EXACT_FILTER_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CardSearchSql.NAME_EXACT_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByNameOrderByName(@Param("keyword") String keyword,
                                         @Param("hasTypes") boolean hasTypes,
@@ -261,8 +223,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                         @Param("expansionId") String expansionId,
                                         Pageable pageable);
 
-    @Query(value = NAME_EXACT_FILTER_BASE + "ORDER BY c.view_count DESC, c.id DESC",
-            countQuery = NAME_EXACT_FILTER_COUNT,
+    @Query(value = CardSearchSql.NAME_EXACT_FILTER_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+            countQuery = CardSearchSql.NAME_EXACT_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByNameOrderByPopular(@Param("keyword") String keyword,
                                            @Param("hasTypes") boolean hasTypes,
@@ -277,22 +239,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                            @Param("expansionId") String expansionId,
                                            Pageable pageable);
 
-    /**
-     * #308: 오타 허용 유사도 폴백(#187) + 필터 5종 결합. 폴백의 존재 이유가 "유사도 순 추천"이라
-     * sort 파라미터와 무관하게 유사도 DESC로 고정한다(설계 승인 항목: 유사도 폴백은 정렬 고정).
-     */
-    String NAME_TRGM_FILTER_BASE = """
-            SELECT c.* FROM cards c WHERE
-            similarity(c.name, :keyword) >= :threshold AND
-            """ + CARD_FILTER_CONDITIONS;
-
-    String NAME_TRGM_FILTER_COUNT = """
-            SELECT COUNT(*) FROM cards c WHERE
-            similarity(c.name, :keyword) >= :threshold AND
-            """ + CARD_FILTER_CONDITIONS;
-
-    @Query(value = NAME_TRGM_FILTER_BASE + "ORDER BY similarity(c.name, :keyword) DESC, c.id ASC",
-            countQuery = NAME_TRGM_FILTER_COUNT,
+    @Query(value = CardSearchSql.NAME_TRGM_FILTER_BASE + "ORDER BY similarity(c.name, :keyword) DESC, c.id ASC",
+            countQuery = CardSearchSql.NAME_TRGM_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByNameSimilarToWithFilters(@Param("keyword") String keyword,
                                                  @Param("threshold") double threshold,
@@ -308,46 +256,13 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                                  @Param("expansionId") String expansionId,
                                                  Pageable pageable);
 
-    /**
-     * 한글 검색어를 도감번호 목록으로 변환한 뒤(PokedexKoNameRepository, 부분일치/초성 검색이라 여러 건일 수 있음)
-     * 조회하는 용도 - 배열 컬럼이라 unnest+IN으로 매칭한다. #300 전에는 CARD_SEARCH_BASE의 types 필터도
-     * 이 패턴이었으나, GIN 인덱스(idx_cards_types_gin)를 실제로 타게 하려고 types는 overlap 연산자(&&)로
-     * 재작성했다 - national_pokedex_numbers는 이번 변경 범위 밖이라 이 패턴을 그대로 유지한다.
-     */
-    String POKEDEX_SEARCH_BASE = """
-            SELECT c.* FROM cards c
-            WHERE EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers))
-            """;
-
-    /** findByNationalPokedexNumbersIn과 짝을 이루는 countQuery. ORDER BY가 없어 조건절이 동일하다. */
-    String POKEDEX_SEARCH_COUNT = """
-            SELECT COUNT(*) FROM cards c
-            WHERE EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers))
-            """;
-
-    @Query(value = POKEDEX_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
-            countQuery = POKEDEX_SEARCH_COUNT,
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CardSearchSql.POKEDEX_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> findByNationalPokedexNumbersIn(@Param("pokedexNumbers") List<Integer> pokedexNumbers, Pageable pageable);
 
-    /**
-     * #308: 한글 키워드(도감번호 매핑) + 필터 5종 결합 검색의 SELECT~WHERE(ORDER BY 제외).
-     * POKEDEX_SEARCH_BASE는 필터 없는 기존 findByNationalPokedexNumbersIn() 전용으로 그대로 두고,
-     * 이 상수를 따로 둬서 CARD_FILTER_CONDITIONS를 결합한다 - 기존 메서드/테스트는 영향받지 않는다.
-     */
-    String POKEDEX_SEARCH_FILTER_BASE = """
-            SELECT c.* FROM cards c WHERE
-            EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers)) AND
-            """ + CARD_FILTER_CONDITIONS;
-
-    /** searchByPokedexNumbersOrderBy* 3개 @Query가 공유하는 countQuery. */
-    String POKEDEX_SEARCH_FILTER_COUNT = """
-            SELECT COUNT(*) FROM cards c WHERE
-            EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers)) AND
-            """ + CARD_FILTER_CONDITIONS;
-
-    @Query(value = POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
-            countQuery = POKEDEX_SEARCH_FILTER_COUNT,
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
+            countQuery = CardSearchSql.POKEDEX_SEARCH_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByPokedexNumbersOrderByLatest(@Param("pokedexNumbers") List<Integer> pokedexNumbers,
                                                     @Param("hasTypes") boolean hasTypes,
@@ -362,8 +277,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                                     @Param("expansionId") String expansionId,
                                                     Pageable pageable);
 
-    @Query(value = POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.name ASC, c.id ASC",
-            countQuery = POKEDEX_SEARCH_FILTER_COUNT,
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CardSearchSql.POKEDEX_SEARCH_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByPokedexNumbersOrderByName(@Param("pokedexNumbers") List<Integer> pokedexNumbers,
                                                   @Param("hasTypes") boolean hasTypes,
@@ -378,8 +293,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                                   @Param("expansionId") String expansionId,
                                                   Pageable pageable);
 
-    @Query(value = POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.view_count DESC, c.id DESC",
-            countQuery = POKEDEX_SEARCH_FILTER_COUNT,
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+            countQuery = CardSearchSql.POKEDEX_SEARCH_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByPokedexNumbersOrderByPopular(@Param("pokedexNumbers") List<Integer> pokedexNumbers,
                                                      @Param("hasTypes") boolean hasTypes,
