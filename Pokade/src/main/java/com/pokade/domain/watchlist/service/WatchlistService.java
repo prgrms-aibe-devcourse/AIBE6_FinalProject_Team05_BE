@@ -65,7 +65,10 @@ public class WatchlistService {
 
         // card_id와 같은 이유로 variant_id FK 위반도 미리 걸러낸다. variantId가 null인 건 "대표 변형 기준"이라는
         // 정상 입력이므로(WatchlistVariantResolver 참고) 값이 있을 때만 검증한다.
-        if (request.variantId() != null && !cardVariantRepository.existsById(request.variantId())) {
+        // 존재 여부만이 아니라 "이 카드의 변형인지"까지 본다 - FK는 card_variants(id)만 참조해서 다른 카드의
+        // 변형 id를 보내면 제약에 걸리지 않고 그대로 저장되기 때문이다(오분류가 아니라 잘못된 데이터가 남는 문제).
+        if (request.variantId() != null
+                && !cardVariantRepository.existsByIdAndCardId(request.variantId(), request.cardId())) {
             throw new BusinessException(ErrorCode.VARIANT_NOT_FOUND);
         }
 

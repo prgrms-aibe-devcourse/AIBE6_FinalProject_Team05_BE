@@ -83,6 +83,26 @@ class CardVariantRepositoryTest extends AbstractIntegrationTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    @DisplayName("t2-1 existsByIdAndCardId는 그 카드에 속한 변형만 true, 다른 카드의 변형이면 false다")
+    void t2_1() {
+        Card otherCard = Card.builder().name("Blastoise").build();
+        entityManager.persist(otherCard);
+        persistVariant(otherCard, "holofoil", true);
+        entityManager.flush();
+
+        CardVariant mine = cardVariantRepository
+                .findByCardIdOrderByPrimaryDescVariantNameAsc(multiVariantCard.getId()).get(0);
+        CardVariant others = cardVariantRepository
+                .findByCardIdOrderByPrimaryDescVariantNameAsc(otherCard.getId()).get(0);
+
+        assertThat(cardVariantRepository.existsByIdAndCardId(mine.getId(), multiVariantCard.getId())).isTrue();
+        // 존재하지만 다른 카드의 변형 - existsById였다면 true였을 조합이다.
+        assertThat(cardVariantRepository.existsByIdAndCardId(others.getId(), multiVariantCard.getId())).isFalse();
+        // 아예 존재하지 않는 변형
+        assertThat(cardVariantRepository.existsByIdAndCardId(999_999L, multiVariantCard.getId())).isFalse();
+    }
+
     private Long persistSeller(String email) {
         return ((Number) entityManager.createNativeQuery(
                         "INSERT INTO users (email, nickname, provider, role, status) "

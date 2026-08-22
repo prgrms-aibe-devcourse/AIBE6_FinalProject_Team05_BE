@@ -118,7 +118,21 @@ class WatchlistServiceTest {
     void addWatchlist_variantNotFound() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 999L, 1000, null);
         given(cardRepository.existsById(1L)).willReturn(true);
-        given(cardVariantRepository.existsById(999L)).willReturn(false);
+        given(cardVariantRepository.existsByIdAndCardId(999L, 1L)).willReturn(false);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.VARIANT_NOT_FOUND);
+        then(watchlistRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("등록: 존재하지만 다른 카드에 속한 variantId면 VARIANT_NOT_FOUND (FK로는 안 걸리는 케이스)")
+    void addWatchlist_variantOfAnotherCard() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 2L, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        // variant 2는 실제로 존재하지만 카드 1의 것이 아니다 - existsById였다면 통과했을 조합.
+        given(cardVariantRepository.existsByIdAndCardId(2L, 1L)).willReturn(false);
 
         assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
                 .isInstanceOf(BusinessException.class)
@@ -138,7 +152,7 @@ class WatchlistServiceTest {
         WatchlistResponse response = watchlistService.addWatchlist(1L, request);
 
         assertThat(response.variantId()).isNull();
-        then(cardVariantRepository).should(never()).existsById(any());
+        then(cardVariantRepository).should(never()).existsByIdAndCardId(any(), any());
     }
 
     @Test
@@ -246,7 +260,7 @@ class WatchlistServiceTest {
     void addWatchlist_success() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 2L, 1000, null);
         given(cardRepository.existsById(1L)).willReturn(true);
-        given(cardVariantRepository.existsById(2L)).willReturn(true);
+        given(cardVariantRepository.existsByIdAndCardId(2L, 1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
