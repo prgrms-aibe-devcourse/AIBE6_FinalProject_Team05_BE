@@ -29,26 +29,26 @@ class NotificationRepositoryTest {
     private EntityManager entityManager;
 
     @Test
-    void findByUserIdOrderByCreatedAtDesc는_같은_유저의_알림을_최신순으로_조회한다() {
+    void findAllByUserIdForTestVerification는_같은_유저의_알림을_최신순으로_조회한다() {
         Long userId = insertUser("order@test.com");
         Notification first = saveNotification(userId, NotificationType.PRICE_TARGET, "first");
         Notification second = saveNotification(userId, NotificationType.TRADE_CONFIRMED, "second");
         Notification third = saveNotification(userId, NotificationType.LISTING_STALE, "third");
 
-        List<Notification> found = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<Notification> found = notificationRepository.findAllByUserIdForTestVerification(userId);
 
         assertThat(found).extracting(Notification::getId)
                 .containsExactly(third.getId(), second.getId(), first.getId());
     }
 
     @Test
-    void findByUserIdOrderByCreatedAtDesc는_다른_유저의_알림과_섞이지_않는다() {
+    void findAllByUserIdForTestVerification는_다른_유저의_알림과_섞이지_않는다() {
         Long userId = insertUser("mine@test.com");
         Long otherUserId = insertUser("other@test.com");
         saveNotification(userId, NotificationType.PRICE_TARGET, "mine");
         saveNotification(otherUserId, NotificationType.PRICE_TARGET, "other");
 
-        List<Notification> found = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<Notification> found = notificationRepository.findAllByUserIdForTestVerification(userId);
 
         assertThat(found).hasSize(1);
         assertThat(found.get(0).getUserId()).isEqualTo(userId);

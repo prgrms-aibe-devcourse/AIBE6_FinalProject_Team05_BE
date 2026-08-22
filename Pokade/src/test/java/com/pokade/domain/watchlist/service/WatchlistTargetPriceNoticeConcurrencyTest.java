@@ -76,14 +76,14 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
             List<Callable<Void>> tasks = new ArrayList<>();
             for (int i = 0; i < instanceCount; i++) {
                 tasks.add(() -> requiresNew.execute(status -> {
-                    newNoticeService(cardId).detectTargetPriceReached();
+                    newScheduler(cardId).detectTargetPriceReached();
                     return null;
                 }));
             }
 
             runConcurrently(tasks);
 
-            List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+            List<Notification> notifications = notificationRepository.findAllByUserIdForTestVerification(userId);
             assertThat(notifications).hasSize(1);
             Watchlist reloaded = requiresNew.execute(status -> watchlistRepository.findById(watchlistId).orElseThrow());
             assertThat(reloaded.isNotified()).isTrue();
@@ -94,7 +94,7 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
 
     // card/price 조회는 항상 "목표가 도달"로 고정 응답하는 mock으로 대체해, 오직 markAsNotifiedIfNotYet()의
     // 원자성만으로 중복 알림 방지가 되는지를 순수하게 검증한다.
-    private WatchlistTargetPriceNoticeService newNoticeService(Long cardId) {
+    private WatchlistTargetPriceNoticeScheduler newScheduler(Long cardId) {
         CardRepository cardRepository = mock(CardRepository.class);
         given(cardRepository.findAllById(any())).willReturn(List.of(Card.builder().id(cardId).name("리자몽").build()));
 
@@ -109,7 +109,7 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
         WatchlistTargetPriceNoticeProcessor processor = new WatchlistTargetPriceNoticeProcessor(
                 watchlistRepository, priceTradeStatsRepository, notificationService, watchlistTargetPriceEvaluator);
 
-        return new WatchlistTargetPriceNoticeService(watchlistRepository, cardRepository,
+        return new WatchlistTargetPriceNoticeScheduler(watchlistRepository, cardRepository,
                 priceTradeStatsRepository, processor);
     }
 
@@ -142,7 +142,7 @@ class WatchlistTargetPriceNoticeConcurrencyTest {
     }
 
     private void cleanup(Long userId, Long watchlistId, Long cardId) {
-        notificationRepository.deleteAll(notificationRepository.findByUserIdOrderByCreatedAtDesc(userId));
+        notificationRepository.deleteAll(notificationRepository.findAllByUserIdForTestVerification(userId));
         watchlistRepository.deleteById(watchlistId);
         entityManager.flush();
         entityManager.createNativeQuery("DELETE FROM users WHERE id = :userId")

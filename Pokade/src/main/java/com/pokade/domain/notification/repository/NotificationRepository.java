@@ -14,10 +14,18 @@ import java.util.Optional;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
-    List<Notification> findByUserIdOrderByCreatedAtDesc(Long userId);
+    // 프로덕션 코드에서는 쓰지 않는다 - 페이지네이션 없이 유저의 알림 전체를 최신순으로 가져오는
+    // 테스트 전용 헬퍼다. 워치리스트 알림 통합/동시성 테스트(WatchlistListingAvailableNoticeIntegrationTest,
+    // WatchlistTargetPriceNoticeConcurrencyTest, WatchlistTargetPriceNoticeTransactionIsolationTest)가
+    // "알림이 실제로 몇 건, 어떤 내용으로 생성됐는지" 검증하거나 테스트 종료 후 정리(deleteAll)할 때 쓴다.
+    // 실제 GET /api/notifications API는 아래 findByUserId(페이징)를 쓴다.
+    // 명시적 @Query가 필요한 이유: 메서드 이름 파생 쿼리 규칙상 "ForTestVerification"이 유효한
+    // 프로퍼티/키워드로 해석되지 않아 PropertyReferenceException이 난다 - 이름을 자유롭게 짓기 위해
+    // JPQL을 직접 명시했다(기존 파생 쿼리와 동일한 쿼리를 그대로 재현).
+    @Query("SELECT n FROM Notification n WHERE n.userId = :userId ORDER BY n.createdAt DESC")
+    List<Notification> findAllByUserIdForTestVerification(@Param("userId") Long userId);
 
-    // #162: 목록 조회 페이지네이션용. 위 findByUserIdOrderByCreatedAtDesc()는 워치리스트 알림 테스트
-    // (WatchlistTargetPriceNoticeConcurrencyTest 등)가 검증/정리 용도로 그대로 쓰고 있어 건드리지 않는다.
+    // #162: GET /api/notifications가 실제로 쓰는 페이지네이션 조회 메서드.
     Page<Notification> findByUserId(Long userId, Pageable pageable);
 
     Optional<Notification> findByIdAndUserId(Long id, Long userId);

@@ -97,6 +97,13 @@ public enum ErrorCode {
     WATCHLIST_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "워치리스트는 최대 20개까지 등록할 수 있습니다."),
     NOTIFICATION_ALREADY_READ(HttpStatus.BAD_REQUEST, "이미 읽음 처리된 알림입니다."),
 
+    // ===== 포트폴리오 =====
+    PORTFOLIO_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "포트폴리오 항목을 찾을 수 없습니다."),
+    PORTFOLIO_PRICE_NOT_FOUND(HttpStatus.NOT_FOUND, "시세 정보가 없어 손익을 계산할 수 없습니다."),
+    PORTFOLIO_ACQUIRED_PRICE_REQUIRED(HttpStatus.BAD_REQUEST, "취득가가 입력되지 않아 손익을 계산할 수 없습니다."),
+    GRADE_RESULT_NOT_REGISTRABLE(HttpStatus.BAD_REQUEST, "정상 산출된 진단 결과만 도감에 등록할 수 있습니다."),
+    GRADE_RESULT_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 도감에 등록된 진단 결과입니다."),
+
     // ===== Scrydex 동기화 배치 (관리자 트리거) =====
     SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "이미 동기화가 진행 중입니다."),
 

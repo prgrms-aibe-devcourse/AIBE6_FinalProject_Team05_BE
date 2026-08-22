@@ -37,7 +37,7 @@ import static org.mockito.BDDMockito.given;
 // 이 버그 자체가 재현되지 않는다).
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({WatchlistTargetPriceNoticeService.class, WatchlistTargetPriceNoticeProcessor.class,
+@Import({WatchlistTargetPriceNoticeScheduler.class, WatchlistTargetPriceNoticeProcessor.class,
         WatchlistService.class, WatchlistTargetPriceEvaluator.class, com.pokade.domain.notification.service.NotificationService.class,
         com.pokade.domain.notification.store.SseEmitterStore.class})
 class WatchlistTargetPriceNoticeTransactionIsolationTest {
@@ -49,7 +49,7 @@ class WatchlistTargetPriceNoticeTransactionIsolationTest {
     private NotificationRepository notificationRepository;
 
     @Autowired
-    private WatchlistTargetPriceNoticeService noticeService;
+    private WatchlistTargetPriceNoticeScheduler scheduler;
 
     @Autowired
     private PlatformTransactionManager transactionManager;
@@ -110,12 +110,12 @@ class WatchlistTargetPriceNoticeTransactionIsolationTest {
                 });
 
         try {
-            requiresNew.executeWithoutResult(status -> noticeService.detectTargetPriceReached());
+            requiresNew.executeWithoutResult(status -> scheduler.detectTargetPriceReached());
 
             Watchlist okReloaded = requiresNew.execute(status -> watchlistRepository.findById(okWatchlistId).orElseThrow());
             assertThat(okReloaded.isNotified()).isTrue();
 
-            List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+            List<Notification> notifications = notificationRepository.findAllByUserIdForTestVerification(userId);
             assertThat(notifications).hasSize(1);
             assertThat(notifications.get(0).getMessage()).contains("리자몽");
 
@@ -134,7 +134,7 @@ class WatchlistTargetPriceNoticeTransactionIsolationTest {
     }
 
     private void cleanup(Long userId, List<Long> watchlistIds, List<Long> cardIds) {
-        notificationRepository.deleteAll(notificationRepository.findByUserIdOrderByCreatedAtDesc(userId));
+        notificationRepository.deleteAll(notificationRepository.findAllByUserIdForTestVerification(userId));
         watchlistIds.forEach(watchlistRepository::deleteById);
         entityManager.flush();
         entityManager.createNativeQuery("DELETE FROM users WHERE id = :userId")

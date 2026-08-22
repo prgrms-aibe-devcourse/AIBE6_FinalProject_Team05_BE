@@ -48,7 +48,7 @@ public class WatchlistService {
     @Timed(value = "watchlist.add.duration")
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
-        validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
+        // #308: 목표가는 등록 시점에 선택 입력으로 변경됨 - 둘 다 없이 등록 가능(수정 API는 별개, updateWatchlist() 참고).
 
         // 동시 등록 요청에서 "중복 체크 + 20개 제한 체크 + 저장" 구간이 원자적이도록, 같은 유저의 요청만
         // 트랜잭션 종료까지 직렬화한다(다른 유저는 영향 없음).

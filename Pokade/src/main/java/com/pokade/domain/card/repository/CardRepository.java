@@ -14,6 +14,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.pokade.domain.card.entity.Card;
+import com.pokade.domain.card.support.CardSearchFilterResolver;
 
 public interface CardRepository extends JpaRepository<Card, Long> {
 
@@ -40,42 +41,15 @@ public interface CardRepository extends JpaRepository<Card, Long> {
      */
     Set<String> SORT_COLUMN_WHITELIST = Set.of(SORT_LATEST, SORT_NAME, SORT_POPULAR);
 
-    /**
-     * searchOrderBy* 3개 @Query가 공유하는 SELECT ~ WHERE 절 (ORDER BY 제외).
-     * ORDER BY는 인덱스 정렬 최적화를 위해 메서드별로 분리 유지한다.
-     */
-    String CARD_SEARCH_BASE = """
-            SELECT c.* FROM cards c WHERE
-            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
-            (:hasRarities = false OR c.rarity IN (:rarities)) AND
-            (:hasLanguages = false OR c.language_code IN (:languages)) AND
-            (:hasPrice = false OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
-                AND (:minPrice IS NULL OR l.price >= :minPrice)
-                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
-            )) AND
-            (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            """;
+    // 필터 5종 조건절/검색 base·count SQL 원문은 CardSearchSql로 이동했다(#308 후속 - 상수가
+    // 11개까지 쌓여 메서드 시그니처와 뒤섞이는 문제를 줄이기 위함). 상수 간 관계는 CardSearchSql의
+    // 클래스 Javadoc에 정리돼 있다.
 
-    /** searchOrderBy* 3개 @Query가 공유하는 countQuery. ORDER BY가 없어 셋 다 동일하다. */
-    String CARD_SEARCH_COUNT = """
-            SELECT COUNT(*) FROM cards c WHERE
-            (:hasTypes = false OR EXISTS (SELECT 1 FROM unnest(c.types) AS t(val) WHERE val IN (:types))) AND
-            (:hasRarities = false OR c.rarity IN (:rarities)) AND
-            (:hasLanguages = false OR c.language_code IN (:languages)) AND
-            (:hasPrice = false OR EXISTS (
-                SELECT 1 FROM listings l WHERE l.card_id = c.id AND l.status = '""" + LISTING_STATUS_ACTIVE + "'" + """
-                AND (:minPrice IS NULL OR l.price >= :minPrice)
-                AND (:maxPrice IS NULL OR l.price <= :maxPrice)
-            )) AND
-            (:expansionId IS NULL OR c.expansion_id = :expansionId)
-            """;
-
-    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
-            countQuery = CARD_SEARCH_COUNT,
+    @Query(value = CardSearchSql.CARD_SEARCH_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
+            countQuery = CardSearchSql.CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByLatest(@Param("hasTypes") boolean hasTypes,
-                                    @Param("types") List<String> types,
+                                    @Param("types") String[] types,
                                     @Param("hasRarities") boolean hasRarities,
                                     @Param("rarities") List<String> rarities,
                                     @Param("hasLanguages") boolean hasLanguages,
@@ -86,11 +60,11 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                     @Param("expansionId") String expansionId,
                                     Pageable pageable);
 
-    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
-            countQuery = CARD_SEARCH_COUNT,
+    @Query(value = CardSearchSql.CARD_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CardSearchSql.CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByName(@Param("hasTypes") boolean hasTypes,
-                                  @Param("types") List<String> types,
+                                  @Param("types") String[] types,
                                   @Param("hasRarities") boolean hasRarities,
                                   @Param("rarities") List<String> rarities,
                                   @Param("hasLanguages") boolean hasLanguages,
@@ -101,11 +75,11 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                   @Param("expansionId") String expansionId,
                                   Pageable pageable);
 
-    @Query(value = CARD_SEARCH_BASE + "ORDER BY c.view_count DESC, c.id DESC",
-            countQuery = CARD_SEARCH_COUNT,
+    @Query(value = CardSearchSql.CARD_SEARCH_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+            countQuery = CardSearchSql.CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByPopular(@Param("hasTypes") boolean hasTypes,
-                                     @Param("types") List<String> types,
+                                     @Param("types") String[] types,
                                      @Param("hasRarities") boolean hasRarities,
                                      @Param("rarities") List<String> rarities,
                                      @Param("hasLanguages") boolean hasLanguages,
@@ -150,28 +124,22 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     /** #263: language(언어 코드, 예 EN/JA) 필터가 추가된 검색. types/rarities와 동일한 방식(바인드 IN절, 값 화이트리스트 없음). */
     default Page<Card> search(List<String> types, List<String> rarities, List<String> languages, String expansionId, Integer minPrice, Integer maxPrice, String sort, Pageable pageable) {
-        // 빈 문자열("")이 섞여 들어오면 실제 필터 조건 없이 IN ('') 비교만 남아 매칭이 전혀 안 되므로
-        // hasTypes/hasRarities/hasLanguages 판단 전에 제거한다.
-        List<String> filteredTypes = types == null ? null
-                : types.stream().filter(v -> v != null && !v.isBlank()).toList();
-        List<String> filteredRarities = rarities == null ? null
-                : rarities.stream().filter(v -> v != null && !v.isBlank()).toList();
-        List<String> filteredLanguages = languages == null ? null
-                : languages.stream().filter(v -> v != null && !v.isBlank()).toList();
-
-        boolean hasTypes = filteredTypes != null && !filteredTypes.isEmpty();
-        boolean hasRarities = filteredRarities != null && !filteredRarities.isEmpty();
-        boolean hasLanguages = filteredLanguages != null && !filteredLanguages.isEmpty();
-        boolean hasPrice = minPrice != null || maxPrice != null;
+        // 필터 5종 유무 판단(blank 제거→hasX)과 IN절/overlap 바인딩용 안전값 대체는 CardQueryService의
+        // 키워드+필터 결합 검색과 완전히 동일한 규칙이라 CardSearchFilterResolver로 공용화했다(#308 후속).
+        CardSearchFilterResolver.Resolved resolved =
+                CardSearchFilterResolver.resolve(types, rarities, languages, minPrice, maxPrice);
+        boolean hasTypes = resolved.hasTypes();
+        String[] safeTypes = resolved.types();
+        boolean hasRarities = resolved.hasRarities();
+        List<String> safeRarities = resolved.rarities();
+        boolean hasLanguages = resolved.hasLanguages();
+        List<String> safeLanguages = resolved.languages();
+        boolean hasPrice = resolved.hasPrice();
         // Pageable에 담긴 Sort는 버린다: Spring의 Pageable 리졸버가 우리와 같은 "sort" 파라미터명을
         // 공유하기 때문에(예: ?sort=latest) 정렬 프로퍼티로 오인해 파싱해 넣을 수 있고, 그 값을 그대로
         // 네이티브 쿼리에 넘기면 이미 고정된 ORDER BY와 충돌한다. 정렬은 아래 화이트리스트로만 결정한다.
         Pageable unsortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         String resolvedSort = sort != null && SORT_COLUMN_WHITELIST.contains(sort) ? sort : SORT_LATEST;
-
-        List<String> safeTypes = hasTypes ? filteredTypes : List.of("");
-        List<String> safeRarities = hasRarities ? filteredRarities : List.of("");
-        List<String> safeLanguages = hasLanguages ? filteredLanguages : List.of("");
 
         if (SORT_NAME.equals(resolvedSort)) {
             return searchOrderByName(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
@@ -182,7 +150,26 @@ public interface CardRepository extends JpaRepository<Card, Long> {
         return searchOrderByLatest(hasTypes, safeTypes, hasRarities, safeRarities, hasLanguages, safeLanguages, hasPrice, minPrice, maxPrice, expansionId, unsortedPageable);
     }
 
-    Page<Card> findByNameContainingIgnoreCase(String name, Pageable pageable);
+    /**
+     * #308: 필터+키워드 통합 쿼리(NAME_EXACT_FILTER_BASE 등)에서 이 ILIKE 조건을 문자열로 재사용하기
+     * 위해 파생 쿼리 대신 명시적 native @Query로 전환했다 - 파생 쿼리는 SQL 텍스트를 꺼내 쓸 수 없어서
+     * CARD_FILTER_CONDITIONS처럼 조합하는 방식이 불가능했다. 시그니처(2-인자)와 부분일치·대소문자
+     * 무시 동작은 기존과 동일하다. ORDER BY만 새로 명시(c.name ASC, c.id ASC) - 파생 쿼리 시절엔
+     * Pageable의 Sort가 있으면 그대로 반영됐지만, 이 메서드의 실제 호출부(CardQueryService.searchByName())는
+     * Sort 없는 Pageable만 넘겨왔으므로 결과 자체는 달라지지 않는다.
+     */
+    @Query(value = "SELECT c.* FROM cards c WHERE c.name ILIKE CONCAT('%', :name, '%') ORDER BY c.name ASC, c.id ASC",
+            countQuery = "SELECT COUNT(*) FROM cards c WHERE c.name ILIKE CONCAT('%', :name, '%')",
+            nativeQuery = true)
+    Page<Card> findByNameContainingIgnoreCase(@Param("name") String name, Pageable pageable);
+
+    /**
+     * #308: "필터 없는 키워드 단독 정확일치가 원래 존재하는가"만 가볍게 확인하는 용도 - 필터 결합 검색이
+     * 0건일 때, 그게 "필터가 세서 없는 것"(폴백 불필요)인지 "키워드 자체가 애매한 것"(폴백 필요)인지
+     * 가르는 판단 기준으로 쓴다. Page/count 없이 boolean만 필요해 findByNameContainingIgnoreCase를
+     * 재사용하는 대신 더 가벼운 존재 확인 쿼리로 별도 선언했다.
+     */
+    boolean existsByNameContainingIgnoreCase(String name);
 
     /**
      * 정확 검색(부분일치)이 0건일 때만 시도하는 오타 허용 폴백 검색(#187) - pg_trgm의 similarity()로
@@ -197,27 +184,128 @@ public interface CardRepository extends JpaRepository<Card, Long> {
             nativeQuery = true)
     Page<Card> findByNameSimilarTo(@Param("keyword") String keyword, @Param("threshold") double threshold, Pageable pageable);
 
-    /**
-     * 한글 검색어를 도감번호 목록으로 변환한 뒤(PokedexKoNameRepository, 부분일치/초성 검색이라 여러 건일 수 있음)
-     * 조회하는 용도 - 배열 컬럼이라 unnest+IN으로 매칭한다(CARD_SEARCH_BASE의 types 필터와 동일한 패턴).
-     */
-    String POKEDEX_SEARCH_BASE = """
-            SELECT c.* FROM cards c
-            WHERE EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers))
-            """;
+    @Query(value = CardSearchSql.NAME_EXACT_FILTER_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
+            countQuery = CardSearchSql.NAME_EXACT_FILTER_COUNT,
+            nativeQuery = true)
+    Page<Card> searchByNameOrderByLatest(@Param("keyword") String keyword,
+                                          @Param("hasTypes") boolean hasTypes,
+                                          @Param("types") String[] types,
+                                          @Param("hasRarities") boolean hasRarities,
+                                          @Param("rarities") List<String> rarities,
+                                          @Param("hasLanguages") boolean hasLanguages,
+                                          @Param("languages") List<String> languages,
+                                          @Param("hasPrice") boolean hasPrice,
+                                          @Param("minPrice") Integer minPrice,
+                                          @Param("maxPrice") Integer maxPrice,
+                                          @Param("expansionId") String expansionId,
+                                          Pageable pageable);
 
-    /** findByNationalPokedexNumbersIn과 짝을 이루는 countQuery. ORDER BY가 없어 조건절이 동일하다. */
-    String POKEDEX_SEARCH_COUNT = """
-            SELECT COUNT(*) FROM cards c
-            WHERE EXISTS (SELECT 1 FROM unnest(c.national_pokedex_numbers) AS n(val) WHERE val IN (:pokedexNumbers))
-            """;
+    @Query(value = CardSearchSql.NAME_EXACT_FILTER_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CardSearchSql.NAME_EXACT_FILTER_COUNT,
+            nativeQuery = true)
+    Page<Card> searchByNameOrderByName(@Param("keyword") String keyword,
+                                        @Param("hasTypes") boolean hasTypes,
+                                        @Param("types") String[] types,
+                                        @Param("hasRarities") boolean hasRarities,
+                                        @Param("rarities") List<String> rarities,
+                                        @Param("hasLanguages") boolean hasLanguages,
+                                        @Param("languages") List<String> languages,
+                                        @Param("hasPrice") boolean hasPrice,
+                                        @Param("minPrice") Integer minPrice,
+                                        @Param("maxPrice") Integer maxPrice,
+                                        @Param("expansionId") String expansionId,
+                                        Pageable pageable);
 
-    @Query(value = POKEDEX_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
-            countQuery = POKEDEX_SEARCH_COUNT,
+    @Query(value = CardSearchSql.NAME_EXACT_FILTER_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+            countQuery = CardSearchSql.NAME_EXACT_FILTER_COUNT,
+            nativeQuery = true)
+    Page<Card> searchByNameOrderByPopular(@Param("keyword") String keyword,
+                                           @Param("hasTypes") boolean hasTypes,
+                                           @Param("types") String[] types,
+                                           @Param("hasRarities") boolean hasRarities,
+                                           @Param("rarities") List<String> rarities,
+                                           @Param("hasLanguages") boolean hasLanguages,
+                                           @Param("languages") List<String> languages,
+                                           @Param("hasPrice") boolean hasPrice,
+                                           @Param("minPrice") Integer minPrice,
+                                           @Param("maxPrice") Integer maxPrice,
+                                           @Param("expansionId") String expansionId,
+                                           Pageable pageable);
+
+    @Query(value = CardSearchSql.NAME_TRGM_FILTER_BASE + "ORDER BY similarity(c.name, :keyword) DESC, c.id ASC",
+            countQuery = CardSearchSql.NAME_TRGM_FILTER_COUNT,
+            nativeQuery = true)
+    Page<Card> searchByNameSimilarToWithFilters(@Param("keyword") String keyword,
+                                                 @Param("threshold") double threshold,
+                                                 @Param("hasTypes") boolean hasTypes,
+                                                 @Param("types") String[] types,
+                                                 @Param("hasRarities") boolean hasRarities,
+                                                 @Param("rarities") List<String> rarities,
+                                                 @Param("hasLanguages") boolean hasLanguages,
+                                                 @Param("languages") List<String> languages,
+                                                 @Param("hasPrice") boolean hasPrice,
+                                                 @Param("minPrice") Integer minPrice,
+                                                 @Param("maxPrice") Integer maxPrice,
+                                                 @Param("expansionId") String expansionId,
+                                                 Pageable pageable);
+
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CardSearchSql.POKEDEX_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> findByNationalPokedexNumbersIn(@Param("pokedexNumbers") List<Integer> pokedexNumbers, Pageable pageable);
 
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.synced_at DESC, c.id DESC",
+            countQuery = CardSearchSql.POKEDEX_SEARCH_FILTER_COUNT,
+            nativeQuery = true)
+    Page<Card> searchByPokedexNumbersOrderByLatest(@Param("pokedexNumbers") List<Integer> pokedexNumbers,
+                                                    @Param("hasTypes") boolean hasTypes,
+                                                    @Param("types") String[] types,
+                                                    @Param("hasRarities") boolean hasRarities,
+                                                    @Param("rarities") List<String> rarities,
+                                                    @Param("hasLanguages") boolean hasLanguages,
+                                                    @Param("languages") List<String> languages,
+                                                    @Param("hasPrice") boolean hasPrice,
+                                                    @Param("minPrice") Integer minPrice,
+                                                    @Param("maxPrice") Integer maxPrice,
+                                                    @Param("expansionId") String expansionId,
+                                                    Pageable pageable);
+
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.name ASC, c.id ASC",
+            countQuery = CardSearchSql.POKEDEX_SEARCH_FILTER_COUNT,
+            nativeQuery = true)
+    Page<Card> searchByPokedexNumbersOrderByName(@Param("pokedexNumbers") List<Integer> pokedexNumbers,
+                                                  @Param("hasTypes") boolean hasTypes,
+                                                  @Param("types") String[] types,
+                                                  @Param("hasRarities") boolean hasRarities,
+                                                  @Param("rarities") List<String> rarities,
+                                                  @Param("hasLanguages") boolean hasLanguages,
+                                                  @Param("languages") List<String> languages,
+                                                  @Param("hasPrice") boolean hasPrice,
+                                                  @Param("minPrice") Integer minPrice,
+                                                  @Param("maxPrice") Integer maxPrice,
+                                                  @Param("expansionId") String expansionId,
+                                                  Pageable pageable);
+
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+            countQuery = CardSearchSql.POKEDEX_SEARCH_FILTER_COUNT,
+            nativeQuery = true)
+    Page<Card> searchByPokedexNumbersOrderByPopular(@Param("pokedexNumbers") List<Integer> pokedexNumbers,
+                                                     @Param("hasTypes") boolean hasTypes,
+                                                     @Param("types") String[] types,
+                                                     @Param("hasRarities") boolean hasRarities,
+                                                     @Param("rarities") List<String> rarities,
+                                                     @Param("hasLanguages") boolean hasLanguages,
+                                                     @Param("languages") List<String> languages,
+                                                     @Param("hasPrice") boolean hasPrice,
+                                                     @Param("minPrice") Integer minPrice,
+                                                     @Param("maxPrice") Integer maxPrice,
+                                                     @Param("expansionId") String expansionId,
+                                                     Pageable pageable);
+
     Optional<Card> findByExternalId(String externalId);
+
+    // AI 등급 진단 이력 응답에서 vision_card_id(externalId)로 카드 정보를 배치 조회할 때 사용(N+1 방지).
+    List<Card> findByExternalIdIn(List<String> externalIds);
 
     /**
      * 필터 옵션(Facet) API용 - 현재 cards에 실제로 존재하는 타입 값(원본 텍스트, 다국어 혼재)별로

@@ -70,4 +70,11 @@ dependencyManagement {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs(
+        "-XX:+EnableDynamicAgentLoading",
+        "-Xshare:off",
+        "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util=ALL-UNNAMED"
+    )
 }

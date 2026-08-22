@@ -408,6 +408,11 @@ class PriceServiceTest {
             public String getCurrency() {
                 return currency;
             }
+
+            @Override
+            public BigDecimal getChange1dPct() {
+                return null;
+            }
         };
     }
 

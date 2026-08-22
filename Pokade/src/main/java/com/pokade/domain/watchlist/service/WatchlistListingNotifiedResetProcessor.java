@@ -21,7 +21,7 @@ public class WatchlistListingNotifiedResetProcessor {
     private final WatchlistRepository watchlistRepository;
     private final ListingRepository listingRepository;
 
-    // resolvedVariantId: 호출자(WatchlistListingNotifiedResetService)가 watchlist.variantId==null이면
+    // resolvedVariantId: 호출자(WatchlistListingNotifiedResetScheduler)가 watchlist.variantId==null이면
     // 카드의 대표 variant ID로 이미 치환해서 넘긴다(WatchlistListingAvailableNoticeListener와 동일한
     // null=대표 변형 해석 규칙) - 대표 variant 정보 자체가 없으면 null 그대로 넘어온다.
     @Transactional(propagation = Propagation.REQUIRES_NEW)

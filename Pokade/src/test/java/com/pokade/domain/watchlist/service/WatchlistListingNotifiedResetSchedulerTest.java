@@ -23,7 +23,7 @@ import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 
 @ExtendWith(MockitoExtension.class)
-class WatchlistListingNotifiedResetServiceTest {
+class WatchlistListingNotifiedResetSchedulerTest {
 
     @Mock
     private WatchlistRepository watchlistRepository;
@@ -35,7 +35,7 @@ class WatchlistListingNotifiedResetServiceTest {
     private WatchlistListingNotifiedResetProcessor processor;
 
     @InjectMocks
-    private WatchlistListingNotifiedResetService service;
+    private WatchlistListingNotifiedResetScheduler scheduler;
 
     private Watchlist watchlist(Long id, Long cardId, Long variantId) {
         Watchlist watchlist = Watchlist.builder()
@@ -54,7 +54,7 @@ class WatchlistListingNotifiedResetServiceTest {
     void resetListingNotifiedIfSoldOut_noCandidatesMeansNoop() {
         given(watchlistRepository.findByListingNotifiedTrue()).willReturn(List.of());
 
-        service.resetListingNotifiedIfSoldOut();
+        scheduler.resetListingNotifiedIfSoldOut();
 
         then(cardVariantRepository).should(never()).findPrimaryVariantIdsByCardIds(any());
         then(processor).should(never()).process(any(), any());
@@ -67,7 +67,7 @@ class WatchlistListingNotifiedResetServiceTest {
         given(watchlistRepository.findByListingNotifiedTrue()).willReturn(List.of(explicit));
         given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L))).willReturn(List.of());
 
-        service.resetListingNotifiedIfSoldOut();
+        scheduler.resetListingNotifiedIfSoldOut();
 
         then(processor).should().process(10L, 100L);
     }
@@ -80,7 +80,7 @@ class WatchlistListingNotifiedResetServiceTest {
         given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L)))
                 .willReturn(List.of(new PrimaryVariantIdView(1L, 999L)));
 
-        service.resetListingNotifiedIfSoldOut();
+        scheduler.resetListingNotifiedIfSoldOut();
 
         then(processor).should().process(10L, 999L);
     }
@@ -92,7 +92,7 @@ class WatchlistListingNotifiedResetServiceTest {
         given(watchlistRepository.findByListingNotifiedTrue()).willReturn(List.of(watchingPrimary));
         given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L))).willReturn(List.of());
 
-        service.resetListingNotifiedIfSoldOut();
+        scheduler.resetListingNotifiedIfSoldOut();
 
         then(processor).should().process(10L, null);
     }
@@ -106,7 +106,7 @@ class WatchlistListingNotifiedResetServiceTest {
         given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L, 2L))).willReturn(List.of());
         org.mockito.Mockito.doThrow(new RuntimeException("boom")).when(processor).process(10L, null);
 
-        service.resetListingNotifiedIfSoldOut();
+        scheduler.resetListingNotifiedIfSoldOut();
 
         ArgumentCaptor<Long> idCaptor = ArgumentCaptor.forClass(Long.class);
         then(processor).should(times(2)).process(idCaptor.capture(), any());
