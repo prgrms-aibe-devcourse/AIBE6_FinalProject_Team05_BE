@@ -54,6 +54,13 @@ public class WatchlistService {
         // 트랜잭션 종료까지 직렬화한다(다른 유저는 영향 없음).
         watchlistRepository.acquireUserLock(userId);
 
+        // SEC-B1: 존재하지 않는 카드는 여기서 걸러낸다. 이 검증이 없으면 저장 시점에 card_id FK 위반으로
+        // DataIntegrityViolationException이 나고, 아래 catch가 그걸 UNIQUE 위반과 구분하지 못해
+        // "이미 등록된 카드입니다"라는 엉뚱한 원인을 안내하게 된다(ListingService.getOrderbook()과 동일한 패턴).
+        if (!cardRepository.existsById(request.cardId())) {
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+        }
+
         if (watchlistRepository.existsByUserIdAndCardId(userId, request.cardId())) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
@@ -73,6 +80,8 @@ public class WatchlistService {
                 .build();
 
         // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
+        // 카드 존재 여부는 위에서 먼저 검증하므로 여기 남는 건 사실상 UNIQUE(user_id, card_id) 위반이다.
+        // (variant_id FK 위반은 아직 이 catch로 흡수되어 DUPLICATE_WATCHLIST로 보고된다 - 별도 이슈)
         try {
             Watchlist saved = watchlistRepository.save(watchlist);
 
