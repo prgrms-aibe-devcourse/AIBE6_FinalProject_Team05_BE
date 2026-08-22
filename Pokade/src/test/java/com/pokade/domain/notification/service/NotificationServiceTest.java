@@ -11,6 +11,11 @@ import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.io.IOException;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -26,9 +32,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -48,6 +51,11 @@ class NotificationServiceTest {
     @Mock CardRepository cardRepository;
     @Mock SseEmitterStore sseEmitterStore;
     @Mock ApplicationEventPublisher eventPublisher;
+    // @InjectMocks가 생성자에 넘길 MeterRegistry. mock이면 counter()가 null을 돌려줘 NPE가 나므로
+    // 실제 인메모리 구현을 @Spy로 둔다(#343 - 계측 주입이 필드에서 생성자로 바뀌면서 필요해졌다).
+    @Spy
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     @InjectMocks NotificationService notificationService;
 
     private Notification notification(Long userId) {

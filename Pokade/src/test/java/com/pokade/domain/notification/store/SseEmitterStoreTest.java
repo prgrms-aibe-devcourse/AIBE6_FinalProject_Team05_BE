@@ -1,5 +1,6 @@
 package com.pokade.domain.notification.store;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -8,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SseEmitterStoreTest {
 
-    private final SseEmitterStore store = new SseEmitterStore();
+    private final SseEmitterStore store = new SseEmitterStore(new SimpleMeterRegistry());
 
     @Test
     @DisplayName("save: 등록한 Emitter를 findByUserId로 조회할 수 있다")

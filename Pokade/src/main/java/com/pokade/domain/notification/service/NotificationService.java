@@ -13,10 +13,8 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.web.PageableValidator;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -57,10 +55,9 @@ public class NotificationService {
     private final SseEmitterStore sseEmitterStore;
     private final ApplicationEventPublisher eventPublisher;
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
-    // required = false: 슬라이스 테스트엔 MeterRegistry 빈이 없어 컨텍스트 로딩이 깨지는 문제(#224 유사)를 막기 위함.
-    @Autowired(required = false)
-    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    // 계측용. 슬라이스 테스트는 MeterRegistry 빈이 없으므로 support/TestMetricsConfig를 함께 @Import하고,
+    // new로 직접 만드는 단위 테스트는 생성자에 new SimpleMeterRegistry()를 넘긴다(#343).
+    private final MeterRegistry meterRegistry;
 
     public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {
         PageableValidator.validatePageSize(pageable, MAX_PAGE_SIZE);

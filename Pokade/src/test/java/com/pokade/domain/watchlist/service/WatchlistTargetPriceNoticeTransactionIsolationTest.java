@@ -9,6 +9,7 @@ import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
+import com.pokade.support.TestMetricsConfig;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -39,7 +40,7 @@ import static org.mockito.BDDMockito.given;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({WatchlistTargetPriceNoticeScheduler.class, WatchlistTargetPriceNoticeProcessor.class,
         WatchlistService.class, WatchlistTargetPriceEvaluator.class, com.pokade.domain.notification.service.NotificationService.class,
-        com.pokade.domain.notification.store.SseEmitterStore.class})
+        com.pokade.domain.notification.store.SseEmitterStore.class, TestMetricsConfig.class})
 class WatchlistTargetPriceNoticeTransactionIsolationTest {
 
     @Autowired

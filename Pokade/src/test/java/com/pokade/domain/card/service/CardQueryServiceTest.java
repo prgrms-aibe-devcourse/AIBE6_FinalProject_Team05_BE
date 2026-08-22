@@ -11,21 +11,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-
 import com.pokade.domain.card.dto.CardDetailResponse;
 import com.pokade.domain.card.dto.CardResponse;
 import com.pokade.domain.card.entity.Card;
@@ -38,6 +23,24 @@ import com.pokade.domain.card.repository.PokedexKoNameRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Spy;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+
+
 
 @ExtendWith(MockitoExtension.class)
 class CardQueryServiceTest {
@@ -53,6 +56,11 @@ class CardQueryServiceTest {
 
     @Mock
     private CardNameKoResolver cardNameKoResolver;
+
+    // @InjectMocks가 생성자에 넘길 MeterRegistry. mock이면 counter()가 null을 돌려줘 NPE가 나므로
+    // 실제 인메모리 구현을 @Spy로 둔다(#343 - 계측 주입이 필드에서 생성자로 바뀌면서 필요해졌다).
+    @Spy
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks
     private CardQueryService cardQueryService;

@@ -25,7 +25,6 @@ import com.pokade.global.web.PageableValidator;
 
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,7 +35,6 @@ import java.util.Set;
 import java.util.function.Function;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 카드 검색/상세/유사 카드 조회 등 "조회" 책임만 담당한다. 필터 옵션 집계(카드 수 카운트)는
@@ -72,13 +70,9 @@ public class CardQueryService {
     private final PokedexKoNameRepository pokedexKoNameRepository;
     private final CardNameKoResolver cardNameKoResolver;
 
-    // Actuator/Prometheus 로컬 실험용 계측 - 커밋 대상 아님.
-    // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
-    // required = false: @DataJpaTest 등 슬라이스 테스트엔 MeterRegistry 빈이 없어 NoSuchBeanDefinitionException으로
-    // 컨텍스트 로딩 자체가 깨졌다(#224). 매칭되는 빈이 없으면 Spring이 필드를 건드리지 않고 그대로 두므로
-    // (value == null이면 field.set() 자체를 안 함), 아래 기본값(SimpleMeterRegistry)이 계속 살아남아 null이 되지 않는다.
-    @Autowired(required = false)
-    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    // 계측용. 슬라이스 테스트는 MeterRegistry 빈이 없으므로 support/TestMetricsConfig를 함께 @Import하고,
+    // new로 직접 만드는 단위 테스트는 생성자에 new SimpleMeterRegistry()를 넘긴다(#343).
+    private final MeterRegistry meterRegistry;
 
     /**
      * languages 없이 호출하는 기존 오버로드 - #263 이전부터 있던 호출부(테스트 다수 포함)가
