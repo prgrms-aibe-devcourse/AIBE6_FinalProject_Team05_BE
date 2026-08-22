@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
@@ -48,6 +49,7 @@ class WatchlistServiceTest {
     @Mock WatchlistRepository watchlistRepository;
     @Mock PriceService priceService;
     @Mock CardRepository cardRepository;
+    @Mock CardVariantRepository cardVariantRepository;
     @Mock PriceTradeStatsRepository priceTradeStatsRepository;
     @Mock CardNameKoResolver cardNameKoResolver;
     @Mock NotificationService notificationService;
@@ -61,7 +63,7 @@ class WatchlistServiceTest {
         WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator =
                 new WatchlistTargetPriceEvaluator(watchlistRepository, cardRepository, notificationService, cardNameKoResolver);
         watchlistService = new WatchlistService(
-                watchlistRepository, priceService, cardRepository, priceTradeStatsRepository, cardNameKoResolver, watchlistTargetPriceEvaluator);
+                watchlistRepository, priceService, cardRepository, cardVariantRepository, priceTradeStatsRepository, cardNameKoResolver, watchlistTargetPriceEvaluator);
     }
 
     private Watchlist watchlist(Long userId, Long cardId) {
@@ -109,6 +111,34 @@ class WatchlistServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.CARD_NOT_FOUND);
         // FK 위반으로 저장까지 가지 않고 사전에 차단돼야 한다.
         then(watchlistRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("등록: 존재하지 않는 variantId면 VARIANT_NOT_FOUND (DUPLICATE_WATCHLIST로 오분류되지 않는다)")
+    void addWatchlist_variantNotFound() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 999L, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.existsById(999L)).willReturn(false);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.VARIANT_NOT_FOUND);
+        then(watchlistRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("등록: variantId가 null이면(대표 변형 기준) 변형 존재 검증을 하지 않는다")
+    void addWatchlist_nullVariantId_skipsVariantCheck() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.variantId()).isNull();
+        then(cardVariantRepository).should(never()).existsById(any());
     }
 
     @Test
@@ -216,6 +246,7 @@ class WatchlistServiceTest {
     void addWatchlist_success() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 2L, 1000, null);
         given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.existsById(2L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));

@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
@@ -40,6 +41,7 @@ public class WatchlistService {
     private final WatchlistRepository watchlistRepository;
     private final PriceService priceService;
     private final CardRepository cardRepository;
+    private final CardVariantRepository cardVariantRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final CardNameKoResolver cardNameKoResolver;
     private final WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator;
@@ -61,6 +63,12 @@ public class WatchlistService {
             throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
         }
 
+        // card_id와 같은 이유로 variant_id FK 위반도 미리 걸러낸다. variantId가 null인 건 "대표 변형 기준"이라는
+        // 정상 입력이므로(WatchlistVariantResolver 참고) 값이 있을 때만 검증한다.
+        if (request.variantId() != null && !cardVariantRepository.existsById(request.variantId())) {
+            throw new BusinessException(ErrorCode.VARIANT_NOT_FOUND);
+        }
+
         if (watchlistRepository.existsByUserIdAndCardId(userId, request.cardId())) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
@@ -80,8 +88,7 @@ public class WatchlistService {
                 .build();
 
         // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
-        // 카드 존재 여부는 위에서 먼저 검증하므로 여기 남는 건 사실상 UNIQUE(user_id, card_id) 위반이다.
-        // (variant_id FK 위반은 아직 이 catch로 흡수되어 DUPLICATE_WATCHLIST로 보고된다 - 별도 이슈)
+        // 카드/변형 존재 여부는 위에서 먼저 검증하므로 여기 남는 건 사실상 UNIQUE(user_id, card_id) 위반이다.
         try {
             Watchlist saved = watchlistRepository.save(watchlist);
 

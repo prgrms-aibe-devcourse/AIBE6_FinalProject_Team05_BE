@@ -26,6 +26,7 @@ public enum ErrorCode {
     CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다."),
     GRADE_RESULT_NOT_FOUND(HttpStatus.NOT_FOUND, "진단 결과를 찾을 수 없습니다."),
     PRIMARY_VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "대표 변형이 지정되지 않은 카드입니다."),
+    VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "카드 변형을 찾을 수 없습니다."),
     WATCHLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "워치리스트 항목을 찾을 수 없습니다."),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
     INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
