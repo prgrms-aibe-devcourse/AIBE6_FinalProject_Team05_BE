@@ -11,6 +11,7 @@ import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.point.client.TossPaymentClient;
 import com.pokade.domain.point.service.PointService;
+import com.pokade.domain.price.dto.BuyOfferFulfillRequest;
 import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyRequest;
@@ -28,9 +29,11 @@ import com.pokade.domain.price.repository.BuyOfferOrderRepository;
 import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
+import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.repository.TradeRepository;
+import com.pokade.domain.trade.service.TradeService;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
@@ -104,6 +107,9 @@ class PriceServiceTest {
 
     @Mock
     private PointService pointService;
+
+    @Mock
+    private TradeService tradeService;
 
     @Spy
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
@@ -1026,5 +1032,91 @@ class PriceServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PRIMARY_VARIANT_NOT_FOUND);
         verifyNoInteractions(cardPriceRepository);
+    }
+
+    private BuyOffer activeBuyOfferOf(Long id, Long buyerId) {
+        return BuyOffer.builder()
+                .id(id)
+                .cardId(1L)
+                .buyerId(buyerId)
+                .variantId(10L)
+                .price(250000)
+                .grade(ListingGrade.S)
+                .recipientName("김철수")
+                .recipientPhone("010-1234-5678")
+                .recipientAddress("서울시 강남구")
+                .tossPaymentKey("pay_999")
+                .pointsUsed(1000)
+                .build();
+    }
+
+    private BuyOfferFulfillRequest buyOfferFulfillRequestOf() {
+        return new BuyOfferFulfillRequest(
+                "국민은행", "110-1234-5678", "홍길동", "홍길동", "010-9999-8888", "서울시 서초구");
+    }
+
+    @Test
+    @DisplayName("t53 즉시판매 성공 시 매물을 생성해 즉시 TRADING으로 잠그고 구매입찰을 체결 처리한다")
+    void t53() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 2L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+        given(listingRepository.save(any(Listing.class))).willAnswer(invocation -> invocation.getArgument(0));
+        TradeResponse expected = new TradeResponse(
+                100L, null, 2L, 1L, 1L, "리자몽", 250000, TradeStatus.PENDING,
+                null, null, null, null, null,
+                "김철수", "010-1234-5678", "서울시 강남구", java.time.LocalDateTime.now());
+        given(tradeService.createMatchedTrade(
+                any(), eq(2L), eq(250000), eq("김철수"), eq("010-1234-5678"),
+                eq("서울시 강남구"), eq("pay_999"), eq(1000)))
+                .willReturn(expected);
+
+        TradeResponse response = priceService.fulfillBuyOffer(7L, 1L, buyOfferFulfillRequestOf());
+
+        assertThat(response).isEqualTo(expected);
+        assertThat(buyOffer.getStatus()).isEqualTo("MATCHED");
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getSellerId()).isEqualTo(1L);
+        assertThat(captor.getValue().getPrice()).isEqualTo(250000);
+        assertThat(captor.getValue().getGrade()).isEqualTo(ListingGrade.S);
+    }
+
+    @Test
+    @DisplayName("t54 존재하지 않는 구매입찰이면 BUY_OFFER_NOT_FOUND 예외가 발생한다")
+    void t54() {
+        given(buyOfferRepository.findById(999L)).willReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> priceService.fulfillBuyOffer(999L, 1L, buyOfferFulfillRequestOf()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUY_OFFER_NOT_FOUND);
+        verifyNoInteractions(listingRepository, tradeService);
+    }
+
+    @Test
+    @DisplayName("t55 본인이 등록한 구매입찰이면 SELF_BUY_OFFER_NOT_ALLOWED 예외가 발생한다")
+    void t55() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+
+        assertThatThrownBy(() -> priceService.fulfillBuyOffer(7L, 1L, buyOfferFulfillRequestOf()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELF_BUY_OFFER_NOT_ALLOWED);
+        verifyNoInteractions(listingRepository, tradeService);
+    }
+
+    @Test
+    @DisplayName("t56 이미 체결된 구매입찰이면 BUY_OFFER_ALREADY_MATCHED 예외가 발생하고 매물도 생성하지 않는다")
+    void t56() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 2L);
+        buyOffer.markMatched();
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+
+        assertThatThrownBy(() -> priceService.fulfillBuyOffer(7L, 1L, buyOfferFulfillRequestOf()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
+        verifyNoInteractions(listingRepository, tradeService);
     }
 }

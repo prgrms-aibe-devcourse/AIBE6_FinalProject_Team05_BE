@@ -194,6 +194,48 @@ public class TradeService {
         return toResponse(trade);
     }
 
+    // domain.price의 "구매입찰 즉시판매" 전용 진입점 - 이미 결제(토스 에스크로)가 끝난 구매입찰에
+    // 판매자가 방금 등록한 매물을 즉시 매칭시킨다. TradeOrder를 거치지 않으므로(결제를 다시 받지 않음)
+    // confirmPurchase()와 별도 메서드로 둔다. BuyOffer 타입을 직접 참조하지 않고 이미 검증된 값만
+    // 받아서, 이 서비스가 domain.price의 엔티티를 몰라도 되게 한다.
+    @Transactional
+    public TradeResponse createMatchedTrade(
+            Long listingId, Long buyerId, Integer price,
+            String recipientName, String recipientPhone, String recipientAddress,
+            String tossPaymentKey, Integer pointsUsed
+    ) {
+        int updated = listingRepository.markAsTrading(listingId);
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.TRADE_CONFLICT);
+        }
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+
+        Trade trade = tradeRepository.save(
+                Trade.builder()
+                        .listing(listing)
+                        .buyerId(buyerId)
+                        .price(price)
+                        .recipientName(recipientName)
+                        .recipientPhone(recipientPhone)
+                        .recipientAddress(recipientAddress)
+                        .build()
+        );
+
+        paymentRepository.save(
+                Payment.builder()
+                        .trade(trade)
+                        .buyerId(buyerId)
+                        .amount(price)
+                        .pointsUsed(pointsUsed)
+                        .method(PaymentMethod.CARD)
+                        .tossPaymentKey(tossPaymentKey)
+                        .build()
+        );
+
+        return toResponse(trade);
+    }
+
     public TradeResponse getTrade(Long userId, Long tradeId) {
         Trade trade = tradeRepository.findById(tradeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));

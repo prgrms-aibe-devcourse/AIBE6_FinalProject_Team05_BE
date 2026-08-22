@@ -1,15 +1,18 @@
 package com.pokade.domain.price.controller;
 
+import com.pokade.domain.price.dto.BuyOfferFulfillRequest;
 import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyResponse;
 import com.pokade.domain.price.dto.BuyOfferResponse;
 import com.pokade.domain.price.service.PriceService;
+import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -52,5 +55,18 @@ public class BuyOfferController {
         BuyOfferResponse response = priceService.confirmBuyOfferPurchase(
                 buyerId, request.paymentKey(), request.orderId(), request.amount());
         return ApiResponse.ok("구매입찰이 등록되었습니다.", response);
+    }
+
+    @Operation(
+            summary = "구매입찰 즉시판매(체결)",
+            description = "이미 결제가 완료된 구매입찰에 판매자가 자신의 카드를 즉시 매칭해 거래를 확정합니다."
+    )
+    @PostMapping("/{buyOfferId}/fulfill")
+    public ApiResponse<TradeResponse> fulfill(
+            @AuthenticationPrincipal Long sellerId,
+            @PathVariable Long buyOfferId,
+            @Valid @RequestBody BuyOfferFulfillRequest request
+    ) {
+        return ApiResponse.ok("즉시판매가 체결되었습니다.", priceService.fulfillBuyOffer(buyOfferId, sellerId, request));
     }
 }

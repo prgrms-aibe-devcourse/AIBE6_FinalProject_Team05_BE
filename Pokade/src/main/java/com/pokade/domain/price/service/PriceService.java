@@ -5,6 +5,7 @@ import com.pokade.domain.card.entity.CardPrice;
 import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.listing.entity.ListingStatus;
@@ -13,6 +14,7 @@ import com.pokade.domain.point.service.PointService;
 import com.pokade.domain.price.ChartPeriod;
 import com.pokade.domain.price.RankingType;
 import com.pokade.domain.price.StatsPeriod;
+import com.pokade.domain.price.dto.BuyOfferFulfillRequest;
 import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyRequest;
@@ -32,7 +34,9 @@ import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
+import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.trade.service.TradeService;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
@@ -88,6 +92,9 @@ public class PriceService {
     private final UserRepository userRepository;
     private final TossPaymentClient tossPaymentClient;
     private final PointService pointService;
+    // 즉시판매(구매입찰 체결) 시 실제 Trade/Payment 생성만 위임한다 - 이번 기능 한정으로 domain.trade
+    // 수정을 허락받고 진행(TradeService.createMatchedTrade 참고).
+    private final TradeService tradeService;
     // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
     private final MeterRegistry meterRegistry;
 
@@ -296,12 +303,57 @@ public class PriceService {
                 .recipientPhone(order.getRecipientPhone())
                 .recipientAddress(order.getRecipientAddress())
                 .tossPaymentKey(order.getPaymentAmount() > 0 ? paymentKey : null)
+                .pointsUsed(order.getPointsUsed())
                 .build();
         BuyOffer saved = buyOfferRepository.save(buyOffer);
 
         order.markConfirmed();
 
         return BuyOfferResponse.of(saved);
+    }
+
+    // 즉시판매 - 이미 결제(토스 에스크로 또는 포인트)가 끝난 구매입찰에 판매자가 자기 카드를 바로
+    // 매칭시킨다. 매물을 먼저 등록하는 절차 없이, 이 매칭 전용으로 매물을 만들어 즉시 TRADING으로
+    // 잠근 뒤(같은 트랜잭션 안이라 다른 사용자에게 ACTIVE로 노출될 일이 없다) 거래를 생성한다.
+    @Transactional
+    public TradeResponse fulfillBuyOffer(Long buyOfferId, Long sellerId, BuyOfferFulfillRequest request) {
+        BuyOffer buyOffer = buyOfferRepository.findById(buyOfferId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUY_OFFER_NOT_FOUND));
+
+        if (buyOffer.getBuyerId().equals(sellerId)) {
+            throw new BusinessException(ErrorCode.SELF_BUY_OFFER_NOT_ALLOWED);
+        }
+        // ACTIVE/만료 여부 검증 및 상태 전이를 매물 생성보다 먼저 한다 - 이미 체결된 입찰이면
+        // 매물을 만들 필요 없이 여기서 바로 실패한다.
+        buyOffer.markMatched();
+        userAccessChecker.assertWritable(sellerId);
+
+        Listing listing = listingRepository.save(
+                Listing.builder()
+                        .cardId(buyOffer.getCardId())
+                        .sellerId(sellerId)
+                        .variantId(buyOffer.getVariantId())
+                        .price(buyOffer.getPrice())
+                        .grade(buyOffer.getGrade())
+                        .settlementBankName(request.settlementBankName())
+                        .settlementAccountNumber(request.settlementAccountNumber())
+                        .settlementAccountHolder(request.settlementAccountHolder())
+                        .returnRecipientName(request.returnRecipientName())
+                        .returnRecipientPhone(request.returnRecipientPhone())
+                        .returnAddress(request.returnAddress())
+                        .build()
+        );
+
+        return tradeService.createMatchedTrade(
+                listing.getId(),
+                buyOffer.getBuyerId(),
+                buyOffer.getPrice(),
+                buyOffer.getRecipientName(),
+                buyOffer.getRecipientPhone(),
+                buyOffer.getRecipientAddress(),
+                buyOffer.getTossPaymentKey(),
+                buyOffer.getPointsUsed()
+        );
     }
 
     public List<TradeSummaryResponse> getRecentTrades(Long cardId) {
