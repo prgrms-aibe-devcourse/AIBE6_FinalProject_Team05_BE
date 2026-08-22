@@ -56,7 +56,7 @@ public class AdminInquiryService {
         InquiryStatus previousStatus = inquiry.getStatus();
         inquiry.changeStatus(status);
         if (previousStatus != InquiryStatus.HANDLED && status == InquiryStatus.HANDLED) {
-            notificationService.createInquiryHandledNotification(inquiry.getUserId(), inquiry.getTitle());
+            notificationService.createInquiryHandledNotification(inquiry.getUserId(), inquiry.getId(), inquiry.getTitle());
         }
         List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(id).stream()
                 .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
@@ -71,7 +71,7 @@ public class AdminInquiryService {
         boolean isFirstAnswer = inquiry.getAnswerContent() == null;
         inquiry.answer(content);
         if (isFirstAnswer) {
-            notificationService.createInquiryHandledNotification(inquiry.getUserId(), inquiry.getTitle());
+            notificationService.createInquiryHandledNotification(inquiry.getUserId(), inquiry.getId(), inquiry.getTitle());
         }
         List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(id).stream()
                 .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))

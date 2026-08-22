@@ -12,6 +12,7 @@ public record NotificationResponse(
         String message,
         Long cardId,
         String cardImageUrl,
+        Long inquiryId,
         boolean isRead,
         LocalDateTime createdAt
 ) {
@@ -25,6 +26,7 @@ public record NotificationResponse(
                 notification.getMessage(),
                 notification.getCardId(),
                 resolveImageUrl(card),
+                notification.getInquiryId(),
                 notification.isRead(),
                 notification.getCreatedAt()
         );

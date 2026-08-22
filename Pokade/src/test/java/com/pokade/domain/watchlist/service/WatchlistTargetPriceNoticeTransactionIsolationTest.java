@@ -9,13 +9,13 @@ import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
+import com.pokade.support.AbstractIntegrationTest;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -36,11 +36,10 @@ import static org.mockito.BDDMockito.given;
 // 실제 Postgres + 실제 Spring 트랜잭션 프록시로 검증한다(mock 기반 단위 테스트로는 AOP가 개입하지 않아
 // 이 버그 자체가 재현되지 않는다).
 @DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({WatchlistTargetPriceNoticeScheduler.class, WatchlistTargetPriceNoticeProcessor.class,
         WatchlistService.class, WatchlistTargetPriceEvaluator.class, com.pokade.domain.notification.service.NotificationService.class,
         com.pokade.domain.notification.store.SseEmitterStore.class})
-class WatchlistTargetPriceNoticeTransactionIsolationTest {
+class WatchlistTargetPriceNoticeTransactionIsolationTest extends AbstractIntegrationTest {
 
     @Autowired
     private WatchlistRepository watchlistRepository;

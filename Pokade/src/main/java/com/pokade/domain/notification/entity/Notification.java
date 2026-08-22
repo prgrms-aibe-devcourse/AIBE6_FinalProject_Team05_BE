@@ -41,6 +41,11 @@ public class Notification {
     @Column(name = "card_id")
     private Long cardId;
 
+    // #338: 문의 처리 완료 알림에서 FE가 해당 문의로 바로 이동할 수 있도록 하는 참조 ID.
+    // cardId와 마찬가지로 관련 없는 알림 타입에서는 null이다.
+    @Column(name = "inquiry_id")
+    private Long inquiryId;
+
     @Column(name = "is_read", nullable = false)
     private boolean isRead;
 
@@ -49,11 +54,12 @@ public class Notification {
     private LocalDateTime createdAt;
 
     @Builder
-    public Notification(Long userId, NotificationType type, String message, Long cardId) {
+    public Notification(Long userId, NotificationType type, String message, Long cardId, Long inquiryId) {
         this.userId = userId;
         this.type = type;
         this.message = message;
         this.cardId = cardId;
+        this.inquiryId = inquiryId;
         this.isRead = false;
     }
 
