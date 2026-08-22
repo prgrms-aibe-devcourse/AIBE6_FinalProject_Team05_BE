@@ -62,6 +62,8 @@ public class WatchlistService {
             throw new BusinessException(ErrorCode.WATCHLIST_LIMIT_EXCEEDED);
         }
 
+        validateTargetPriceOrder(request.targetBuyPrice(), request.targetSellPrice());
+
         Watchlist watchlist = Watchlist.builder()
                 .userId(userId)
                 .cardId(request.cardId())
@@ -152,6 +154,16 @@ public class WatchlistService {
         Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.WATCHLIST_NOT_FOUND));
 
+        // 부분 수정이라 요청 값만 봐서는 역전을 못 잡는다 - 구매가만 올려 보내도 "기존 판매가"와 엮여
+        // 역전될 수 있으므로, updateTargetPrices()와 같은 규칙으로 최종 조합을 먼저 계산해 검증한다.
+        // 가격을 하나도 안 보낸 요청(재알림 전용)은 건드리지 않고 넘긴다 - 이번 검증이 생기기 전에
+        // 저장된 역전 데이터가 있어도 재알림 요청까지 막히지는 않게 한다.
+        if (request.targetBuyPrice() != null || request.targetSellPrice() != null) {
+            validateTargetPriceOrder(
+                    Watchlist.resolveUpdatedPrice(request.targetBuyPrice(), watchlist.getTargetBuyPrice()),
+                    Watchlist.resolveUpdatedPrice(request.targetSellPrice(), watchlist.getTargetSellPrice()));
+        }
+
         watchlist.updateTargetPrices(request.targetBuyPrice(), request.targetSellPrice());
         if (resend) {
             watchlist.requestNotificationAgain();
@@ -170,6 +182,17 @@ public class WatchlistService {
         boolean targetReached = reachedTargetPrice != null;
         watchlistTargetPriceEvaluator.notifyIfNewlyReached(watchlist, reachedTargetPrice);
         return WatchlistResponse.of(watchlist, targetReached);
+    }
+
+    // #238: 목표 구매가가 판매가 이상이면 두 목표가가 한 체결가에 동시에 걸려 알림이 의미를 잃는다.
+    // 한쪽만 설정된 경우는 애초에 역전이 성립하지 않으므로 통과시킨다.
+    private void validateTargetPriceOrder(Integer targetBuyPrice, Integer targetSellPrice) {
+        if (targetBuyPrice == null || targetSellPrice == null) {
+            return;
+        }
+        if (targetBuyPrice >= targetSellPrice) {
+            throw new BusinessException(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+        }
     }
 
     private void validateAtLeastOneTargetPrice(Integer targetBuyPrice, Integer targetSellPrice) {

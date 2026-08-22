@@ -21,6 +21,9 @@ import java.util.Objects;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Watchlist {
 
+    // #238: 목표가 상한. DTO의 @Max와 같은 값을 두 군데 적지 않도록 도메인 엔티티에 단일 정의한다.
+    public static final int MAX_TARGET_PRICE = 100_000_000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -94,8 +97,8 @@ public class Watchlist {
     // null로 온 필드는 "값을 지운다"가 아니라 "기존 값 유지"로 해석한다 - 부분 업데이트를 지원하기
     // 위함. 두 필드를 한꺼번에 지우는 기능은 없음(전체 삭제는 DELETE로만 가능).
     public void updateTargetPrices(Integer targetBuyPrice, Integer targetSellPrice) {
-        Integer resolvedBuyPrice = targetBuyPrice != null ? targetBuyPrice : this.targetBuyPrice;
-        Integer resolvedSellPrice = targetSellPrice != null ? targetSellPrice : this.targetSellPrice;
+        Integer resolvedBuyPrice = resolveUpdatedPrice(targetBuyPrice, this.targetBuyPrice);
+        Integer resolvedSellPrice = resolveUpdatedPrice(targetSellPrice, this.targetSellPrice);
         // 목표가가 실제로 바뀐 경우에만 isNotified를 리셋한다 - 이미 알림이 간 목표가를 그대로 재저장하는
         // no-op 수정에서는 배치가 불필요하게 재알림을 보내지 않도록 한다.
         boolean changed = !Objects.equals(this.targetBuyPrice, resolvedBuyPrice)
@@ -105,5 +108,12 @@ public class Watchlist {
         if (changed) {
             resetNotification();
         }
+    }
+
+    // 위 "null = 기존 값 유지" 규칙을 밖에서도 쓸 수 있게 노출한다(#238) - WatchlistService가 수정 요청을
+    // 반영하기 "전에" 최종 목표가 조합을 미리 계산해 역전 여부를 검증하는데, 그 계산이 여기 규칙과
+    // 어긋나면 검증을 통과한 값과 실제 저장되는 값이 달라진다.
+    public static Integer resolveUpdatedPrice(Integer requested, Integer current) {
+        return requested != null ? requested : current;
     }
 }

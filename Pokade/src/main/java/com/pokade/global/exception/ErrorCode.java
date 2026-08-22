@@ -90,6 +90,7 @@ public enum ErrorCode {
     DUPLICATE_WATCHLIST(HttpStatus.CONFLICT, "이미 등록된 카드입니다."),
     TARGET_PRICE_REQUIRED(HttpStatus.BAD_REQUEST, "목표 구매가 또는 판매가 중 하나는 입력해야 합니다."),
     WATCHLIST_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "워치리스트는 최대 20개까지 등록할 수 있습니다."),
+    INVALID_TARGET_PRICE_RANGE(HttpStatus.BAD_REQUEST, "목표 구매가는 목표 판매가보다 낮아야 합니다."),
     NOTIFICATION_ALREADY_READ(HttpStatus.BAD_REQUEST, "이미 읽음 처리된 알림입니다."),
 
     // ===== 포트폴리오 =====

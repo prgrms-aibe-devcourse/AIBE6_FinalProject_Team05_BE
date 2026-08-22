@@ -122,6 +122,76 @@ class WatchlistServiceTest {
         then(watchlistRepository).should(never()).save(any());
     }
 
+    // ===== #238 목표가 역전 검증 =====
+    @Test
+    @DisplayName("등록: 목표 구매가가 판매가보다 높으면 INVALID_TARGET_PRICE_RANGE")
+    void addWatchlist_invertedTargetPrices() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 5000, 3000);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+        then(watchlistRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("등록: 목표 구매가와 판매가가 같아도 INVALID_TARGET_PRICE_RANGE(구매가는 판매가보다 낮아야 한다)")
+    void addWatchlist_equalTargetPrices() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 3000, 3000);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+    }
+
+    @Test
+    @DisplayName("등록: 한쪽 목표가만 있으면 역전이 성립하지 않아 그대로 저장된다")
+    void addWatchlist_onlyOneTargetPrice_passes() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, null, 3000);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.targetSellPrice()).isEqualTo(3000);
+        then(watchlistRepository).should().save(any(Watchlist.class));
+    }
+
+    @Test
+    @DisplayName("수정: 구매가만 올려 보내도 기존 판매가와 역전되면 INVALID_TARGET_PRICE_RANGE")
+    void updateWatchlist_invertedAgainstStoredSellPrice() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(1000).targetSellPrice(3000)
+                .build();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(5000, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+        // 검증에서 막혔으므로 엔티티 값도 그대로여야 한다.
+        assertThat(target.getTargetBuyPrice()).isEqualTo(1000);
+    }
+
+    @Test
+    @DisplayName("수정: 가격을 안 보낸 재알림 전용 요청은 기존 값이 역전 상태여도 통과한다")
+    void updateWatchlist_resendOnly_skipsOrderValidation() {
+        // 이번 검증이 생기기 전에 저장된 역전 데이터를 재현한다.
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(5000).targetSellPrice(3000)
+                .build();
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(null, null, true));
+
+        assertThat(response.isNotified()).isFalse();
+    }
+
     @Test
     @DisplayName("등록: 검증 통과하면 저장 후 WatchlistResponse 반환")
     void addWatchlist_success() {
