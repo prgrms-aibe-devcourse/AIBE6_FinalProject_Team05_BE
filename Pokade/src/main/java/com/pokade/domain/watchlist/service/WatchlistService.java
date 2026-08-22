@@ -90,28 +90,35 @@ public class WatchlistService {
                 .targetSellPrice(request.targetSellPrice())
                 .build();
 
+        // catch 범위는 저장 한 줄로 좁혀 둔다. 예전에는 아래 시세 조회·알림 생성까지 같은 try 안에 있어서,
+        // 알림 쪽에서 난 무결성 오류까지 "이미 등록된 카드입니다"로 뒤집어씌워졌다(워치리스트는 이미
+        // 저장에 성공했는데도) - 오분류를 막으려면 변환 대상 구간이 딱 저장이어야 한다.
         // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
         // 카드/변형 존재 여부는 위에서 먼저 검증하므로 여기 남는 건 사실상 UNIQUE(user_id, card_id) 위반이다.
+        // save()만으로 충분한 이유: id가 IDENTITY라 Hibernate가 키를 받으려고 INSERT를 즉시 실행하고,
+        // UNIQUE 제약도 DEFERRABLE이 아니라 그 문장에서 바로 검사된다(커밋까지 미뤄지지 않는다).
+        // 생성 전략을 SEQUENCE로 바꾸면 위반이 커밋 시점으로 밀려 이 catch를 빠져나가므로 saveAndFlush가 필요해진다.
+        Watchlist saved;
         try {
-            Watchlist saved = watchlistRepository.save(watchlist);
-
-            // TODO(#275): updateWatchlist()/getWatchlist()와 같은 원인(전체 기간 range 사용)을 공유하지만,
-            // "등록 시점에 이미 도달이면 배치를 기다리지 않고 즉시 알림"이라는 의도된 최적화(아래 주석)와
-            // 상충할 수 있어 이번엔 범위에서 제외함 - 등록 이후 스코프로 바꿀지는 별도 논의 필요.
-            PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
-                    .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
-                    .stream()
-                    .findFirst()
-                    .orElse(null);
-            Integer reachedTargetPrice = watchlistTargetPriceEvaluator.resolveReachedTargetPrice(saved, range);
-            boolean targetReached = reachedTargetPrice != null;
-            // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
-            // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
-            watchlistTargetPriceEvaluator.notifyIfNewlyReached(saved, reachedTargetPrice);
-            return WatchlistResponse.of(saved, targetReached);
+            saved = watchlistRepository.save(watchlist);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
+
+        // TODO(#275): updateWatchlist()/getWatchlist()와 같은 원인(전체 기간 range 사용)을 공유하지만,
+        // "등록 시점에 이미 도달이면 배치를 기다리지 않고 즉시 알림"이라는 의도된 최적화(아래 주석)와
+        // 상충할 수 있어 이번엔 범위에서 제외함 - 등록 이후 스코프로 바꿀지는 별도 논의 필요.
+        PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
+                .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        Integer reachedTargetPrice = watchlistTargetPriceEvaluator.resolveReachedTargetPrice(saved, range);
+        boolean targetReached = reachedTargetPrice != null;
+        // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
+        // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
+        watchlistTargetPriceEvaluator.notifyIfNewlyReached(saved, reachedTargetPrice);
+        return WatchlistResponse.of(saved, targetReached);
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {

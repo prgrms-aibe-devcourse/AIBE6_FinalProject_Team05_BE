@@ -344,6 +344,26 @@ class WatchlistServiceTest {
     }
 
     @Test
+    @DisplayName("등록: 저장 성공 후 알림 처리에서 무결성 오류가 나면 DUPLICATE_WATCHLIST로 바꾸지 않고 그대로 전파한다")
+    void addWatchlist_notificationFailure_isNotMisreportedAsDuplicate() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 2000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(1L, 1800, 2200)));
+        // 워치리스트 저장은 이미 성공한 뒤, 알림 처리(markAsNotifiedIfNotYet)에서 무결성 오류가 나는 상황.
+        given(watchlistRepository.markAsNotifiedIfNotYet(any()))
+                .willThrow(new DataIntegrityViolationException("notification constraint violation"));
+
+        // 예전에는 이 예외까지 같은 try에 잡혀 "이미 등록된 카드입니다"로 나갔다.
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        then(watchlistRepository).should().save(any(Watchlist.class));
+    }
+
+    @Test
     @DisplayName("등록: 체결가가 목표가 구간 밖이면 targetReached/isNotified 모두 false로 유지된다")
     void addWatchlist_targetNotReached_keepsNotifiedFalse() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 9000, null);
