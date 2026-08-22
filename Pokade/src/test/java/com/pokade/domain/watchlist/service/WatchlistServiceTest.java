@@ -256,6 +256,54 @@ class WatchlistServiceTest {
     }
 
     @Test
+    @DisplayName("수정: 역전 데이터에 기존과 똑같은 값을 되보내면(no-op) 차단되지 않는다")
+    void updateWatchlist_noOpOnInvertedData_passes() {
+        // 검증 도입 전에 저장된 역전 데이터. 예전에는 "가격 필드가 왔는지"로 판정해서, 값이 그대로여도
+        // 400이 났다(재알림만 보내면 200 - 같은 의도인데 요청 모양에 따라 결과가 갈리던 문제).
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(5000).targetSellPrice(3000)
+                .build();
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(5000, 3000, null));
+
+        assertThat(response.targetBuyPrice()).isEqualTo(5000);
+        assertThat(response.targetSellPrice()).isEqualTo(3000);
+        // 값이 안 바뀌었으므로 isNotified도 유지된다.
+        assertThat(response.isNotified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("수정: 역전 데이터에 재알림을 함께 요청해도 값이 그대로면 통과한다(재알림 전용 요청과 동일 결과)")
+    void updateWatchlist_noOpWithResendOnInvertedData_passes() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(5000).targetSellPrice(3000)
+                .build();
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(5000, 3000, true));
+
+        assertThat(response.isNotified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수정: 역전 데이터라도 값을 실제로 바꾸면 여전히 INVALID_TARGET_PRICE_RANGE로 차단된다")
+    void updateWatchlist_actualChangeOnInvertedData_stillBlocked() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(5000).targetSellPrice(3000)
+                .build();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(7000, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+        // 검증에서 막혔으므로 엔티티 값은 그대로여야 한다.
+        assertThat(target.getTargetBuyPrice()).isEqualTo(5000);
+    }
+
+    @Test
     @DisplayName("등록: 검증 통과하면 저장 후 WatchlistResponse 반환")
     void addWatchlist_success() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 2L, 1000, null);
