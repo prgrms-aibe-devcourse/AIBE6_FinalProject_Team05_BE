@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
@@ -40,6 +41,7 @@ public class WatchlistService {
     private final WatchlistRepository watchlistRepository;
     private final PriceService priceService;
     private final CardRepository cardRepository;
+    private final CardVariantRepository cardVariantRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
     private final CardNameKoResolver cardNameKoResolver;
     private final WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator;
@@ -54,6 +56,22 @@ public class WatchlistService {
         // 트랜잭션 종료까지 직렬화한다(다른 유저는 영향 없음).
         watchlistRepository.acquireUserLock(userId);
 
+        // SEC-B1: 존재하지 않는 카드는 여기서 걸러낸다. 이 검증이 없으면 저장 시점에 card_id FK 위반으로
+        // DataIntegrityViolationException이 나고, 아래 catch가 그걸 UNIQUE 위반과 구분하지 못해
+        // "이미 등록된 카드입니다"라는 엉뚱한 원인을 안내하게 된다(ListingService.getOrderbook()과 동일한 패턴).
+        if (!cardRepository.existsById(request.cardId())) {
+            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+        }
+
+        // card_id와 같은 이유로 variant_id FK 위반도 미리 걸러낸다. variantId가 null인 건 "대표 변형 기준"이라는
+        // 정상 입력이므로(WatchlistVariantResolver 참고) 값이 있을 때만 검증한다.
+        // 존재 여부만이 아니라 "이 카드의 변형인지"까지 본다 - FK는 card_variants(id)만 참조해서 다른 카드의
+        // 변형 id를 보내면 제약에 걸리지 않고 그대로 저장되기 때문이다(오분류가 아니라 잘못된 데이터가 남는 문제).
+        if (request.variantId() != null
+                && !cardVariantRepository.existsByIdAndCardId(request.variantId(), request.cardId())) {
+            throw new BusinessException(ErrorCode.VARIANT_NOT_FOUND);
+        }
+
         if (watchlistRepository.existsByUserIdAndCardId(userId, request.cardId())) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
@@ -61,6 +79,8 @@ public class WatchlistService {
         if (watchlistRepository.countByUserId(userId) >= WATCHLIST_LIMIT) {
             throw new BusinessException(ErrorCode.WATCHLIST_LIMIT_EXCEEDED);
         }
+
+        Watchlist.validateTargetPriceOrder(request.targetBuyPrice(), request.targetSellPrice());
 
         Watchlist watchlist = Watchlist.builder()
                 .userId(userId)
@@ -70,27 +90,35 @@ public class WatchlistService {
                 .targetSellPrice(request.targetSellPrice())
                 .build();
 
+        // catch 범위는 저장 한 줄로 좁혀 둔다. 예전에는 아래 시세 조회·알림 생성까지 같은 try 안에 있어서,
+        // 알림 쪽에서 난 무결성 오류까지 "이미 등록된 카드입니다"로 뒤집어씌워졌다(워치리스트는 이미
+        // 저장에 성공했는데도) - 오분류를 막으려면 변환 대상 구간이 딱 저장이어야 한다.
         // 위 잠금으로 정상 경로에서는 걸릴 일이 없지만, 방어적으로 DB UNIQUE 제약 위반도 안전하게 변환한다.
+        // 카드/변형 존재 여부는 위에서 먼저 검증하므로 여기 남는 건 사실상 UNIQUE(user_id, card_id) 위반이다.
+        // save()만으로 충분한 이유: id가 IDENTITY라 Hibernate가 키를 받으려고 INSERT를 즉시 실행하고,
+        // UNIQUE 제약도 DEFERRABLE이 아니라 그 문장에서 바로 검사된다(커밋까지 미뤄지지 않는다).
+        // 생성 전략을 SEQUENCE로 바꾸면 위반이 커밋 시점으로 밀려 이 catch를 빠져나가므로 saveAndFlush가 필요해진다.
+        Watchlist saved;
         try {
-            Watchlist saved = watchlistRepository.save(watchlist);
-
-            // TODO(#275): updateWatchlist()/getWatchlist()와 같은 원인(전체 기간 range 사용)을 공유하지만,
-            // "등록 시점에 이미 도달이면 배치를 기다리지 않고 즉시 알림"이라는 의도된 최적화(아래 주석)와
-            // 상충할 수 있어 이번엔 범위에서 제외함 - 등록 이후 스코프로 바꿀지는 별도 논의 필요.
-            PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
-                    .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
-                    .stream()
-                    .findFirst()
-                    .orElse(null);
-            Integer reachedTargetPrice = watchlistTargetPriceEvaluator.resolveReachedTargetPrice(saved, range);
-            boolean targetReached = reachedTargetPrice != null;
-            // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
-            // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
-            watchlistTargetPriceEvaluator.notifyIfNewlyReached(saved, reachedTargetPrice);
-            return WatchlistResponse.of(saved, targetReached);
+            saved = watchlistRepository.save(watchlist);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.DUPLICATE_WATCHLIST);
         }
+
+        // TODO(#275): updateWatchlist()/getWatchlist()와 같은 원인(전체 기간 range 사용)을 공유하지만,
+        // "등록 시점에 이미 도달이면 배치를 기다리지 않고 즉시 알림"이라는 의도된 최적화(아래 주석)와
+        // 상충할 수 있어 이번엔 범위에서 제외함 - 등록 이후 스코프로 바꿀지는 별도 논의 필요.
+        PriceTradeStatsRepository.CardPriceRangeView range = priceTradeStatsRepository
+                .findPriceRangesByCardIds(List.of(saved.getCardId()), null, TradeStatus.COMPLETED)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        Integer reachedTargetPrice = watchlistTargetPriceEvaluator.resolveReachedTargetPrice(saved, range);
+        boolean targetReached = reachedTargetPrice != null;
+        // 등록 시점에 이미 목표가 범위 안이면 배치(최대 1시간 지연)를 기다리지 않고 바로 알림 처리한다 -
+        // 화면은 "도달"인데 실제 알림은 한참 뒤에 오는 시차, 그리고 알림 자체가 생성 안 되는 누락을 없애기 위함.
+        watchlistTargetPriceEvaluator.notifyIfNewlyReached(saved, reachedTargetPrice);
+        return WatchlistResponse.of(saved, targetReached);
     }
 
     public List<WatchlistResponse> getWatchlist(Long userId) {
@@ -152,6 +180,9 @@ public class WatchlistService {
         Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.WATCHLIST_NOT_FOUND));
 
+        // 역전 검증은 updateTargetPrices() 안에서 "값이 실제로 바뀔 때"만 수행된다 - 부분 수정이라
+        // 요청 값만 봐서는 역전을 못 잡고(구매가만 올려 보내도 기존 판매가와 엮여 역전될 수 있다),
+        // 최종 조합과 변경 여부를 아는 곳이 엔티티뿐이라 판정을 그쪽으로 합쳤다.
         watchlist.updateTargetPrices(request.targetBuyPrice(), request.targetSellPrice());
         if (resend) {
             watchlist.requestNotificationAgain();

@@ -294,7 +294,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("문의 처리 완료 알림 생성: INQUIRY_HANDLED 타입으로 저장하고, 커밋 이후 푸시를 위한 이벤트를 발행한다")
     void createInquiryHandledNotification_savesAndPublishesEvent() {
-        notificationService.createInquiryHandledNotification(1L, "결제 문의");
+        notificationService.createInquiryHandledNotification(1L, 7L, "결제 문의");
 
         ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
         then(notificationRepository).should().save(notificationCaptor.capture());
@@ -303,11 +303,13 @@ class NotificationServiceTest {
         assertThat(saved.getType()).isEqualTo(NotificationType.INQUIRY_HANDLED);
         assertThat(saved.getMessage()).contains("결제 문의");
         assertThat(saved.getCardId()).isNull();
+        assertThat(saved.getInquiryId()).isEqualTo(7L);
 
         ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
         then(eventPublisher).should().publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().userId()).isEqualTo(1L);
         assertThat(eventCaptor.getValue().response().type()).isEqualTo(NotificationType.INQUIRY_HANDLED);
+        assertThat(eventCaptor.getValue().response().inquiryId()).isEqualTo(7L);
 
         // 이벤트 발행 시점엔 아직 커밋 전이므로, 이 메서드 자체는 Emitter로 직접 전송하지 않는다.
         then(sseEmitterStore).should(never()).findByUserId(any());
@@ -317,7 +319,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 있으면 notification 이벤트를 전송한다")
     void onNotificationPush_pushes_to_subscriber() throws Exception {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, false, null);
+        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
         SseEmitter emitter = mock(SseEmitter.class);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
@@ -329,7 +331,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 없으면 예외 없이 조용히 스킵된다")
     void onNotificationPush_no_subscriber_noop() {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, false, null);
+        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of());
 
         assertThatCode(() -> notificationService.onNotificationPush(new NotificationPushEvent(1L, response)))
