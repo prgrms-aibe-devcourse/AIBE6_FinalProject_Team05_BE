@@ -25,7 +25,6 @@ import com.pokade.global.web.PageableValidator;
 
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,7 +35,6 @@ import java.util.Set;
 import java.util.function.Function;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 카드 검색/상세/유사 카드 조회 등 "조회" 책임만 담당한다. 필터 옵션 집계(카드 수 카운트)는
@@ -72,13 +70,8 @@ public class CardQueryService {
     private final PokedexKoNameRepository pokedexKoNameRepository;
     private final CardNameKoResolver cardNameKoResolver;
 
-    // Actuator/Prometheus 로컬 실험용 계측 - 커밋 대상 아님.
-    // final이 아니라 Lombok @RequiredArgsConstructor 생성 대상에서 빠져 기존 테스트(@InjectMocks) 영향 없음.
-    // required = false: @DataJpaTest 등 슬라이스 테스트엔 MeterRegistry 빈이 없어 NoSuchBeanDefinitionException으로
-    // 컨텍스트 로딩 자체가 깨졌다(#224). 매칭되는 빈이 없으면 Spring이 필드를 건드리지 않고 그대로 두므로
-    // (value == null이면 field.set() 자체를 안 함), 아래 기본값(SimpleMeterRegistry)이 계속 살아남아 null이 되지 않는다.
-    @Autowired(required = false)
-    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    // 계측 주입 규칙은 support/TestMetricsConfig javadoc 참조(#343).
+    private final MeterRegistry meterRegistry;
 
     /**
      * languages 없이 호출하는 기존 오버로드 - #263 이전부터 있던 호출부(테스트 다수 포함)가
@@ -98,7 +91,7 @@ public class CardQueryService {
         return search(null, types, rarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
     }
 
-    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+    // 운영 계측 - #217 도입, card 대시보드가 사용 중
     // #263: language(언어 코드, 예 EN/JA) 필터 추가 - types/rarity와 동일하게 값 화이트리스트 없이
     // 사이즈 검증만 한다(바인드 IN절이라 애초에 인젝션 여지가 없고, DB에 실제 존재하는 값과 무관하게
     // 빈 결과로 안전하게 좁혀지므로 신규 언어코드가 추가돼도 서비스가 깨지지 않는다).
@@ -150,7 +143,7 @@ public class CardQueryService {
         Card card = cardRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
         cardRepository.incrementViewCount(id);
-        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+        // 운영 계측 - #217 도입, card 대시보드가 사용 중
         meterRegistry.counter("card.view.increment.calls").increment();
         // incrementViewCount()는 벌크 UPDATE라 위에서 조회해 둔 card 엔티티의 메모리 값에는 반영되지
         // 않는다(영속성 컨텍스트를 거치지 않음) - 그래서 "이번 방문으로 +1된" 값을 직접 계산해서 응답에
@@ -340,7 +333,7 @@ public class CardQueryService {
         if (cards.isEmpty()) {
             return Map.of();
         }
-        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+        // 운영 계측 - #217 도입, card 대시보드가 사용 중
         meterRegistry.counter("card.grade.batch.calls").increment();
         List<Long> cardIds = cards.stream().map(Card::getId).toList();
         return groupByKey(cardRepository.findGradesByCardIds(cardIds, GRADE_WHITELIST_LIST),

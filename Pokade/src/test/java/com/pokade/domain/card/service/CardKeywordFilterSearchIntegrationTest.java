@@ -19,6 +19,7 @@ import com.pokade.domain.card.entity.PokedexKoName;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.card.support.PokedexKoNameCache;
 import com.pokade.support.AbstractIntegrationTest;
+import com.pokade.support.TestMetricsConfig;
 
 import jakarta.persistence.EntityManager;
 
@@ -34,7 +35,7 @@ import jakarta.persistence.EntityManager;
  * ③ 필터+정확일치 0건, 필터 없이도 0건(키워드 자체가 애매) → 유사도 폴백 탐, 폴백 결과에도 필터 적용됨.
  */
 @DataJpaTest
-@Import({CardNameKoResolver.class, PokedexKoNameCache.class, CardQueryService.class})
+@Import({CardNameKoResolver.class, PokedexKoNameCache.class, CardQueryService.class, TestMetricsConfig.class})
 class CardKeywordFilterSearchIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired

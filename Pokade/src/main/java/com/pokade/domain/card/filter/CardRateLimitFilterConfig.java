@@ -16,7 +16,7 @@ import org.springframework.core.Ordered;
 @Configuration
 public class CardRateLimitFilterConfig {
 
-    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님 (MeterRegistry 주입)
+    // 운영 계측 - #217 도입, card 대시보드가 사용 중 (MeterRegistry 주입)
     @Bean
     public FilterRegistrationBean<CardRateLimitFilter> cardRateLimitFilterRegistration(MeterRegistry meterRegistry) {
         FilterRegistrationBean<CardRateLimitFilter> registration = new FilterRegistrationBean<>();
