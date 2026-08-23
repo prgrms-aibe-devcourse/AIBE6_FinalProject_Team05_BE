@@ -2,6 +2,7 @@ package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
@@ -49,6 +50,7 @@ class WatchlistServiceTest {
     @Mock WatchlistRepository watchlistRepository;
     @Mock PriceService priceService;
     @Mock CardRepository cardRepository;
+    @Mock CardVariantRepository cardVariantRepository;
     @Mock PriceTradeStatsRepository priceTradeStatsRepository;
     @Mock CardNameKoResolver cardNameKoResolver;
     @Mock NotificationService notificationService;
@@ -62,7 +64,7 @@ class WatchlistServiceTest {
         WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator =
                 new WatchlistTargetPriceEvaluator(watchlistRepository, cardRepository, notificationService, cardNameKoResolver, new SimpleMeterRegistry());
         watchlistService = new WatchlistService(
-                watchlistRepository, priceService, cardRepository, priceTradeStatsRepository, cardNameKoResolver, watchlistTargetPriceEvaluator);
+                watchlistRepository, priceService, cardRepository, cardVariantRepository, priceTradeStatsRepository, cardNameKoResolver, watchlistTargetPriceEvaluator);
     }
 
     private Watchlist watchlist(Long userId, Long cardId) {
@@ -84,6 +86,7 @@ class WatchlistServiceTest {
     @DisplayName("등록: #308 목표가는 선택 입력 - 둘 다 null이어도 정상 등록된다")
     void addWatchlist_bothTargetPricesNull_success() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, null, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -99,9 +102,65 @@ class WatchlistServiceTest {
     }
 
     @Test
+    @DisplayName("등록: 존재하지 않는 카드면 CARD_NOT_FOUND (DUPLICATE_WATCHLIST로 오분류되지 않는다)")
+    void addWatchlist_cardNotFound() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(999L, null, 1000, null);
+        given(cardRepository.existsById(999L)).willReturn(false);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.CARD_NOT_FOUND);
+        // FK 위반으로 저장까지 가지 않고 사전에 차단돼야 한다.
+        then(watchlistRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("등록: 존재하지 않는 variantId면 VARIANT_NOT_FOUND (DUPLICATE_WATCHLIST로 오분류되지 않는다)")
+    void addWatchlist_variantNotFound() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 999L, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.existsByIdAndCardId(999L, 1L)).willReturn(false);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.VARIANT_NOT_FOUND);
+        then(watchlistRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("등록: 존재하지만 다른 카드에 속한 variantId면 VARIANT_NOT_FOUND (FK로는 안 걸리는 케이스)")
+    void addWatchlist_variantOfAnotherCard() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 2L, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        // variant 2는 실제로 존재하지만 카드 1의 것이 아니다 - existsById였다면 통과했을 조합.
+        given(cardVariantRepository.existsByIdAndCardId(2L, 1L)).willReturn(false);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.VARIANT_NOT_FOUND);
+        then(watchlistRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("등록: variantId가 null이면(대표 변형 기준) 변형 존재 검증을 하지 않는다")
+    void addWatchlist_nullVariantId_skipsVariantCheck() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.variantId()).isNull();
+        then(cardVariantRepository).should(never()).existsByIdAndCardId(any(), any());
+    }
+
+    @Test
     @DisplayName("등록: 이미 등록된 카드면 DUPLICATE_WATCHLIST")
     void addWatchlist_duplicate() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(true);
 
         assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
@@ -114,6 +173,7 @@ class WatchlistServiceTest {
     @DisplayName("등록: 20개 이미 등록했으면 WATCHLIST_LIMIT_EXCEEDED")
     void addWatchlist_limitExceeded() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(20L);
 
@@ -123,10 +183,133 @@ class WatchlistServiceTest {
         then(watchlistRepository).should(never()).save(any());
     }
 
+    // ===== #238 목표가 역전 검증 =====
+    @Test
+    @DisplayName("등록: 목표 구매가가 판매가보다 높으면 INVALID_TARGET_PRICE_RANGE")
+    void addWatchlist_invertedTargetPrices() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 5000, 3000);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+        then(watchlistRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("등록: 목표 구매가와 판매가가 같아도 INVALID_TARGET_PRICE_RANGE(구매가는 판매가보다 낮아야 한다)")
+    void addWatchlist_equalTargetPrices() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 3000, 3000);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+    }
+
+    @Test
+    @DisplayName("등록: 한쪽 목표가만 있으면 역전이 성립하지 않아 그대로 저장된다")
+    void addWatchlist_onlyOneTargetPrice_passes() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, null, 3000);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        WatchlistResponse response = watchlistService.addWatchlist(1L, request);
+
+        assertThat(response.targetSellPrice()).isEqualTo(3000);
+        then(watchlistRepository).should().save(any(Watchlist.class));
+    }
+
+    @Test
+    @DisplayName("수정: 구매가만 올려 보내도 기존 판매가와 역전되면 INVALID_TARGET_PRICE_RANGE")
+    void updateWatchlist_invertedAgainstStoredSellPrice() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(1000).targetSellPrice(3000)
+                .build();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(5000, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+        // 검증에서 막혔으므로 엔티티 값도 그대로여야 한다.
+        assertThat(target.getTargetBuyPrice()).isEqualTo(1000);
+    }
+
+    @Test
+    @DisplayName("수정: 가격을 안 보낸 재알림 전용 요청은 기존 값이 역전 상태여도 통과한다")
+    void updateWatchlist_resendOnly_skipsOrderValidation() {
+        // 이번 검증이 생기기 전에 저장된 역전 데이터를 재현한다.
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(5000).targetSellPrice(3000)
+                .build();
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(null, null, true));
+
+        assertThat(response.isNotified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수정: 역전 데이터에 기존과 똑같은 값을 되보내면(no-op) 차단되지 않는다")
+    void updateWatchlist_noOpOnInvertedData_passes() {
+        // 검증 도입 전에 저장된 역전 데이터. 예전에는 "가격 필드가 왔는지"로 판정해서, 값이 그대로여도
+        // 400이 났다(재알림만 보내면 200 - 같은 의도인데 요청 모양에 따라 결과가 갈리던 문제).
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(5000).targetSellPrice(3000)
+                .build();
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(5000, 3000, null));
+
+        assertThat(response.targetBuyPrice()).isEqualTo(5000);
+        assertThat(response.targetSellPrice()).isEqualTo(3000);
+        // 값이 안 바뀌었으므로 isNotified도 유지된다.
+        assertThat(response.isNotified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("수정: 역전 데이터에 재알림을 함께 요청해도 값이 그대로면 통과한다(재알림 전용 요청과 동일 결과)")
+    void updateWatchlist_noOpWithResendOnInvertedData_passes() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(5000).targetSellPrice(3000)
+                .build();
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(5000, 3000, true));
+
+        assertThat(response.isNotified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수정: 역전 데이터라도 값을 실제로 바꾸면 여전히 INVALID_TARGET_PRICE_RANGE로 차단된다")
+    void updateWatchlist_actualChangeOnInvertedData_stillBlocked() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(5000).targetSellPrice(3000)
+                .build();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(7000, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_TARGET_PRICE_RANGE);
+        // 검증에서 막혔으므로 엔티티 값은 그대로여야 한다.
+        assertThat(target.getTargetBuyPrice()).isEqualTo(5000);
+    }
+
     @Test
     @DisplayName("등록: 검증 통과하면 저장 후 WatchlistResponse 반환")
     void addWatchlist_success() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, 2L, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.existsByIdAndCardId(2L, 1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -144,6 +327,7 @@ class WatchlistServiceTest {
     @DisplayName("등록: 등록 시점에 이미 체결가가 목표가 구간 안이면 targetReached=true와 isNotified=true가 함께 반영된다")
     void addWatchlist_targetAlreadyReached_marksAsNotified() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 2000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -161,9 +345,30 @@ class WatchlistServiceTest {
     }
 
     @Test
+    @DisplayName("등록: 저장 성공 후 알림 처리에서 무결성 오류가 나면 DUPLICATE_WATCHLIST로 바꾸지 않고 그대로 전파한다")
+    void addWatchlist_notificationFailure_isNotMisreportedAsDuplicate() {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 2000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
+        given(watchlistRepository.countByUserId(1L)).willReturn(0L);
+        given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(priceTradeStatsRepository.findPriceRangesByCardIds(List.of(1L), null, TradeStatus.COMPLETED))
+                .willReturn(List.of(new PriceRange(1L, 1800, 2200)));
+        // 워치리스트 저장은 이미 성공한 뒤, 알림 처리(markAsNotifiedIfNotYet)에서 무결성 오류가 나는 상황.
+        given(watchlistRepository.markAsNotifiedIfNotYet(any()))
+                .willThrow(new DataIntegrityViolationException("notification constraint violation"));
+
+        // 예전에는 이 예외까지 같은 try에 잡혀 "이미 등록된 카드입니다"로 나갔다.
+        assertThatThrownBy(() -> watchlistService.addWatchlist(1L, request))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        then(watchlistRepository).should().save(any(Watchlist.class));
+    }
+
+    @Test
     @DisplayName("등록: 체결가가 목표가 구간 밖이면 targetReached/isNotified 모두 false로 유지된다")
     void addWatchlist_targetNotReached_keepsNotifiedFalse() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 9000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -181,6 +386,7 @@ class WatchlistServiceTest {
     @DisplayName("등록: 목표가 도달했지만 카드를 찾지 못하면 알림 생성은 스킵되고 targetReached/isNotified는 정상 반영된다")
     void addWatchlist_targetReachedButCardNotFound_skipsNotification() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 2000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -200,6 +406,7 @@ class WatchlistServiceTest {
     @DisplayName("등록: 사전 체크를 통과했지만 저장 시점에 DB UNIQUE 제약을 위반하면(동시 등록 경합) DUPLICATE_WATCHLIST로 변환된다")
     void addWatchlist_saveThrowsDataIntegrityViolation_convertsToDuplicateWatchlist() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 1000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class)))
@@ -214,6 +421,7 @@ class WatchlistServiceTest {
     @DisplayName("등록: variantId가 null이어도 정상 등록된다")
     void addWatchlist_success_variantIdNull() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 10000, null);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -228,6 +436,7 @@ class WatchlistServiceTest {
     @DisplayName("등록: targetSellPrice만 있어도 정상 등록된다")
     void addWatchlist_success_targetSellPriceOnly() {
         WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, null, 5000);
+        given(cardRepository.existsById(1L)).willReturn(true);
         given(watchlistRepository.existsByUserIdAndCardId(1L, 1L)).willReturn(false);
         given(watchlistRepository.countByUserId(1L)).willReturn(0L);
         given(watchlistRepository.save(any(Watchlist.class))).willAnswer(invocation -> invocation.getArgument(0));

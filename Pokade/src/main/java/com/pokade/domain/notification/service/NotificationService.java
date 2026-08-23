@@ -153,11 +153,12 @@ public class NotificationService {
     // 커밋 전에 푸시하면 이후 같은 트랜잭션 안에서 다른 작업이 실패해 롤백되는 경우, 유저는 이미 알림을
     // 받았는데 문의 상태/알림 레코드는 존재하지 않는 불일치가 생긴다.
     @Transactional
-    public void createInquiryHandledNotification(Long userId, String inquiryTitle) {
+    public void createInquiryHandledNotification(Long userId, Long inquiryId, String inquiryTitle) {
         Notification notification = Notification.builder()
                 .userId(userId)
                 .type(NotificationType.INQUIRY_HANDLED)
                 .message(String.format("'%s' 문의가 처리 완료되었습니다.", inquiryTitle))
+                .inquiryId(inquiryId)
                 .build();
 
         notificationRepository.save(notification);

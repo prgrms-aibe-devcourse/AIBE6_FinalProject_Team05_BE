@@ -1,6 +1,7 @@
 package com.pokade.domain.watchlist.service;
 
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
@@ -32,11 +33,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 
 // WatchlistService.addWatchlist()의 동시 등록 방어(유저 단위 잠금 + UNIQUE 위반 변환)를 실제 DB로 검증한다.
 // 여기서 검증하는 중복/제한 체크는 targetReached(체결가 조회) 결과와 무관하고, mock인 PriceTradeStatsRepository는
-// 기본값(빈 리스트)만 반환해 항상 targetReached=false로 끝나므로(CardRepository/NotificationService 호출 없음)
+// 기본값(빈 리스트)만 반환해 항상 targetReached=false로 끝나므로(NotificationService 호출 없음 - CardRepository는
+// SEC-B1 존재 검증 때문에 호출되므로 아래에서 existsById만 스텁한다)
 // WatchlistRepository만 진짜로 연결하고 나머지는 mock으로 채운 WatchlistService를 직접 생성해 사용한다.
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -53,12 +57,17 @@ class WatchlistConcurrencyTest {
 
     private WatchlistService newWatchlistService() {
         CardRepository cardRepository = mock(CardRepository.class);
+        // SEC-B1로 addWatchlist()가 카드 존재 여부를 먼저 확인하게 됐다. 이 테스트는 카드를 native SQL로
+        // 직접 넣고 CardRepository는 mock으로 두므로, 존재 검증만 통과시켜 원래 검증 대상(동시 등록 방어)에
+        // 도달하게 한다.
+        given(cardRepository.existsById(any())).willReturn(true);
         CardNameKoResolver cardNameKoResolver = mock(CardNameKoResolver.class);
         NotificationService notificationService = mock(NotificationService.class);
         WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator =
                 new WatchlistTargetPriceEvaluator(watchlistRepository, cardRepository, notificationService, cardNameKoResolver, new SimpleMeterRegistry());
         return new WatchlistService(watchlistRepository, mock(PriceService.class),
-                cardRepository, mock(PriceTradeStatsRepository.class), cardNameKoResolver, watchlistTargetPriceEvaluator);
+                cardRepository, mock(CardVariantRepository.class), mock(PriceTradeStatsRepository.class),
+                cardNameKoResolver, watchlistTargetPriceEvaluator);
     }
 
     @Test

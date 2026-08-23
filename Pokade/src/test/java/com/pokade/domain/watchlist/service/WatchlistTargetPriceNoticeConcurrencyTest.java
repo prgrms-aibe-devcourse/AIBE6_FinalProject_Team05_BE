@@ -10,6 +10,7 @@ import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
+import com.pokade.support.AbstractIntegrationTest;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -25,7 +26,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -40,8 +40,7 @@ import static org.mockito.Mockito.mock;
 // 스케줄러 실행 중첩 등)을 실제 스레드로 재현해, markAsNotifiedIfNotYet()의 조건부 원자적 UPDATE가
 // 중복 알림 생성을 막는지 검증한다.
 @DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-class WatchlistTargetPriceNoticeConcurrencyTest {
+class WatchlistTargetPriceNoticeConcurrencyTest extends AbstractIntegrationTest {
 
     @Autowired
     private WatchlistRepository watchlistRepository;

@@ -100,7 +100,7 @@ class NotificationControllerTest {
     @Test
     void 목록_조회에_성공하면_200과_페이지를_반환한다() throws Exception {
         NotificationResponse response = new NotificationResponse(
-                1L, NotificationType.PRICE_TARGET, "메시지", 10L, "medium.png", false, LocalDateTime.now());
+                1L, NotificationType.PRICE_TARGET, "메시지", 10L, "medium.png", null, false, LocalDateTime.now());
 
         given(notificationService.getNotifications(eq(100L), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 20), 1));
