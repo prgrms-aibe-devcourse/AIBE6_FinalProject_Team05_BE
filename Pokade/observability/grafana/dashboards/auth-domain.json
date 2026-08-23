@@ -150,7 +150,7 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "auth_oauth2_callback_duration_seconds_max",
+          "expr": "max by (provider) (max_over_time(auth_oauth2_callback_duration_seconds_max[1h]))",
           "legendFormat": "{{provider}} max",
           "refId": "B"
         }
