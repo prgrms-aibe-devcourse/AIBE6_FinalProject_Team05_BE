@@ -124,10 +124,12 @@ public class WithdrawalService {
                 } catch (DataIntegrityViolationException e) {         // 익명화 토큰 UNIQUE 충돌 → 새 토큰으로 재시도
                     if (++attempts >= MAX_ANON_RETRY) {
                         log.error("탈퇴 확정 실패 - 익명화 토큰 충돌 재시도 초과 (userId={})", userId, e);
+                        failed = true;
                         break; // confirmed=false 유지, 남으면 다음 배치가 또 재시도(자가치유)
                     }
                 } catch (Exception e) {
                     log.error("탈퇴 확정 실패 - 다음 대상 계속 진행 (userId={})", userId, e);
+                    failed = true;
                     break;
                 }
             }
