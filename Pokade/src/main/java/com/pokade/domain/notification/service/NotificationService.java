@@ -50,6 +50,12 @@ public class NotificationService {
     // #162: 다른 페이징 API(AiGradeService/CardQueryService/ChatService)와 동일한 상한
     private static final int MAX_PAGE_SIZE = 100;
 
+    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. SSE 전송 실패를 경로별로 나눠 센다.
+    // 하트비트 실패는 "연결이 이미 끊겼다"는 신호에 가깝지만, 알림 push 실패는 사용자가 받았어야 할
+    // 알림이 실제로 유실됐다는 뜻이라 성격이 다르다 - 한 지표로 합치면 이 구분이 사라진다.
+    private static final String HEARTBEAT_FAILURE_METRIC = "notification.sse.heartbeat.failure.calls";
+    private static final String PUSH_FAILURE_METRIC = "notification.sse.push.failure.calls";
+
     private final NotificationRepository notificationRepository;
     private final CardRepository cardRepository;
     private final SseEmitterStore sseEmitterStore;
@@ -186,7 +192,9 @@ public class NotificationService {
     // 구독 중인 Emitter가 없으면(구독 중이 아니면) 조용히 스킵한다.
     private void pushToSubscribers(Long userId, NotificationResponse response) {
         for (SseEmitter emitter : sseEmitterStore.findByUserId(userId)) {
-            sendEvent(emitter, SseEmitter.event().name("notification").data(response));
+            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. 여기서 실패하면 알림이 유실된 것이므로
+            // 하트비트와 분리된 카운터로 센다.
+            sendEvent(emitter, SseEmitter.event().name("notification").data(response), PUSH_FAILURE_METRIC);
         }
     }
 
@@ -195,13 +203,15 @@ public class NotificationService {
     @Scheduled(fixedRate = HEARTBEAT_INTERVAL_MILLIS)
     public void sendHeartbeat() {
         for (SseEmitter emitter : sseEmitterStore.findAll()) {
-            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. 하트비트 전송 실패율만 별도로 보기 위해
-            // 실패 카운터 지표명을 넘기는 오버로드를 쓴다 - 일반 알림 push(pushToSubscribers)는 대상 아님.
-            sendEvent(emitter, SseEmitter.event().comment("heartbeat"), "notification.sse.heartbeat.failure.calls");
+            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. 하트비트 전송 실패율을 별도로 본다.
+            sendEvent(emitter, SseEmitter.event().comment("heartbeat"), HEARTBEAT_FAILURE_METRIC);
         }
     }
 
     // 하나의 Emitter 전송 실패가 나머지 Emitter 처리를 막지 않도록 예외를 여기서 흡수한다.
+    // 계측 없이 보내는 유일한 경로는 subscribe()의 connect 더미 이벤트다 - 여기서 실패하면 구독 자체가
+    // 성립하지 않아 활성 연결 수(notification.sse.active.connections)에 바로 드러나므로 별도 카운터를
+    // 두지 않았다. 필요해지면 이 오버로드를 없애고 세 경로 모두 지표명을 넘기게 하면 된다.
     private void sendEvent(SseEmitter emitter, SseEmitter.SseEventBuilder event) {
         sendEvent(emitter, event, null);
     }

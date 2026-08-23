@@ -12,6 +12,7 @@ import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.util.List;
@@ -57,6 +58,11 @@ class NotificationServiceTest {
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks NotificationService notificationService;
+
+    // 프로덕션 상수와 일부러 중복해 적는다 - 지표명은 Grafana 대시보드/PromQL과 맺은 계약이라,
+    // 프로덕션에서 이름을 바꾸면 대시보드가 조용히 비는 대신 이 테스트가 먼저 깨져야 한다.
+    private static final String PUSH_FAILURE_METRIC = "notification.sse.push.failure.calls";
+    private static final String HEARTBEAT_FAILURE_METRIC = "notification.sse.heartbeat.failure.calls";
 
     private Notification notification(Long userId) {
         return Notification.builder()
@@ -389,5 +395,70 @@ class NotificationServiceTest {
         given(sseEmitterStore.findAll()).willReturn(List.of());
 
         assertThatCode(() -> notificationService.sendHeartbeat()).doesNotThrowAnyException();
+    }
+
+    // ===== SSE 전송 실패 계측 (#258 임시 계측) =====
+    // 두 경로의 실패가 서로 다른 카운터로 잡히는지까지 확인한다 - 한쪽으로 합쳐지면
+    // "알림이 유실됐다"와 "이미 끊긴 연결이다"를 구분할 수 없게 된다.
+    @Test
+    @DisplayName("알림 push 전송이 실패하면 push 실패 카운터만 증가한다")
+    void pushFailure_incrementsPushCounterOnly() throws Exception {
+        SseEmitter failing = mock(SseEmitter.class);
+        doThrow(new IOException("broken pipe")).when(failing).send(any(SseEmitter.SseEventBuilder.class));
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(failing));
+
+        notificationService.onNotificationPush(new NotificationPushEvent(1L, pushResponse()));
+
+        assertThat(counterCount(PUSH_FAILURE_METRIC)).isEqualTo(1.0);
+        assertThat(counterCount(HEARTBEAT_FAILURE_METRIC)).isZero();
+    }
+
+    @Test
+    @DisplayName("하트비트 전송이 실패하면 하트비트 실패 카운터만 증가한다")
+    void heartbeatFailure_incrementsHeartbeatCounterOnly() throws Exception {
+        SseEmitter failing = mock(SseEmitter.class);
+        doThrow(new IOException("broken pipe")).when(failing).send(any(SseEmitter.SseEventBuilder.class));
+        given(sseEmitterStore.findAll()).willReturn(List.of(failing));
+
+        notificationService.sendHeartbeat();
+
+        assertThat(counterCount(HEARTBEAT_FAILURE_METRIC)).isEqualTo(1.0);
+        assertThat(counterCount(PUSH_FAILURE_METRIC)).isZero();
+    }
+
+    @Test
+    @DisplayName("알림 push가 성공하면 어떤 실패 카운터도 증가하지 않는다")
+    void pushSuccess_incrementsNoFailureCounter() {
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(mock(SseEmitter.class)));
+
+        notificationService.onNotificationPush(new NotificationPushEvent(1L, pushResponse()));
+
+        assertThat(counterCount(PUSH_FAILURE_METRIC)).isZero();
+        assertThat(counterCount(HEARTBEAT_FAILURE_METRIC)).isZero();
+    }
+
+    @Test
+    @DisplayName("여러 Emitter 중 실패한 개수만큼 push 실패 카운터가 증가한다")
+    void pushFailure_countsEachFailedEmitter() throws Exception {
+        SseEmitter firstFailing = mock(SseEmitter.class);
+        SseEmitter healthy = mock(SseEmitter.class);
+        SseEmitter secondFailing = mock(SseEmitter.class);
+        doThrow(new IOException("broken pipe")).when(firstFailing).send(any(SseEmitter.SseEventBuilder.class));
+        doThrow(new IOException("broken pipe")).when(secondFailing).send(any(SseEmitter.SseEventBuilder.class));
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(firstFailing, healthy, secondFailing));
+
+        notificationService.onNotificationPush(new NotificationPushEvent(1L, pushResponse()));
+
+        assertThat(counterCount(PUSH_FAILURE_METRIC)).isEqualTo(2.0);
+        then(healthy).should(never()).completeWithError(any());
+    }
+
+    private NotificationResponse pushResponse() {
+        return new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, false, null);
+    }
+
+    private double counterCount(String metricName) {
+        Counter counter = meterRegistry.find(metricName).counter();
+        return counter == null ? 0.0 : counter.count();
     }
 }
