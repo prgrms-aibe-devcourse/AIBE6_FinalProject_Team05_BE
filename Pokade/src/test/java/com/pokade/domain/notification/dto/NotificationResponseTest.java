@@ -25,6 +25,17 @@ class NotificationResponseTest {
     }
 
     @Test
+    @DisplayName("of: 알림의 inquiryId를 그대로 응답에 노출하고, 없는 알림은 null이다")
+    void of_exposesInquiryId() {
+        Notification inquiryHandled = Notification.builder()
+                .userId(1L).type(NotificationType.INQUIRY_HANDLED).message("메시지").inquiryId(7L)
+                .build();
+
+        assertThat(NotificationResponse.of(inquiryHandled, null).inquiryId()).isEqualTo(7L);
+        assertThat(NotificationResponse.of(notification(), null).inquiryId()).isNull();
+    }
+
+    @Test
     @DisplayName("of: imageMedium이 있으면 imageMedium을 cardImageUrl로 쓴다")
     void of_prefersImageMedium() {
         Card card = Card.builder().id(10L).name("리자몽").imageSmall("small.png").imageMedium("medium.png").build();

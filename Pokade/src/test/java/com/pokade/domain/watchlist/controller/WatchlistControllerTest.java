@@ -43,6 +43,8 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -127,6 +129,66 @@ class WatchlistControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TARGET_PRICE_REQUIRED"));
+    }
+
+    @Test
+    void 등록시_목표가가_상한_1억원을_넘으면_400을_반환하고_서비스를_호출하지_않는다() throws Exception {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 100_000_001, null);
+
+        mockMvc.perform(post("/api/watchlist")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+                .andExpect(jsonPath("$.msg").value("targetBuyPrice: 목표가는 1억원을 초과할 수 없습니다."));
+
+        then(watchlistService).should(never()).addWatchlist(anyLong(), any(WatchlistCreateRequest.class));
+    }
+
+    @Test
+    void 등록시_목표가가_상한_1억원_정확히면_통과한다() throws Exception {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 100_000_000, null);
+
+        given(watchlistService.addWatchlist(anyLong(), any(WatchlistCreateRequest.class)))
+                .willReturn(new WatchlistResponse(
+                        1L, 1L, null, "피카츄", null, "기본팩", "image.png", 100_000_000, null, false, LocalDateTime.now(), null, null, false));
+
+        mockMvc.perform(post("/api/watchlist")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 수정시_목표가가_상한_1억원을_넘으면_400을_반환하고_서비스를_호출하지_않는다() throws Exception {
+        WatchlistUpdateRequest request = new WatchlistUpdateRequest(null, 100_000_001, null);
+
+        mockMvc.perform(patch("/api/watchlist/1")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+                .andExpect(jsonPath("$.msg").value("targetSellPrice: 목표가는 1억원을 초과할 수 없습니다."));
+
+        then(watchlistService).should(never()).updateWatchlist(anyLong(), anyLong(), any(WatchlistUpdateRequest.class));
+    }
+
+    @Test
+    void 목표가_역전_조합이면_400과_INVALID_TARGET_PRICE_RANGE를_반환한다() throws Exception {
+        WatchlistCreateRequest request = new WatchlistCreateRequest(1L, null, 5000, 3000);
+
+        given(watchlistService.addWatchlist(anyLong(), any(WatchlistCreateRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.INVALID_TARGET_PRICE_RANGE));
+
+        mockMvc.perform(post("/api/watchlist")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TARGET_PRICE_RANGE"));
     }
 
     @Test
