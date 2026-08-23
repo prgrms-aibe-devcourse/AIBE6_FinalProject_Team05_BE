@@ -12,11 +12,14 @@ import com.pokade.global.event.UserWithdrawalRequestedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.TokenBlacklistStore;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -53,6 +56,8 @@ class WithdrawalServiceTest {
     WithdrawalConfirmer withdrawalConfirmer;
     @Mock
     WithdrawalCodeService withdrawalCodeService;
+    @Spy
+    MeterRegistry meterRegistry =new SimpleMeterRegistry();
     @InjectMocks
     WithdrawalService withdrawalService;
 
