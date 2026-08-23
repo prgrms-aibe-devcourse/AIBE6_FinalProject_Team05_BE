@@ -3,16 +3,22 @@
 > 이 문서는 원래 개인 설정 파일(`CLAUDE.md`, git 추적 제외)에만 있어서 팀원에게 전달되지 않던
 > 내용을 저장소로 옮긴 것이다(#343). 계측을 새로 추가하거나 배포 설정을 만질 때 여기부터 본다.
 
+> **경로 표기**: 파일 경로는 프로젝트 루트인 `Pokade/`(build.gradle.kts가 있는 곳) 기준이다.
+> `global/config/MetricsConfig`처럼 확장자 없이 쓴 것은 파일 경로가 아니라 패키지·클래스 약어이며,
+> `src/main/java/com/pokade/` 아래에서 찾으면 된다. 이 문서 자체는 저장소 루트 기준
+> `Pokade/docs/monitoring.md`이다.
+
 ## 한눈에 보기
 
 | 무엇 | 어디 |
 | --- | --- |
-| `@Timed` 동작(TimedAspect) + SLO 버킷 필터 | `Pokade/src/main/java/com/pokade/global/config/MetricsConfig.java` |
-| 테스트용 MeterRegistry 빈 | `Pokade/src/test/java/com/pokade/support/TestMetricsConfig.java` |
-| 위 두 가지가 실제로 등록되는지 검증 | `Pokade/src/test/java/com/pokade/global/config/MetricsConfigTest.java` |
-| 로컬 관측 스택(Prometheus + Grafana) | `Pokade/docker-compose.observability.yml`, `Pokade/observability/` |
-| 대시보드 JSON | `Pokade/observability/grafana/dashboards/*.json` |
-| 관리자 지표 API(Prometheus HTTP API 직접 호출) | `Pokade/src/main/java/com/pokade/domain/admin/metrics/` |
+| `@Timed` 동작(TimedAspect) + SLO 버킷 필터 | `src/main/java/com/pokade/global/config/MetricsConfig.java` |
+| 테스트용 MeterRegistry 빈 | `src/test/java/com/pokade/support/TestMetricsConfig.java` |
+| SLO 버킷 필터 **로직** 검증 (Spring 없이 필터를 직접 호출) | `src/test/java/com/pokade/global/config/MetricsConfigTest.java` |
+| 위 두 빈이 실제로 **등록·적용**되는지 검증 (Spring 컨텍스트) | `src/test/java/com/pokade/global/config/MetricsConfigWiringTest.java` |
+| 로컬 관측 스택(Prometheus + Grafana) | `docker-compose.observability.yml`, `observability/` |
+| 대시보드 JSON | `observability/grafana/dashboards/*.json` |
+| 관리자 지표 API(Prometheus HTTP API 직접 호출) | `src/main/java/com/pokade/domain/admin/metrics/` |
 
 로컬에서 관측 스택 띄우기 (앱은 호스트에서 `./gradlew bootRun`으로 별도 실행):
 
