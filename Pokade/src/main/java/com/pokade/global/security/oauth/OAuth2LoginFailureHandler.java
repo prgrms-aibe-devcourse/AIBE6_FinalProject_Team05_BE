@@ -1,5 +1,7 @@
 package com.pokade.global.security.oauth;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,8 +20,12 @@ public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
 
     private final String redirectBase;
 
+    private final MeterRegistry meterRegistry;
+
     public OAuth2LoginFailureHandler(
+            MeterRegistry meterRegistry,
             @Value("${app.oauth2.redirect-base}") String redirectBase) {
+        this.meterRegistry = meterRegistry;
         this.redirectBase = redirectBase;
     }
 
@@ -29,6 +35,12 @@ public class OAuth2LoginFailureHandler implements AuthenticationFailureHandler {
         if (exception instanceof OAuth2AuthenticationException oauthException) {
             reason = oauthException.getError().getErrorCode();
         }
+        Counter.builder(OAuth2Metrics.RESULT_COUNTER)
+                .tag(OAuth2Metrics.PROVIDER_TAG, OAuth2Metrics.providerTagFromUri(request.getRequestURI()))
+                .tag(OAuth2Metrics.RESULT_TAG, "failure")
+                .register(meterRegistry)
+                .increment();
         response.sendRedirect(redirectBase + "/login?error=" + URLEncoder.encode(reason, StandardCharsets.UTF_8));
+
     }
 }

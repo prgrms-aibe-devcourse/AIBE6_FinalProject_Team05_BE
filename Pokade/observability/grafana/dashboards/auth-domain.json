@@ -132,6 +132,46 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "OAuth2 콜백 소요시간 (auth.oauth2.callback.duration)",
+      "description": "콜백 요청 전체 구간이다. 대부분이 구글·카카오와의 왕복(인가 코드 교환 + 사용자 정보 조회)이므로 값이 크다고 우리 처리가 느린 것이 아니다. 표본이 적어 1시간 창으로 계산한다.",
+      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(auth_oauth2_callback_duration_seconds_bucket[1h])))",
+          "legendFormat": "{{provider}} p95",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max by (provider) (max_over_time(auth_oauth2_callback_duration_seconds_max[1h]))",
+          "legendFormat": "{{provider}} max",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "OAuth2 콜백 결과 분포 - 24시간 누적 (auth.oauth2.result)",
+      "description": "logged_in=기존 소셜 계정 로그인, signup_required=신규 가입 유도, conflict=같은 이메일이 다른 provider로 존재, error=우리 처리 중 거부, failure=인증 자체 실패. 소셜 로그인은 트래픽이 적어 rate()로는 평선이라 24시간 누적으로 본다.",
+      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (provider, result) (increase(auth_oauth2_result_total[24h]))",
+          "legendFormat": "{{provider}} {{result}}",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }
