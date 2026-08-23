@@ -34,6 +34,11 @@ public class MetricsConfig {
     // 조회성 API - 로컬 실측 평균이 13~18ms라(card.search 14.3ms, price.ranking 12.9ms, 10회 샘플)
     // 50ms를 첫 구간으로 잡으면 정상 트래픽이 최하위 버킷에 뭉치지 않는다. 200ms 경계는
     // "200ms 이내 요청 비율"을 PromQL로 바로 뽑기 위한 것이고, 1s는 이상치 탐지용이다.
+    //
+    // 주의: 200ms는 Grafana 대시보드의 "SLO 달성률" 패널이 le="0.2"로 하드코딩해 참조한다
+    // (observability/grafana/dashboards/{card-domain,watchlist-notification}.json).
+    // 이 값을 바꾸면 해당 시리즈가 사라져 패널이 조용히 "No data"가 되므로 대시보드도 함께 고칠 것.
+    // 경계값은 나노초로 선언하지만 Prometheus에는 초 단위 le 라벨로 노출된다(200ms -> le="0.2").
     private static final double[] QUERY_API_SLO_NANOS = {
             Duration.ofMillis(50).toNanos(),
             Duration.ofMillis(100).toNanos(),

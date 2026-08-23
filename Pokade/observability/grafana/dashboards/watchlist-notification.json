@@ -4,7 +4,7 @@
   "tags": ["pokade", "watchlist", "notification", "temp-258"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
@@ -113,6 +113,23 @@
     {
       "id": 7,
       "type": "timeseries",
+      "title": "SSE 알림 push 전송 실패율 (notification.sse.push.failure.calls)",
+      "description": "pushToSubscribers()에서 집계 - 구독 중인 Emitter로 알림을 보내다 실패한 횟수다. 하트비트 실패(왼쪽)와 달리 이 값이 0이 아니면 사용자가 받았어야 할 알림이 실제로 유실됐다는 뜻이다.",
+      "gridPos": { "x": 16, "y": 16, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(notification_sse_push_failure_calls_total[5m])",
+          "legendFormat": "push failures/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
       "title": "워치리스트 P95 응답시간 (SLO 버킷 기반)",
       "description": "#343에서 추가한 SLO 버킷으로 계산한 p95. 평균 패널과 달리 느린 꼬리 요청을 드러낸다.",
       "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
@@ -134,10 +151,10 @@
       ]
     },
     {
-      "id": 8,
+      "id": 9,
       "type": "timeseries",
       "title": "워치리스트 SLO 달성률 - 200ms 이내 비율",
-      "description": "SLO 경계 200ms(le=\"0.2\") 이내로 처리된 요청 비율. 트래픽이 없는 구간은 0/0이라 값이 비는데, 이때 0%로 채우면 정상인 상태가 SLO 전면 미달처럼 보이므로 일부러 채우지 않는다.",
+      "description": "SLO 경계 200ms(le=\"0.2\") 이내로 처리된 요청 비율. 트래픽이 없는 구간은 0/0이라 값이 비는데, 이때 0%로 채우면 정상인 상태가 SLO 전면 미달처럼 보이므로 일부러 채우지 않는다. 이 200ms 경계는 MetricsConfig.QUERY_API_SLO_NANOS에서 정의된다 - 그쪽을 바꾸면 이 le 라벨도 함께 고쳐야 패널이 비지 않는다.",
       "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
@@ -153,23 +170,6 @@
           "expr": "sum(rate(watchlist_update_duration_seconds_bucket{le=\"0.2\"}[5m])) / sum(rate(watchlist_update_duration_seconds_count[5m])) * 100",
           "legendFormat": "update within 200ms (%)",
           "refId": "B"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "SSE 알림 push 전송 실패율 (notification.sse.push.failure.calls)",
-      "description": "pushToSubscribers()에서 집계 - 구독 중인 Emitter로 알림을 보내다 실패한 횟수다. 하트비트 실패(왼쪽)와 달리 이 값이 0이 아니면 사용자가 받았어야 할 알림이 실제로 유실됐다는 뜻이다.",
-      "gridPos": { "x": 16, "y": 16, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(notification_sse_push_failure_calls_total[5m])",
-          "legendFormat": "push failures/s",
-          "refId": "A"
         }
       ]
     }

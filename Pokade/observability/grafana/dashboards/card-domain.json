@@ -137,7 +137,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "카드 검색 SLO 달성률 - 200ms 이내 비율",
-      "description": "SLO 경계 200ms(le=\"0.2\") 이내로 처리된 요청 비율. 트래픽이 없는 구간은 0/0이라 값이 비는데, 이때 0%로 채우면 정상인 상태가 SLO 전면 미달처럼 보이므로 일부러 채우지 않는다.",
+      "description": "SLO 경계 200ms(le=\"0.2\") 이내로 처리된 요청 비율. 트래픽이 없는 구간은 0/0이라 값이 비는데, 이때 0%로 채우면 정상인 상태가 SLO 전면 미달처럼 보이므로 일부러 채우지 않는다. 이 200ms 경계는 MetricsConfig.QUERY_API_SLO_NANOS에서 정의된다 - 그쪽을 바꾸면 이 le 라벨도 함께 고쳐야 패널이 비지 않는다.",
       "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
