@@ -22,6 +22,8 @@ import com.pokade.domain.price.dto.BuyOfferReadyResponse;
 import com.pokade.domain.price.dto.BuyOfferResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.DailyMarketStatResponse;
+import com.pokade.domain.price.dto.MarketOverviewResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
@@ -51,6 +53,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -71,6 +74,11 @@ public class PriceService {
     private static final int STATS_PERIOD_DAYS = 7;
     private static final ListingGrade STATS_GRADE = ListingGrade.S;
     private static final int RANKING_LIMIT = 10;
+    // 시세 랭킹 페이지의 "거래 현황" 개요 차트가 보여주는 기간(일).
+    private static final int MARKET_OVERVIEW_DAYS = 30;
+    // 거래가 중간값의 "30일 전 대비" 변화율 계산에 필요한 최대 조회 범위(일) - 차트 표시 기간(30일)과
+    // 우연히 같은 값이지만 의미가 다르다(하나는 표시 범위, 하나는 비교 기준점).
+    private static final int MEDIAN_COMPARISON_MAX_DAYS = 30;
     // CardUpsertService가 Scrydex 동기화 시 raw NM 시세를 저장하는 키와 동일해야 한다(card_prices 조회 fallback용).
     private static final String RAW_PRICE_TYPE = "raw";
     private static final String RAW_GRADE = "";
@@ -629,5 +637,88 @@ public class PriceService {
     }
 
     private record CardChangeRate(Long cardId, BigDecimal recentAvgAmount, BigDecimal changeRate, BigDecimal diff) {
+    }
+
+    // 시세 랭킹 페이지의 "거래 현황" 개요 - getRanking()의 카드별 등락률과는 별개로, 플랫폼 전체(카드/등급
+    // 구분 없음) 체결의 일별 거래량과 거래가 중간값(median)을 보여준다. 평균 대신 중간값을 쓰는 이유는
+    // 소수의 초고가/초저가 체결 때문에 평균이 왜곡되는 걸 피하기 위함(사용자 요청, KREAM TCG 시세 페이지
+    // 참고). 최근 30일치를 항상 30개(빈 날짜는 volume=0/medianPrice=null로) 반환하고, 오늘 대비 전일/
+    // 일주일 전/30일 전 세 시점으로 거래가 중간값 변화율을 각각 계산한다(사용자 요청 - 하루 단위 변화만
+    // 보여주면 단기 잡음에 흔들리는 인상을 줄 수 있어, 더 긴 기준선도 함께 보여준다).
+    public MarketOverviewResponse getMarketOverview() {
+        LocalDate today = LocalDate.now();
+        LocalDate chartFrom = today.minusDays(MARKET_OVERVIEW_DAYS - 1L);
+        // 30일 전 대비 비교를 하려면 차트 표시 범위(chartFrom)보다 하루 더 과거 체결까지 조회해야 한다.
+        LocalDate queryFrom = today.minusDays(MEDIAN_COMPARISON_MAX_DAYS);
+
+        Map<LocalDate, PriceTradeStatsRepository.DailyMarketStatView> statsByDate = priceTradeStatsRepository
+                .findDailyMarketStats(TradeStatus.COMPLETED, queryFrom.atStartOfDay()).stream()
+                .collect(Collectors.toMap(PriceTradeStatsRepository.DailyMarketStatView::getTradeDate, v -> v));
+
+        List<DailyMarketStatResponse> dailyStats = new ArrayList<>();
+        for (int i = 0; i < MARKET_OVERVIEW_DAYS; i++) {
+            LocalDate date = chartFrom.plusDays(i);
+            dailyStats.add(toDailyMarketStatResponse(date, statsByDate.get(date)));
+        }
+
+        DailyMarketStatResponse todayStat = dailyStats.get(dailyStats.size() - 1);
+        DailyMarketStatResponse yesterdayStat = dailyStats.get(dailyStats.size() - 2);
+        long totalVolume = dailyStats.stream().mapToLong(DailyMarketStatResponse::volume).sum();
+
+        Long median7dAgo = toDailyMarketStatResponse(today.minusDays(7), statsByDate.get(today.minusDays(7))).medianPrice();
+        Long median30dAgo = toDailyMarketStatResponse(today.minusDays(MEDIAN_COMPARISON_MAX_DAYS),
+                statsByDate.get(today.minusDays(MEDIAN_COMPARISON_MAX_DAYS))).medianPrice();
+
+        return new MarketOverviewResponse(
+                todayStat.volume(),
+                computeVolumeChangeRate(yesterdayStat.volume(), todayStat.volume()),
+                todayStat.medianPrice(),
+                computeMedianChangeRate(yesterdayStat.medianPrice(), todayStat.medianPrice()),
+                computeMedianChangeAmount(yesterdayStat.medianPrice(), todayStat.medianPrice()),
+                computeMedianChangeRate(median7dAgo, todayStat.medianPrice()),
+                computeMedianChangeRate(median30dAgo, todayStat.medianPrice()),
+                totalVolume,
+                dailyStats
+        );
+    }
+
+    private DailyMarketStatResponse toDailyMarketStatResponse(LocalDate date,
+                                                                PriceTradeStatsRepository.DailyMarketStatView view) {
+        long volume = view != null ? view.getVolume() : 0L;
+        Long medianPrice = view != null && view.getMedianPrice() != null
+                ? Math.round(view.getMedianPrice())
+                : null;
+        return new DailyMarketStatResponse(date, volume, medianPrice);
+    }
+
+    // 어제 거래가 0건이면 "증가율"이라는 지표 자체가 의미 없어(0에서 몇 건이 늘어도 무한대%) null로 남긴다.
+    private BigDecimal computeVolumeChangeRate(long previousVolume, long todayVolume) {
+        if (previousVolume == 0) {
+            return null;
+        }
+        return BigDecimal.valueOf(todayVolume - previousVolume)
+                .divide(BigDecimal.valueOf(previousVolume), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    // 오늘 또는 어제 중 하루라도 체결이 없어 중간값을 못 구했으면 변화율도 계산할 수 없다.
+    private BigDecimal computeMedianChangeRate(Long previousMedian, Long todayMedian) {
+        if (previousMedian == null || todayMedian == null || previousMedian == 0) {
+            return null;
+        }
+        return BigDecimal.valueOf(todayMedian - previousMedian)
+                .divide(BigDecimal.valueOf(previousMedian), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    // 전일 대비 거래가 중간값 변동을 원화 금액으로도 보여주기 위한 값(사용자 요청) - 비율과 달리 어제
+    // 중간값이 0이어도(이론상 없는 값이지만) 계산 가능하나, 둘 중 하나가 아예 없으면(체결 없음) 계산 불가.
+    private Long computeMedianChangeAmount(Long previousMedian, Long todayMedian) {
+        if (previousMedian == null || todayMedian == null) {
+            return null;
+        }
+        return todayMedian - previousMedian;
     }
 }
