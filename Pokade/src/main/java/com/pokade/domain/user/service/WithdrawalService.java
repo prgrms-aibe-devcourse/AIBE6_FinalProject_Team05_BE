@@ -10,6 +10,9 @@ import com.pokade.global.event.UserWithdrawalRequestedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.TokenBlacklistStore;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -19,8 +22,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -34,14 +39,20 @@ public class WithdrawalService {
     private final TokenBlacklistStore tokenBlacklistStore;
     private final WithdrawalConfirmer withdrawalConfirmer;
     private final WithdrawalCodeService withdrawalCodeService;
+    private final MeterRegistry meterRegistry;
+
 
     private static final int GRACE_PERIOD_DAYS = 7;
     private static final int MAX_ANON_RETRY = 3;
 
+    private static final String CONFIRM_METRIC = "user.withdrawal.confirm";
+    private static final String LAST_SUCCESS_METRIC = "user.withdrawal.confirm.last.success";
     private static final String REAUTH_PURPOSE = "withdrawal_reauth";
     private static final String CLAIM_PURPOSE = "purpose";
     private static final String CLAIM_EMAIL = "email";
     private static final String CLAIM_PROVIDER = "provider";
+
+    private final AtomicLong lastSuccessEpochSecond = new AtomicLong(0);
 
 
     // 탈퇴 신청한다 (ACTIVE + 본인확인 후 유예 상태로 전환, 이벤트 발행)
@@ -103,6 +114,8 @@ public class WithdrawalService {
                 .toList();
         for (Long userId : targetIds) {
             boolean confirmed = false;
+            boolean failed = false;
+
             int attempts = 0;
             while (true) {
                 try {
@@ -111,13 +124,24 @@ public class WithdrawalService {
                 } catch (DataIntegrityViolationException e) {         // 익명화 토큰 UNIQUE 충돌 → 새 토큰으로 재시도
                     if (++attempts >= MAX_ANON_RETRY) {
                         log.error("탈퇴 확정 실패 - 익명화 토큰 충돌 재시도 초과 (userId={})", userId, e);
+                        failed = true;
                         break; // confirmed=false 유지, 남으면 다음 배치가 또 재시도(자가치유)
                     }
                 } catch (Exception e) {
                     log.error("탈퇴 확정 실패 - 다음 대상 계속 진행 (userId={})", userId, e);
+                    failed = true;
                     break;
                 }
             }
+
+            if (confirmed) {
+                countConfirm("confirmed");
+            } else if (failed) {
+                countConfirm("failed");
+            } else {
+                countConfirm("skipped");
+            }
+
             if (!confirmed) {
                 continue; // 확정 안 됨(그새 철회/이미 확정 or 재시도 초과) → 토큰 정리 불필요
             }
@@ -132,5 +156,19 @@ public class WithdrawalService {
                 log.error("탈퇴 확정됨(DB) - access blacklist 실패, 보정 필요 (userId={})", userId, e);
             }
         }
+        lastSuccessEpochSecond.set(Instant.now().getEpochSecond());
+    }
+
+    // 마지막 성공 실행 시각을 Gauge로 등록한다. 배치가 멈추면 time().과의 차이가 계속 벌어진다.
+    @PostConstruct
+    void registerLastSuccessGauge() {
+        meterRegistry.gauge(LAST_SUCCESS_METRIC, lastSuccessEpochSecond, AtomicLong::doubleValue);
+    }
+
+    private void countConfirm(String result) {
+        Counter.builder(CONFIRM_METRIC)
+                .tag("result", result)
+                .register(meterRegistry)
+                .increment();
     }
 }
