@@ -80,6 +80,7 @@ jobs:
               -e TZ=Asia/Seoul \
               -e OPENAI_API_KEY="$OPENAI_API_KEY" \
               -e REDIS_HOST=pokade-redis \
+              -e MANAGEMENT_ADDRESS=0.0.0.0 \
               "$IMAGE"
 
             HEALTHY=false
