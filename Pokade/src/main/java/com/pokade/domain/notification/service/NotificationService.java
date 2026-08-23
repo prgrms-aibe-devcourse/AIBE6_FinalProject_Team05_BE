@@ -192,8 +192,7 @@ public class NotificationService {
     // 구독 중인 Emitter가 없으면(구독 중이 아니면) 조용히 스킵한다.
     private void pushToSubscribers(Long userId, NotificationResponse response) {
         for (SseEmitter emitter : sseEmitterStore.findByUserId(userId)) {
-            // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중. 여기서 실패하면 알림이 유실된 것이므로
-            // 하트비트와 분리된 카운터로 센다.
+            // 여기서 실패하면 알림이 유실된 것이므로 하트비트와 분리된 카운터로 센다.
             sendEvent(emitter, SseEmitter.event().name("notification").data(response), PUSH_FAILURE_METRIC);
         }
     }
@@ -203,20 +202,18 @@ public class NotificationService {
     @Scheduled(fixedRate = HEARTBEAT_INTERVAL_MILLIS)
     public void sendHeartbeat() {
         for (SseEmitter emitter : sseEmitterStore.findAll()) {
-            // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중. 하트비트 전송 실패율을 별도로 본다.
+            // 하트비트 전송 실패율은 알림 push 실패와 분리해서 본다.
             sendEvent(emitter, SseEmitter.event().comment("heartbeat"), HEARTBEAT_FAILURE_METRIC);
         }
     }
 
-    // 하나의 Emitter 전송 실패가 나머지 Emitter 처리를 막지 않도록 예외를 여기서 흡수한다.
-    // 계측 없이 보내는 유일한 경로는 subscribe()의 connect 더미 이벤트다 - 여기서 실패하면 구독 자체가
-    // 성립하지 않아 활성 연결 수(notification.sse.active.connections)에 바로 드러나므로 별도 카운터를
-    // 두지 않았다. 필요해지면 이 오버로드를 없애고 세 경로 모두 지표명을 넘기게 하면 된다.
+    // 실패 카운터를 두지 않는 경로(subscribe()의 connect 더미 이벤트)용 오버로드.
     private void sendEvent(SseEmitter emitter, SseEmitter.SseEventBuilder event) {
         sendEvent(emitter, event, null);
     }
 
-    // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중. failureMetricName이 있을 때만 실패 카운터를 증가시킨다.
+    // 하나의 Emitter 전송 실패가 나머지 Emitter 처리를 막지 않도록 예외를 여기서 흡수한다.
+    // failureMetricName이 있을 때만 실패 카운터를 올린다.
     private void sendEvent(SseEmitter emitter, SseEmitter.SseEventBuilder event, String failureMetricName) {
         try {
             emitter.send(event);
