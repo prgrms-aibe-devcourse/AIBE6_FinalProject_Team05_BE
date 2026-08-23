@@ -29,6 +29,9 @@ import lombok.extern.slf4j.Slf4j;
 public class CacheConfig implements CachingConfigurer {
 
     private static final String CARD_FACETS_CACHE = "cardFacets";
+    // PriceService.getRanking()/refreshRanking() - PriceRankingRefreshScheduler가 매일 자정 갱신하므로
+    // TTL은 하루(24h)보다 여유 있게 잡아서, 스케줄러가 하루 실패해도 다음 날엔 결국 새로 계산되게 한다.
+    private static final String PRICE_RANKING_CACHE = "priceRanking";
 
     private final RedisConnectionFactory redisConnectionFactory;
 
@@ -57,6 +60,7 @@ public class CacheConfig implements CachingConfigurer {
                 // 세트/타입/레어도 데이터는 Scrydex 배치 동기화(보통 일 단위) 때만 바뀌므로 1시간 지연은
                 // 실사용상 무리 없음 - 동기화 완료 이벤트가 없어 무효화 훅을 걸 수 없는 상태라 TTL로 대체.
                 .withCacheConfiguration(CARD_FACETS_CACHE, defaultConfig.entryTtl(Duration.ofHours(1)))
+                .withCacheConfiguration(PRICE_RANKING_CACHE, defaultConfig.entryTtl(Duration.ofHours(26)))
                 .build();
     }
 

@@ -47,6 +47,8 @@ import com.pokade.global.port.UserAccessChecker;
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -74,6 +76,8 @@ public class PriceService {
     private static final int STATS_PERIOD_DAYS = 7;
     private static final ListingGrade STATS_GRADE = ListingGrade.S;
     private static final int RANKING_LIMIT = 10;
+    // CacheConfig에 TTL(안전망)까지 등록된 캐시 이름 - PriceRankingRefreshScheduler가 주기적으로 갱신한다.
+    private static final String RANKING_CACHE = "priceRanking";
     // 시세 랭킹 페이지의 "거래 현황" 개요 차트가 보여주는 기간(일).
     private static final int MARKET_OVERVIEW_DAYS = 30;
     // 거래가 중간값의 "30일 전 대비" 변화율 계산에 필요한 최대 조회 범위(일) - 차트 표시 기간(30일)과
@@ -568,12 +572,35 @@ public class PriceService {
     private record PeriodDays(int days, Function<CardPrice, BigDecimal> changePct) {
     }
 
+    // 카드 수가 많아지면(운영 기준 2만+) 매 요청마다 전체 카드의 최근/이전 7일 블록 평균가를 스캔하는
+    // 비용이 커진다 - PriceRankingRefreshScheduler가 주기적으로 재계산해 캐시에 채워두고, 이 메서드는
+    // 캐시만 읽는다(사용자 요청, 2026-08-24). 캐시가 아직 없는 첫 요청(배포 직후 등)에는 이 메서드가
+    // 직접 계산해서 채운다 - 그 이후로는 스케줄러가 갱신할 때까지 이 값을 그대로 반환한다.
+    // @Timed는 여기(캐시 적중이면 거의 즉시 반환하는 진입점)에 둬서, 캐싱이 실제로 사용자 체감 지연을
+    // 줄이는지 그대로 보여주게 한다 - 배치 자체의 계산 비용은 refreshRanking() 쪽 별도 지표로 분리했다.
+    @Cacheable(cacheNames = RANKING_CACHE, key = "#type")
+    @Timed(value = "price.ranking.duration")
+    public List<PriceRankingResponse> getRanking(String type) {
+        return computeRanking(type);
+    }
+
+    // PriceRankingRefreshScheduler 전용 - 캐시 적중 여부와 무관하게 항상 재계산해서 캐시를 갱신한다.
+    // getRanking()과 달리 @CachePut이라 호출할 때마다 무조건 메서드 본문을 실행한다. 이 메서드 자체가
+    // 무거운 배치 연산이라 별도 지표(price.ranking.refresh.duration)로 소요 시간을 추적한다.
+    @CachePut(cacheNames = RANKING_CACHE, key = "#type")
+    @Timed(value = "price.ranking.refresh.duration")
+    public List<PriceRankingResponse> refreshRanking(String type) {
+        return computeRanking(type);
+    }
+
     // FR-PRICE-06: getStats()와 같은 방식(자체 AI등급 S, COMPLETED 거래, 최근 7일 vs 이전 7일 블록 평균 비교)을
     // 전체 카드로 확장해 등락률 상위/하위 10개 카드를 랭킹으로 뽑는다. card_prices(Scrydex 동기화)는 쓰지 않는다 —
     // 그 테이블은 PSA/CGC 같은 공인 등급만 있고 우리 자체 S등급 데이터가 없다(getStats와 동일한 이유).
-    // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
-    @Timed(value = "price.ranking.duration")
-    public List<PriceRankingResponse> getRanking(String type) {
+    // private이라 @Timed/@Cacheable 같은 프록시 기반 어노테이션을 붙여도 동작하지 않는다(같은 클래스
+    // 내부에서 this.computeRanking()으로 직접 호출되므로 Spring AOP 프록시를 안 거침 - CardSyncService/
+    // CardUpsertService가 @Transactional/@Async 때문에 별도 빈으로 분리된 것과 동일한 이유) - 그래서
+    // 계측은 이 메서드가 아니라 이 메서드를 외부에서 호출하는 getRanking()/refreshRanking()에 붙였다.
+    private List<PriceRankingResponse> computeRanking(String type) {
         RankingType rankingType = RankingType.from(type);
         // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
         meterRegistry.counter("price.ranking.requests", "type", rankingType.name()).increment();
