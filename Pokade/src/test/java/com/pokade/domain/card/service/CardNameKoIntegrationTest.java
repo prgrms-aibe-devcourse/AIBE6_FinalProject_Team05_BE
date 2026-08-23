@@ -19,6 +19,7 @@ import com.pokade.domain.card.repository.PokedexKoNameRepository;
 import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.card.support.PokedexKoNameCache;
 import com.pokade.support.AbstractIntegrationTest;
+import com.pokade.support.TestMetricsConfig;
 
 import jakarta.persistence.EntityManager;
 
@@ -30,7 +31,8 @@ import jakarta.persistence.EntityManager;
  */
 @DataJpaTest
 @Import({PokedexKoNameJdbcRepository.class, PokedexKoNameInitializer.class, PokedexKoNameCache.class,
-        CardNameKoResolver.class, CardService.class, CardQueryService.class, CardFacetService.class})
+        CardNameKoResolver.class, CardService.class, CardQueryService.class, CardFacetService.class,
+        TestMetricsConfig.class})
 class CardNameKoIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired

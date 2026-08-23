@@ -19,7 +19,6 @@ import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -50,15 +49,12 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
         thread.setDaemon(true);
         return thread;
     });
-    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+    // 운영 계측 - #217 도입, card 대시보드가 사용 중
     private final MeterRegistry meterRegistry;
 
-    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
-    public CardRateLimitFilter() {
-        this(new SimpleMeterRegistry());
-    }
-
-    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+    // 운영 계측 - #217 도입, card 대시보드가 사용 중. 유일한 생성자로 MeterRegistry를 강제한다
+    // (예전엔 테스트 편의용 no-arg 생성자가 프로덕션에 있었는데, 그러면 계측이 아무 데도 흘러가지 않는
+    //  인메모리 레지스트리로 조용히 대체돼도 아무도 모른다 - #343에서 제거했다).
     public CardRateLimitFilter(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
         cleanupExecutor.scheduleAtFixedRate(this::evictIdleEntries,
@@ -72,13 +68,13 @@ public class CardRateLimitFilter extends OncePerRequestFilter {
         entry.touch();
 
         if (entry.bucket().tryConsume(1)) {
-            // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+            // 운영 계측 - #217 도입, card 대시보드가 사용 중
             meterRegistry.counter("card.ratelimit.allowed").increment();
             filterChain.doFilter(request, response);
             return;
         }
 
-        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+        // 운영 계측 - #217 도입, card 대시보드가 사용 중
         meterRegistry.counter("card.ratelimit.rejected").increment();
         response.setStatus(ErrorCode.CARD_RATE_LIMIT_EXCEEDED.getStatus().value());
         response.setContentType(JSON_CONTENT_TYPE);

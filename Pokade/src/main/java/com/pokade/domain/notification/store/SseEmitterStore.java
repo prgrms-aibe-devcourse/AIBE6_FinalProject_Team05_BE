@@ -1,10 +1,9 @@
 package com.pokade.domain.notification.store;
 
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -18,16 +17,17 @@ import java.util.concurrent.CopyOnWriteArrayList;
 // push할 수 없다. 인스턴스 간 브로드캐스트가 필요해지면 Redis Pub/Sub 등으로 교체해야 한다.
 @Slf4j
 @Repository
+@RequiredArgsConstructor
 public class SseEmitterStore {
 
     private final Map<Long, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
-    // required = false: 슬라이스 테스트엔 MeterRegistry 빈이 없어 컨텍스트 로딩이 깨지는 문제(#224 유사)를 막기 위함.
-    @Autowired(required = false)
-    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    // 계측 주입 규칙은 support/TestMetricsConfig javadoc 참조(#343).
+    // 위 emitters는 final이지만 선언과 동시에 초기화돼 @RequiredArgsConstructor 대상에서 빠지므로,
+    // 생성자 파라미터는 이 필드 하나뿐이다.
+    private final MeterRegistry meterRegistry;
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
+    // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중.
     // emitters 맵 자체를 상태 객체로 등록해, 스크레이프 시점마다 그 시점의 총 연결 수(유저별 리스트 크기 합)를
     // 즉석에서 계산한다 - 별도 카운터 필드를 직접 증감시키지 않아 save()/remove()의 동시성 로직과 분리된다.
     @PostConstruct

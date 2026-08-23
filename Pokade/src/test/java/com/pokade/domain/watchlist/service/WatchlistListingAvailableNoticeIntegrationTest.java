@@ -28,6 +28,7 @@ import com.pokade.domain.user.service.UserAccessGuard;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.support.AbstractIntegrationTest;
+import com.pokade.support.TestMetricsConfig;
 
 import jakarta.persistence.EntityManager;
 
@@ -47,7 +48,8 @@ import jakarta.persistence.EntityManager;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({ListingService.class, WatchlistListingAvailableNoticeListener.class, NotificationService.class,
         CardNameKoResolver.class, PokedexKoNameCache.class, UserAccessGuard.class, SseEmitterStore.class,
-        WatchlistListingNotifiedResetScheduler.class, WatchlistListingNotifiedResetProcessor.class})
+        WatchlistListingNotifiedResetScheduler.class, WatchlistListingNotifiedResetProcessor.class,
+        TestMetricsConfig.class})
 class WatchlistListingAvailableNoticeIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired

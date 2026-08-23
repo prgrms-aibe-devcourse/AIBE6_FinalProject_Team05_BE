@@ -11,6 +11,12 @@ import com.pokade.domain.notification.store.SseEmitterStore;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.io.IOException;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -26,9 +33,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -48,7 +52,17 @@ class NotificationServiceTest {
     @Mock CardRepository cardRepository;
     @Mock SseEmitterStore sseEmitterStore;
     @Mock ApplicationEventPublisher eventPublisher;
+    // @InjectMocks가 생성자에 넘길 MeterRegistry. mock이면 counter()가 null을 돌려줘 NPE가 나므로
+    // 실제 인메모리 구현을 @Spy로 둔다(#343 - 계측 주입이 필드에서 생성자로 바뀌면서 필요해졌다).
+    @Spy
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     @InjectMocks NotificationService notificationService;
+
+    // 프로덕션 상수와 일부러 중복해 적는다 - 지표명은 Grafana 대시보드/PromQL과 맺은 계약이라,
+    // 프로덕션에서 이름을 바꾸면 대시보드가 조용히 비는 대신 이 테스트가 먼저 깨져야 한다.
+    private static final String PUSH_FAILURE_METRIC = "notification.sse.push.failure.calls";
+    private static final String HEARTBEAT_FAILURE_METRIC = "notification.sse.heartbeat.failure.calls";
 
     private Notification notification(Long userId) {
         return Notification.builder()
@@ -58,6 +72,11 @@ class NotificationServiceTest {
 
     private Card card() {
         return Card.builder().id(10L).name("리자몽").imageMedium("medium.png").build();
+    }
+
+    // AFTER_COMMIT push 계열 테스트가 공유하는 응답. inquiryId는 어디서도 검증하지 않는 자리표시자다.
+    private NotificationResponse pushResponse() {
+        return new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
     }
 
     // ===== 목록 조회 =====
@@ -319,7 +338,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 있으면 notification 이벤트를 전송한다")
     void onNotificationPush_pushes_to_subscriber() throws Exception {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
+        NotificationResponse response = pushResponse();
         SseEmitter emitter = mock(SseEmitter.class);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
@@ -331,7 +350,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 없으면 예외 없이 조용히 스킵된다")
     void onNotificationPush_no_subscriber_noop() {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
+        NotificationResponse response = pushResponse();
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of());
 
         assertThatCode(() -> notificationService.onNotificationPush(new NotificationPushEvent(1L, response)))
@@ -383,5 +402,66 @@ class NotificationServiceTest {
         given(sseEmitterStore.findAll()).willReturn(List.of());
 
         assertThatCode(() -> notificationService.sendHeartbeat()).doesNotThrowAnyException();
+    }
+
+    // ===== SSE 전송 실패 계측 (#258 도입, 워치리스트/알림 대시보드가 사용 중) =====
+    // 두 경로의 실패가 서로 다른 카운터로 잡히는지까지 확인한다 - 한쪽으로 합쳐지면
+    // "알림이 유실됐다"와 "이미 끊긴 연결이다"를 구분할 수 없게 된다.
+    @Test
+    @DisplayName("알림 push 전송이 실패하면 push 실패 카운터만 증가한다")
+    void pushFailure_incrementsPushCounterOnly() throws Exception {
+        SseEmitter failing = mock(SseEmitter.class);
+        doThrow(new IOException("broken pipe")).when(failing).send(any(SseEmitter.SseEventBuilder.class));
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(failing));
+
+        notificationService.onNotificationPush(new NotificationPushEvent(1L, pushResponse()));
+
+        assertThat(counterCount(PUSH_FAILURE_METRIC)).isEqualTo(1.0);
+        assertThat(counterCount(HEARTBEAT_FAILURE_METRIC)).isZero();
+    }
+
+    @Test
+    @DisplayName("하트비트 전송이 실패하면 하트비트 실패 카운터만 증가한다")
+    void heartbeatFailure_incrementsHeartbeatCounterOnly() throws Exception {
+        SseEmitter failing = mock(SseEmitter.class);
+        doThrow(new IOException("broken pipe")).when(failing).send(any(SseEmitter.SseEventBuilder.class));
+        given(sseEmitterStore.findAll()).willReturn(List.of(failing));
+
+        notificationService.sendHeartbeat();
+
+        assertThat(counterCount(HEARTBEAT_FAILURE_METRIC)).isEqualTo(1.0);
+        assertThat(counterCount(PUSH_FAILURE_METRIC)).isZero();
+    }
+
+    @Test
+    @DisplayName("알림 push가 성공하면 어떤 실패 카운터도 증가하지 않는다")
+    void pushSuccess_incrementsNoFailureCounter() {
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(mock(SseEmitter.class)));
+
+        notificationService.onNotificationPush(new NotificationPushEvent(1L, pushResponse()));
+
+        assertThat(counterCount(PUSH_FAILURE_METRIC)).isZero();
+        assertThat(counterCount(HEARTBEAT_FAILURE_METRIC)).isZero();
+    }
+
+    @Test
+    @DisplayName("여러 Emitter 중 실패한 개수만큼 push 실패 카운터가 증가한다")
+    void pushFailure_countsEachFailedEmitter() throws Exception {
+        SseEmitter firstFailing = mock(SseEmitter.class);
+        SseEmitter healthy = mock(SseEmitter.class);
+        SseEmitter secondFailing = mock(SseEmitter.class);
+        doThrow(new IOException("broken pipe")).when(firstFailing).send(any(SseEmitter.SseEventBuilder.class));
+        doThrow(new IOException("broken pipe")).when(secondFailing).send(any(SseEmitter.SseEventBuilder.class));
+        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(firstFailing, healthy, secondFailing));
+
+        notificationService.onNotificationPush(new NotificationPushEvent(1L, pushResponse()));
+
+        assertThat(counterCount(PUSH_FAILURE_METRIC)).isEqualTo(2.0);
+        then(healthy).should(never()).completeWithError(any());
+    }
+
+    private double counterCount(String metricName) {
+        Counter counter = meterRegistry.find(metricName).counter();
+        return counter == null ? 0.0 : counter.count();
     }
 }
