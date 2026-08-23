@@ -51,6 +51,24 @@ public class PointService {
         return user.getPointBalance();
     }
 
+    // 결제 전 미리 차감했던 포인트 환불 - 거래 취소 시 사용한다(토스 결제취소와 별개로, 우리 자체
+    // 포인트 잔액은 우리가 직접 되돌려줘야 한다). 잔액 부족 걱정 없이 항상 성공한다(충전과 동일한 방향).
+    @Transactional
+    public int refund(Long userId, int amount, Long relatedTradeId) {
+        User user = findUserWithLock(userId);
+        user.chargePoints(amount);
+
+        pointTransactionRepository.save(PointTransaction.builder()
+                .userId(userId)
+                .type(PointTransactionType.REFUND)
+                .amount(amount)
+                .balanceAfter(user.getPointBalance())
+                .relatedTradeId(relatedTradeId)
+                .build());
+
+        return user.getPointBalance();
+    }
+
     // AI 등급진단 유료 사용 - 잔액이 모자라면 BusinessException(INSUFFICIENT_POINT_BALANCE). 차감 후 잔액을 반환한다.
     @Transactional
     public int useForGrade(Long userId, int amount, Long relatedGradeResultId) {

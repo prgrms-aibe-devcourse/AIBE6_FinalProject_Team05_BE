@@ -94,9 +94,10 @@ class ListingControllerTest {
 
     @Test
     void 매물_등록에_성공하면_200과_등록된_매물을_반환한다() throws Exception {
-        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A);
+        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
         ListingResponse response = new ListingResponse(
-                1L, 1L, 100L, null, 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
+                1L, 1L, 100L, null, 10000, ListingGrade.A, ListingStatus.ACTIVE,
+                null, null, null, null, null, null, LocalDateTime.now());
 
         given(listingService.createListing(anyLong(), any(ListingCreateRequest.class)))
                 .willReturn(response);
@@ -112,7 +113,8 @@ class ListingControllerTest {
 
     @Test
     void 필수값이_없으면_400을_반환한다() throws Exception {
-        ListingCreateRequest invalidRequest = new ListingCreateRequest(null, null, null, null);
+        ListingCreateRequest invalidRequest =
+                new ListingCreateRequest(null, null, null, null, null, null, null, null, null, null);
 
         mockMvc.perform(post("/api/listings")
                         .with(userId(100L))
@@ -124,7 +126,7 @@ class ListingControllerTest {
 
     @Test
     void 중복_등록이면_409를_반환한다() throws Exception {
-        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A);
+        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
 
         given(listingService.createListing(anyLong(), any(ListingCreateRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.DUPLICATE_LISTING));
@@ -260,7 +262,8 @@ class ListingControllerTest {
     void 매물_수정에_성공하면_200과_수정된_매물을_반환한다() throws Exception {
         ListingUpdateRequest request = new ListingUpdateRequest(20000);
         ListingResponse response = new ListingResponse(
-                1L, 1L, 100L, null, 20000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now());
+                1L, 1L, 100L, null, 20000, ListingGrade.A, ListingStatus.ACTIVE,
+                null, null, null, null, null, null, LocalDateTime.now());
 
         given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
                 .willReturn(response);

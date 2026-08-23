@@ -52,6 +52,12 @@ public class ListingService {
                 .variantId(request.variantId())
                 .price(request.price())
                 .grade(request.grade())
+                .settlementBankName(request.settlementBankName())
+                .settlementAccountNumber(request.settlementAccountNumber())
+                .settlementAccountHolder(request.settlementAccountHolder())
+                .returnRecipientName(request.returnRecipientName())
+                .returnRecipientPhone(request.returnRecipientPhone())
+                .returnAddress(request.returnAddress())
                 .build();
 
         Listing saved = listingRepository.save(listing);

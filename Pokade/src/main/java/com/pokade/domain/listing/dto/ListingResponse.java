@@ -14,6 +14,12 @@ public record ListingResponse(
         Integer price,
         ListingGrade grade,
         ListingStatus status,
+        String settlementBankName,
+        String settlementAccountNumber,
+        String settlementAccountHolder,
+        String returnRecipientName,
+        String returnRecipientPhone,
+        String returnAddress,
         LocalDateTime createdAt
 ) {
 
@@ -26,6 +32,12 @@ public record ListingResponse(
                 listing.getPrice(),
                 listing.getGrade(),
                 listing.getStatus(),
+                listing.getSettlementBankName(),
+                listing.getSettlementAccountNumber(),
+                listing.getSettlementAccountHolder(),
+                listing.getReturnRecipientName(),
+                listing.getReturnRecipientPhone(),
+                listing.getReturnAddress(),
                 listing.getCreatedAt()
         );
     }

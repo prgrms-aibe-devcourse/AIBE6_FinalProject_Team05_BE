@@ -1,22 +1,10 @@
-package com.pokade.domain.listing.dto;
+package com.pokade.domain.price.dto;
 
-import com.pokade.domain.listing.entity.ListingGrade;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 
-public record ListingCreateRequest(
-        @NotNull(message = "cardId는 필수입니다.")
-        Long cardId,
-
-        Long variantId,
-
-        @NotNull(message = "price는 필수입니다.")
-        @Positive(message = "price는 0보다 커야 합니다.")
-        Integer price,
-
-        ListingGrade grade,
-
+// 즉시판매(구매입찰 체결) 요청 - 가격/등급/받는사람 정보는 이미 구매입찰(BuyOffer)에 있으므로,
+// 판매자에게 새로 받아야 하는 정산계좌·반송주소만 ListingCreateRequest와 동일한 필드로 받는다.
+public record BuyOfferFulfillRequest(
         @NotBlank(message = "정산 받을 은행명은 필수입니다.")
         String settlementBankName,
 
