@@ -1,0 +1,137 @@
+{
+  "title": "인증·프로필 도메인 모니터링 (#340)",
+  "uid": "pokade-auth-domain",
+  "tags": ["pokade", "auth", "temp-340"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "인증·프로필 응답시간 p50·p95 (http.server.requests)",
+      "description": "AuthMetricsConfig의 MeterFilter가 /api/auth·/api/users URI에만 붙인 퍼센타일. 버킷이 아니라 percentiles로 발행하므로 histogram_quantile()이 아니라 quantile 라벨을 직접 조회한다. 발행한 p50·p95만 조회 가능하며 소급 계산은 안 된다.",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "http_server_requests_seconds{quantile=\"0.5\", uri=~\"/api/(auth|users).*\"}",
+          "legendFormat": "{{uri}} p50",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "http_server_requests_seconds{quantile=\"0.95\", uri=~\"/api/(auth|users).*\"}",
+          "legendFormat": "{{uri}} p95",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "인증·프로필 처리량 (URI별)",
+      "description": "http.server.requests의 count를 초당 요청수로 환산. 응답시간 패널과 같은 URI 집합이라 나란히 놓고 본다. 부하가 없는 구간에서 퍼센타일이 흔들릴 때 표본이 적어서인지 여기서 확인한다.",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (uri) (rate(http_server_requests_seconds_count{uri=~\"/api/(auth|users).*\"}[5m]))",
+          "legendFormat": "{{uri}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "로그인 실패 사유별 (auth.login.failure)",
+      "description": "응답은 계정 열거 방지를 위해 LOGIN_FAILED로 뭉개므로 밖에서는 구분할 수 없다. 지표에서만 갈린다. blocked가 오르면 브루트포스가 실제로 차단되고 있다는 뜻이고, no_account가 튀면 계정 탐색 시도다. email_unverified가 꾸준하면 가입 후 인증 이탈이다.",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (reason) (rate(auth_login_failure_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "refresh 재발급 결과 (auth.token.reissue)",
+      "description": "stolen은 폐기된 refresh가 다시 제출된 것으로 토큰 탈취 정황이다. 0이 아니면 확인이 필요하다. grace는 동시 요청·네트워크 재시도로 정상 발생하므로 0이 아닌 것이 맞고, rotated 대비 비율로 본다. grace 비율이 계속 높으면 클라이언트가 재발급을 중복 호출하고 있다는 신호다.",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (result) (rate(auth_token_reissue_total[5m]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "인증 메일 발송 성공·실패 (auth.mail.send)",
+      "description": "발송이 @Async라 API는 이미 200을 반환한 뒤다. 컨트롤러 레벨 지표는 접수 수만 잡히므로 실제 전송 지점에서 센다. failure가 오르면 SMTP 문제이며 사용자는 인증 코드를 못 받는다. type은 verification·password_reset·withdrawal 세 종류다.",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (type, result) (rate(auth_mail_send_total[5m]))",
+          "legendFormat": "{{type}} / {{result}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "탈퇴 확정 배치 결과 - 24시간 누적 (user.withdrawal.confirm)",
+      "description": "매일 04:00 1회 실행이라 rate(5m)로는 하루 종일 0으로 보인다. increase(24h)로 하루치 누적을 본다. skipped는 그새 철회·이미 확정된 정상 멱등 스킵이고, failed는 익명화 토큰 충돌 재시도 초과나 예상 못 한 예외다. failed가 반복되면 개인정보 삭제 기한을 넘길 수 있어 개입이 필요하다.",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (result) (increase(user_withdrawal_confirm_total[24h]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "탈퇴 확정 배치 - 마지막 성공 이후 경과 (워치독)",
+      "description": "배치가 끝까지 돌 때마다 갱신되는 Gauge와 현재 시각의 차이. 정상이면 24시간(86400초)을 주기로 톱니 모양을 그린다. 이 값이 24시간을 크게 넘기면 스케줄러가 멈춘 것이다. 주의: 앱 기동 직후 배치가 한 번도 안 돌았으면 Gauge가 0이라 이 값이 56년치로 튄다. 그 자체가 미실행 상태를 뜻한다.",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "time() - user_withdrawal_confirm_last_success",
+          "legendFormat": "마지막 성공 이후 경과",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
