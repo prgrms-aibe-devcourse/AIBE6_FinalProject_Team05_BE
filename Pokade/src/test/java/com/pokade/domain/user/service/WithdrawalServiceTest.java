@@ -12,11 +12,14 @@ import com.pokade.global.event.UserWithdrawalRequestedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.TokenBlacklistStore;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -53,6 +56,8 @@ class WithdrawalServiceTest {
     WithdrawalConfirmer withdrawalConfirmer;
     @Mock
     WithdrawalCodeService withdrawalCodeService;
+    @Spy
+    MeterRegistry meterRegistry =new SimpleMeterRegistry();
     @InjectMocks
     WithdrawalService withdrawalService;
 
@@ -185,6 +190,8 @@ class WithdrawalServiceTest {
 
         then(refreshTokenStore).should(never()).deleteAll(any());
         then(tokenBlacklistStore).should(never()).blacklist(any());
+        assertThat(counted("skipped")).isEqualTo(1.0);  // 정상 멱등 스킵은 failed로 세지 않는다
+        assertThat(counted("failed")).isZero();
     }
 
     @Test
@@ -215,6 +222,14 @@ class WithdrawalServiceTest {
         then(refreshTokenStore).should(never()).deleteAll(2L);     // 실패 건은 Redis 정리 안 함
         then(refreshTokenStore).should().deleteAll(3L);
         then(tokenBlacklistStore).should().blacklist(3L);
+        assertThat(counted("failed")).isEqualTo(1.0);      // 예외 건은 failed
+        assertThat(counted("confirmed")).isEqualTo(1.0);   // 나머지 한 건은 confirmed
+        assertThat(counted("skipped")).isZero();
+    }
+
+    // 탈퇴 확정 결과 카운터의 현재 값을 읽는다.
+    private double counted(String result) {
+        return meterRegistry.counter("user.withdrawal.confirm", "result", result).count();
     }
 
     private User pendingUserWithId(long id, String email, String nickname) {
@@ -242,6 +257,8 @@ class WithdrawalServiceTest {
         then(withdrawalConfirmer).should(times(2)).confirm(2L);   // 재시도 발생
         then(refreshTokenStore).should().deleteAll(2L);              // 최종 정리 수행
         then(tokenBlacklistStore).should().blacklist(2L);
+        assertThat(counted("confirmed")).isEqualTo(1.0);
+        assertThat(counted("failed")).isZero();    // 상한 미도달 재시도는 실패가 아니다
     }
 
     @Test
@@ -257,6 +274,8 @@ class WithdrawalServiceTest {
 
         then(withdrawalConfirmer).should(times(3)).confirm(2L);   // MAX_ANON_RETRY 만큼만 시도
         then(refreshTokenStore).should(never()).deleteAll(2L);
+        assertThat(counted("failed")).isEqualTo(1.0);
+        assertThat(counted("skipped")).isZero();   // 재시도 초과는 멱등 스킵이 아니다
     }
 
     private User socialUser() {

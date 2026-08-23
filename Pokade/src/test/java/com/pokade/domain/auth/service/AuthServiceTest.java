@@ -15,12 +15,15 @@ import com.pokade.domain.user.service.UserAgreementService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.security.JwtTokenProvider;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -50,6 +53,8 @@ class AuthServiceTest {
     LoginAttemptStore loginAttemptStore;
     @Mock
     UserAgreementService userAgreementService;
+    @Spy
+    MeterRegistry meterRegistry = new SimpleMeterRegistry();
     @InjectMocks
     AuthService authService;
 
