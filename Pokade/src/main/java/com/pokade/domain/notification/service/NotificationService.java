@@ -61,8 +61,7 @@ public class NotificationService {
     private final SseEmitterStore sseEmitterStore;
     private final ApplicationEventPublisher eventPublisher;
 
-    // 계측용. 슬라이스 테스트는 MeterRegistry 빈이 없으므로 support/TestMetricsConfig를 함께 @Import하고,
-    // new로 직접 만드는 단위 테스트는 생성자에 new SimpleMeterRegistry()를 넘긴다(#343).
+    // 계측 주입 규칙은 support/TestMetricsConfig javadoc 참조(#343).
     private final MeterRegistry meterRegistry;
 
     public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {

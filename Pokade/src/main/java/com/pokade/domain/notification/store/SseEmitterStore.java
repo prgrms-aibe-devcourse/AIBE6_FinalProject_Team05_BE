@@ -22,8 +22,7 @@ public class SseEmitterStore {
 
     private final Map<Long, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
-    // 계측용. 슬라이스 테스트는 MeterRegistry 빈이 없으므로 support/TestMetricsConfig를 함께 @Import하고,
-    // new로 직접 만드는 단위 테스트는 생성자에 new SimpleMeterRegistry()를 넘긴다(#343).
+    // 계측 주입 규칙은 support/TestMetricsConfig javadoc 참조(#343).
     // 위 emitters는 final이지만 선언과 동시에 초기화돼 @RequiredArgsConstructor 대상에서 빠지므로,
     // 생성자 파라미터는 이 필드 하나뿐이다.
     private final MeterRegistry meterRegistry;

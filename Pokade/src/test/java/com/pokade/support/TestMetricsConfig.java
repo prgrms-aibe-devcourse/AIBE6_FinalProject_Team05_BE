@@ -27,6 +27,16 @@ import org.springframework.context.annotation.Bean;
  * <p>Spring 컨텍스트를 안 쓰고 {@code new}로 직접 만드는 단위 테스트는 이 설정이 필요 없다.
  * 생성자에 {@code new SimpleMeterRegistry()}를 넘기면 된다.
  *
+ * <p>{@code @InjectMocks}를 쓰는 Mockito 테스트는 {@code @Mock MeterRegistry}로 두면 안 된다 -
+ * {@code counter()}가 null을 돌려줘 생성자 안에서 NPE가 나고, Mockito가 그걸
+ * {@code InjectMocksException}으로 감싸버려 원인이 안 보인다. 실제 구현을 {@code @Spy}로 둔다:
+ * <pre>
+ * &#64;Spy
+ * private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+ * </pre>
+ *
+ * <p>계측 전반(지표 인벤토리, SLO 버킷 추가법, Prometheus 이름 변환)은 {@code docs/monitoring.md} 참고.
+ *
  * <p>SimpleMeterRegistry를 쓰는 이유: 인메모리라 외부 의존이 없고, 테스트가 실제로 기록된 값을
  * 확인해야 할 때는 이 빈을 주입받아 {@code registry.counter("...").count()}로 읽을 수 있다
  * (SiteVisitServiceTest가 그렇게 쓴다).
