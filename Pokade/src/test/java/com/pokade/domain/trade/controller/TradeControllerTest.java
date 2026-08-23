@@ -85,7 +85,7 @@ class TradeControllerTest {
 
     @Test
     void 결제준비에_성공하면_200과_orderId_amount를_반환한다() throws Exception {
-        TradeReadyRequest request = new TradeReadyRequest(1L);
+        TradeReadyRequest request = new TradeReadyRequest(1L, 0, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
         TradeReadyResponse response = new TradeReadyResponse("order-1", 10000);
 
         given(tradeService.ready(anyLong(), any(TradeReadyRequest.class)))
@@ -102,7 +102,7 @@ class TradeControllerTest {
 
     @Test
     void 결제준비시_listingId가_없으면_400을_반환한다() throws Exception {
-        TradeReadyRequest invalidRequest = new TradeReadyRequest(null);
+        TradeReadyRequest invalidRequest = new TradeReadyRequest(null, 0, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
 
         mockMvc.perform(post("/api/trades/ready")
                         .with(userId(200L))
@@ -114,7 +114,7 @@ class TradeControllerTest {
 
     @Test
     void 결제준비시_본인_매물을_구매하려하면_400을_반환한다() throws Exception {
-        TradeReadyRequest request = new TradeReadyRequest(1L);
+        TradeReadyRequest request = new TradeReadyRequest(1L, 0, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
 
         given(tradeService.ready(anyLong(), any(TradeReadyRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.SELF_PURCHASE_NOT_ALLOWED));
@@ -129,7 +129,7 @@ class TradeControllerTest {
 
     @Test
     void 결제준비시_존재하지_않는_매물이면_404를_반환한다() throws Exception {
-        TradeReadyRequest request = new TradeReadyRequest(999L);
+        TradeReadyRequest request = new TradeReadyRequest(999L, 0, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
 
         given(tradeService.ready(anyLong(), any(TradeReadyRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
@@ -147,7 +147,7 @@ class TradeControllerTest {
         TradePaymentConfirmRequest request = new TradePaymentConfirmRequest("pay_123", "order-1", 10000L);
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
-                null, null, null, null, null, LocalDateTime.now());
+                null, null, null, null, null, null, null, null, LocalDateTime.now());
 
         given(tradeService.confirmPurchase(200L, "pay_123", "order-1", 10000L))
                 .willReturn(response);
@@ -163,8 +163,8 @@ class TradeControllerTest {
     }
 
     @Test
-    void 결제승인시_paymentKey가_없으면_400을_반환한다() throws Exception {
-        TradePaymentConfirmRequest invalidRequest = new TradePaymentConfirmRequest("", "order-1", 10000L);
+    void 결제승인시_orderId가_없으면_400을_반환한다() throws Exception {
+        TradePaymentConfirmRequest invalidRequest = new TradePaymentConfirmRequest("pay_123", "", 10000L);
 
         mockMvc.perform(post("/api/trades/confirm-payment")
                         .with(userId(200L))
@@ -172,6 +172,26 @@ class TradeControllerTest {
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 포인트로_전액_결제해_paymentKey가_없어도_200을_반환한다() throws Exception {
+        // paymentKey는 DTO 레벨에서는 필수가 아니다 - 결제 금액이 0보다 클 때만 서비스 레벨에서
+        // 필수로 검증한다(TradeServiceTest에서 검증). 여기서는 서비스를 목으로 대체하므로
+        // paymentKey 없이도 요청 자체는 컨트롤러를 통과하는지만 확인한다.
+        TradePaymentConfirmRequest request = new TradePaymentConfirmRequest(null, "order-1", 0L);
+        TradeResponse response = new TradeResponse(
+                1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
+                null, null, null, null, null, null, null, null, LocalDateTime.now());
+
+        given(tradeService.confirmPurchase(200L, null, "order-1", 0L)).willReturn(response);
+
+        mockMvc.perform(post("/api/trades/confirm-payment")
+                        .with(userId(200L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1L));
     }
 
     @Test
@@ -193,7 +213,7 @@ class TradeControllerTest {
     void 본인_거래를_조회하면_200과_거래정보를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
-                null, null, null, null, null, LocalDateTime.now());
+                null, null, null, null, null, null, null, null, LocalDateTime.now());
 
         given(tradeService.getTrade(200L, 1L)).willReturn(response);
 
@@ -235,7 +255,7 @@ class TradeControllerTest {
         LocalDateTime confirmedAt = LocalDateTime.now();
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.COMPLETED,
-                shippedAt, inspectedAt, deliveredAt, confirmedAt, confirmedAt, confirmedAt);
+                shippedAt, inspectedAt, deliveredAt, confirmedAt, confirmedAt, null, null, null, confirmedAt);
 
         given(tradeService.confirmTrade(200L, 1L)).willReturn(response);
 
@@ -285,7 +305,7 @@ class TradeControllerTest {
     void 구매자가_취소하면_200과_CANCELLED_상태를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.CANCELLED,
-                null, null, null, null, null, LocalDateTime.now());
+                null, null, null, null, null, null, null, null, LocalDateTime.now());
 
         given(tradeService.cancelTrade(200L, 1L)).willReturn(response);
 
@@ -299,7 +319,7 @@ class TradeControllerTest {
     void 판매자가_취소하면_200과_CANCELLED_상태를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
                 1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.CANCELLED,
-                null, null, null, null, null, LocalDateTime.now());
+                null, null, null, null, null, null, null, null, LocalDateTime.now());
 
         given(tradeService.cancelTrade(100L, 1L)).willReturn(response);
 

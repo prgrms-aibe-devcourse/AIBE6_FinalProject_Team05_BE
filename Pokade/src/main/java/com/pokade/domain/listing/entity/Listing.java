@@ -52,6 +52,27 @@ public class Listing {
     @Column(name = "stale_notice_sent", nullable = false)
     private boolean staleNoticeSent;
 
+    // 판매자가 정산받을 계좌 - 실제 이체 연동 전이라 지금은 저장만 한다(주문서에서 매번 새로 입력,
+    // 마이페이지 저장/재사용은 하지 않기로 함).
+    @Column(name = "settlement_bank_name")
+    private String settlementBankName;
+
+    @Column(name = "settlement_account_number")
+    private String settlementAccountNumber;
+
+    @Column(name = "settlement_account_holder")
+    private String settlementAccountHolder;
+
+    // 검수 실패 등으로 카드를 판매자에게 반송해야 할 때 쓰는 주소.
+    @Column(name = "return_recipient_name")
+    private String returnRecipientName;
+
+    @Column(name = "return_recipient_phone")
+    private String returnRecipientPhone;
+
+    @Column(name = "return_address")
+    private String returnAddress;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -61,12 +82,30 @@ public class Listing {
     private LocalDateTime updatedAt;
 
     @Builder
-    public Listing(Long cardId, Long sellerId, Long variantId, Integer price, ListingGrade grade) {
+    public Listing(
+            Long cardId,
+            Long sellerId,
+            Long variantId,
+            Integer price,
+            ListingGrade grade,
+            String settlementBankName,
+            String settlementAccountNumber,
+            String settlementAccountHolder,
+            String returnRecipientName,
+            String returnRecipientPhone,
+            String returnAddress
+    ) {
         this.cardId = cardId;
         this.sellerId = sellerId;
         this.variantId = variantId;
         this.price = price;
         this.grade = grade;
+        this.settlementBankName = settlementBankName;
+        this.settlementAccountNumber = settlementAccountNumber;
+        this.settlementAccountHolder = settlementAccountHolder;
+        this.returnRecipientName = returnRecipientName;
+        this.returnRecipientPhone = returnRecipientPhone;
+        this.returnAddress = returnAddress;
         this.status = ListingStatus.ACTIVE;
         this.staleNoticeSent = false;
     }

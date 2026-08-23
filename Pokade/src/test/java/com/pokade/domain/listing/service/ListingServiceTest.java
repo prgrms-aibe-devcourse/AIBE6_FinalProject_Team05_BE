@@ -61,7 +61,7 @@ class ListingServiceTest {
 
     @Test
     void 매물_등록시_판매자_계정이_비활성이면_ACCOUNT_NOT_ACTIVE_예외가_발생한다() {
-        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A);
+        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
         willThrow(new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE))
                 .given(userAccessChecker).assertWritable(100L);
 
@@ -74,7 +74,7 @@ class ListingServiceTest {
 
     @Test
     void 매물_등록시_판매자_계정이_활성이면_정상_등록된다() {
-        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A);
+        ListingCreateRequest request = new ListingCreateRequest(1L, null, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
         given(listingRepository.existsBySellerIdAndCardIdAndVariantIdAndStatus(
                 anyLong(), any(), any(), any())).willReturn(false);
         given(listingRepository.save(any(Listing.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -87,7 +87,7 @@ class ListingServiceTest {
 
     @Test
     void 매물_등록에_성공하면_ListingCreatedEvent가_저장된_카드ID_변형ID로_발행된다() {
-        ListingCreateRequest request = new ListingCreateRequest(1L, 2L, 10000, ListingGrade.A);
+        ListingCreateRequest request = new ListingCreateRequest(1L, 2L, 10000, ListingGrade.A, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
         given(listingRepository.existsBySellerIdAndCardIdAndVariantIdAndStatus(
                 anyLong(), any(), any(), any())).willReturn(false);
         given(listingRepository.save(any(Listing.class))).willAnswer(invocation -> invocation.getArgument(0));

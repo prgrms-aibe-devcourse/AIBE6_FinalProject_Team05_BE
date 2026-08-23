@@ -67,16 +67,29 @@ public class Trade {
     @Column(name = "settled_at")
     private LocalDateTime settledAt;
 
+    @Column(name = "recipient_name")
+    private String recipientName;
+
+    @Column(name = "recipient_phone")
+    private String recipientPhone;
+
+    @Column(name = "recipient_address")
+    private String recipientAddress;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
-    public Trade(Listing listing, Long buyerId, Integer price) {
+    public Trade(Listing listing, Long buyerId, Integer price,
+                 String recipientName, String recipientPhone, String recipientAddress) {
         this.listing = listing;
         this.buyerId = buyerId;
         this.price = price;
         this.status = TradeStatus.PENDING;
+        this.recipientName = recipientName;
+        this.recipientPhone = recipientPhone;
+        this.recipientAddress = recipientAddress;
     }
 
     // 판매자가 플랫폼으로 발송했음을 기록 (판매자 액션)
