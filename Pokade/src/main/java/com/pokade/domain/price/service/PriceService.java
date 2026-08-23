@@ -304,6 +304,7 @@ public class PriceService {
                 .recipientAddress(order.getRecipientAddress())
                 .tossPaymentKey(order.getPaymentAmount() > 0 ? paymentKey : null)
                 .pointsUsed(order.getPointsUsed())
+                .shippingFee(order.getShippingFee())
                 .build();
         BuyOffer saved = buyOfferRepository.save(buyOffer);
 
@@ -323,10 +324,13 @@ public class PriceService {
         if (buyOffer.getBuyerId().equals(sellerId)) {
             throw new BusinessException(ErrorCode.SELF_BUY_OFFER_NOT_ALLOWED);
         }
+        // TradeService.ready()와 동일하게 양쪽(구매자/판매자) 모두 정지/탈퇴 여부를 검증한다 -
+        // 구매입찰 등록 이후 구매자 계정이 정지됐을 수도 있기 때문.
+        userAccessChecker.assertWritable(sellerId);
+        userAccessChecker.assertWritable(buyOffer.getBuyerId());
         // ACTIVE/만료 여부 검증 및 상태 전이를 매물 생성보다 먼저 한다 - 이미 체결된 입찰이면
         // 매물을 만들 필요 없이 여기서 바로 실패한다.
         buyOffer.markMatched();
-        userAccessChecker.assertWritable(sellerId);
 
         Listing listing = listingRepository.save(
                 Listing.builder()
@@ -344,10 +348,16 @@ public class PriceService {
                         .build()
         );
 
+        // Payment.amount는 판매자 정산 기준가(product price)가 아니라 실제로 결제된 금액
+        // (상품가+배송비-포인트사용액) - TradeService.confirmPurchase()가 지키는 것과 동일한
+        // 규칙(그 메서드의 주석 참고). Trade.price(=buyOffer.getPrice())는 그대로 상품가만 유지한다.
+        int paymentAmount = buyOffer.getPrice() + buyOffer.getShippingFee() - buyOffer.getPointsUsed();
+
         return tradeService.createMatchedTrade(
                 listing.getId(),
                 buyOffer.getBuyerId(),
                 buyOffer.getPrice(),
+                paymentAmount,
                 buyOffer.getRecipientName(),
                 buyOffer.getRecipientPhone(),
                 buyOffer.getRecipientAddress(),

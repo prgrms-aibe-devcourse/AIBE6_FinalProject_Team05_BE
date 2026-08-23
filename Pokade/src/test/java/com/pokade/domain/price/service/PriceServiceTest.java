@@ -1052,6 +1052,7 @@ class PriceServiceTest {
                 .recipientAddress("서울시 강남구")
                 .tossPaymentKey("pay_999")
                 .pointsUsed(1000)
+                .shippingFee(3000)
                 .build();
     }
 
@@ -1071,7 +1072,7 @@ class PriceServiceTest {
                 null, null, null, null, null,
                 "김철수", "010-1234-5678", "서울시 강남구", java.time.LocalDateTime.now());
         given(tradeService.createMatchedTrade(
-                any(), eq(2L), eq(250000), eq("김철수"), eq("010-1234-5678"),
+                any(), eq(2L), eq(250000), eq(252000), eq("김철수"), eq("010-1234-5678"),
                 eq("서울시 강남구"), eq("pay_999"), eq(1000)))
                 .willReturn(expected);
 

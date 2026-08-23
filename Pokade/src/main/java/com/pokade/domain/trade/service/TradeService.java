@@ -202,7 +202,7 @@ public class TradeService {
     // 받아서, 이 서비스가 domain.price의 엔티티를 몰라도 되게 한다.
     @Transactional
     public TradeResponse createMatchedTrade(
-            Long listingId, Long buyerId, Integer price,
+            Long listingId, Long buyerId, Integer price, Integer paymentAmount,
             String recipientName, String recipientPhone, String recipientAddress,
             String tossPaymentKey, Integer pointsUsed
     ) {
@@ -224,11 +224,13 @@ public class TradeService {
                         .build()
         );
 
+        // Payment.amount는 confirmPurchase()와 동일하게 실제 결제(에스크로+포인트)된 금액인
+        // paymentAmount를 저장한다 - trade.getPrice()(=price, 상품가만)가 아니다.
         paymentRepository.save(
                 Payment.builder()
                         .trade(trade)
                         .buyerId(buyerId)
-                        .amount(price)
+                        .amount(paymentAmount)
                         .pointsUsed(pointsUsed)
                         .method(PaymentMethod.CARD)
                         .tossPaymentKey(tossPaymentKey)

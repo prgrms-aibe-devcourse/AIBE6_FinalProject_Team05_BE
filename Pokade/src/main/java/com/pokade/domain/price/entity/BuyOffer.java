@@ -73,6 +73,11 @@ public class BuyOffer {
     @Column(name = "points_used")
     private Integer pointsUsed;
 
+    // 결제 시점에 함께 낸 배송비 - 즉시판매(체결) 시 실제 결제된 금액(price+shippingFee-pointsUsed)을
+    // TradeService.createMatchedTrade()의 Payment.amount로 정확히 넘기기 위해 필요하다.
+    @Column(name = "shipping_fee")
+    private Integer shippingFee;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -95,7 +100,8 @@ public class BuyOffer {
             String recipientPhone,
             String recipientAddress,
             String tossPaymentKey,
-            Integer pointsUsed
+            Integer pointsUsed,
+            Integer shippingFee
     ) {
         this.id = id;
         this.cardId = cardId;
@@ -111,12 +117,15 @@ public class BuyOffer {
         this.recipientAddress = recipientAddress;
         this.tossPaymentKey = tossPaymentKey;
         this.pointsUsed = pointsUsed != null ? pointsUsed : 0;
+        this.shippingFee = shippingFee != null ? shippingFee : 0;
     }
 
     // 판매자가 즉시판매로 이 구매입찰에 매칭했을 때 호출 - ACTIVE가 아니거나(이미 체결) 만료됐으면
     // 거부한다. 이후 orderbook/최고가 조회 쿼리가 전부 status='ACTIVE'만 보므로 자연히 목록에서 빠진다.
+    // expiresAt은 빌더에서 항상 채워지지만, DB에서 직접 로드된 레코드가 null일 가능성을 대비해 방어한다.
     public void markMatched() {
-        if (!"ACTIVE".equals(this.status) || this.expiresAt.isBefore(LocalDateTime.now())) {
+        boolean expired = this.expiresAt != null && this.expiresAt.isBefore(LocalDateTime.now());
+        if (!"ACTIVE".equals(this.status) || expired) {
             throw new BusinessException(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
         }
         this.status = "MATCHED";
