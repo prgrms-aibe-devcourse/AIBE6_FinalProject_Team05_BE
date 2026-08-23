@@ -8,9 +8,7 @@ import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -28,10 +26,8 @@ public class WatchlistTargetPriceEvaluator {
     private final NotificationService notificationService;
     private final CardNameKoResolver cardNameKoResolver;
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
-    // required = false: 슬라이스 테스트엔 MeterRegistry 빈이 없어 컨텍스트 로딩이 깨지는 문제(#224 유사)를 막기 위함.
-    @Autowired(required = false)
-    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    // 계측 주입 규칙은 support/TestMetricsConfig javadoc 참조(#343).
+    private final MeterRegistry meterRegistry;
 
     // 목표가에 새로 도달한 경우(아직 알림 안 간 상태에서 도달)에만 markAsNotified + 실제 알림 생성을 한다.
     // "이미 알림 갔는지"는 메모리 값이 아니라 markAsNotifiedIfNotYet()의 원자적 조건부 UPDATE(DB 기준)로
@@ -45,11 +41,11 @@ public class WatchlistTargetPriceEvaluator {
         }
         int claimed = watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId());
         if (claimed == 0) {
-            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+            // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중
             meterRegistry.counter("watchlist.notify.already_claimed.calls").increment();
             return;
         }
-        // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+        // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중
         meterRegistry.counter("watchlist.notify.immediate.calls").increment();
         watchlist.markAsNotified();
         notifyIfTargetAlreadyReached(watchlist, reachedTargetPrice);

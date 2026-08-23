@@ -11,16 +11,9 @@ import com.pokade.domain.price.repository.PriceTradeStatsRepository;
 import com.pokade.domain.watchlist.entity.Watchlist;
 import com.pokade.domain.watchlist.repository.WatchlistRepository;
 import com.pokade.support.AbstractIntegrationTest;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +22,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -102,9 +103,9 @@ class WatchlistTargetPriceNoticeConcurrencyTest extends AbstractIntegrationTest 
         given(priceTradeStatsRepository.findPriceRangesByCardIds(any(), any(), any())).willReturn(List.of(range));
         given(priceTradeStatsRepository.findPriceRangesByCardIdsSince(any(), any(), any(), any())).willReturn(List.of(range));
 
-        NotificationService notificationService = new NotificationService(notificationRepository, cardRepository, new SseEmitterStore(), event -> { });
+        NotificationService notificationService = new NotificationService(notificationRepository, cardRepository, new SseEmitterStore(new SimpleMeterRegistry()), event -> { }, new SimpleMeterRegistry());
         WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator = new WatchlistTargetPriceEvaluator(
-                watchlistRepository, cardRepository, notificationService, mock(CardNameKoResolver.class));
+                watchlistRepository, cardRepository, notificationService, mock(CardNameKoResolver.class), new SimpleMeterRegistry());
         WatchlistTargetPriceNoticeProcessor processor = new WatchlistTargetPriceNoticeProcessor(
                 watchlistRepository, priceTradeStatsRepository, notificationService, watchlistTargetPriceEvaluator);
 
