@@ -74,6 +74,11 @@ class NotificationServiceTest {
         return Card.builder().id(10L).name("리자몽").imageMedium("medium.png").build();
     }
 
+    // AFTER_COMMIT push 계열 테스트가 공유하는 응답. inquiryId는 어디서도 검증하지 않는 자리표시자다.
+    private NotificationResponse pushResponse() {
+        return new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
+    }
+
     // ===== 목록 조회 =====
     @Test
     @DisplayName("목록 조회: 알림이 없으면 빈 페이지 반환")
@@ -333,7 +338,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 있으면 notification 이벤트를 전송한다")
     void onNotificationPush_pushes_to_subscriber() throws Exception {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
+        NotificationResponse response = pushResponse();
         SseEmitter emitter = mock(SseEmitter.class);
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
@@ -345,7 +350,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("onNotificationPush: 구독 중인 Emitter가 없으면 예외 없이 조용히 스킵된다")
     void onNotificationPush_no_subscriber_noop() {
-        NotificationResponse response = new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
+        NotificationResponse response = pushResponse();
         given(sseEmitterStore.findByUserId(1L)).willReturn(List.of());
 
         assertThatCode(() -> notificationService.onNotificationPush(new NotificationPushEvent(1L, response)))
@@ -399,7 +404,7 @@ class NotificationServiceTest {
         assertThatCode(() -> notificationService.sendHeartbeat()).doesNotThrowAnyException();
     }
 
-    // ===== SSE 전송 실패 계측 (#258 임시 계측) =====
+    // ===== SSE 전송 실패 계측 (#258 도입, 워치리스트/알림 대시보드가 사용 중) =====
     // 두 경로의 실패가 서로 다른 카운터로 잡히는지까지 확인한다 - 한쪽으로 합쳐지면
     // "알림이 유실됐다"와 "이미 끊긴 연결이다"를 구분할 수 없게 된다.
     @Test
@@ -453,10 +458,6 @@ class NotificationServiceTest {
 
         assertThat(counterCount(PUSH_FAILURE_METRIC)).isEqualTo(2.0);
         then(healthy).should(never()).completeWithError(any());
-    }
-
-    private NotificationResponse pushResponse() {
-        return new NotificationResponse(1L, NotificationType.INQUIRY_HANDLED, "메시지", null, null, 7L, false, null);
     }
 
     private double counterCount(String metricName) {
