@@ -2,12 +2,12 @@ package com.pokade.domain.notification.repository;
 
 import com.pokade.domain.notification.entity.Notification;
 import com.pokade.domain.notification.entity.NotificationType;
+import com.pokade.support.AbstractIntegrationTest;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -19,8 +19,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-class NotificationRepositoryTest {
+class NotificationRepositoryTest extends AbstractIntegrationTest {
 
     @Autowired
     private NotificationRepository notificationRepository;
@@ -218,6 +217,29 @@ class NotificationRepositoryTest {
         entityManager.clear();
     }
 
+    @Test
+    void 문의_처리_완료_알림은_inquiry_id_컬럼에_참조_문의를_저장하고_그대로_조회된다() {
+        Long userId = insertUser("inquiry@test.com");
+        Long inquiryId = insertInquiry(userId);
+
+        Notification saved = notificationRepository.save(
+                Notification.builder()
+                        .userId(userId)
+                        .type(NotificationType.INQUIRY_HANDLED)
+                        .message("'제목' 문의가 처리 완료되었습니다.")
+                        .inquiryId(inquiryId)
+                        .build()
+        );
+        entityManager.flush();
+        entityManager.clear();
+
+        Optional<Notification> found = notificationRepository.findById(saved.getId());
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getInquiryId()).isEqualTo(inquiryId);
+        assertThat(found.get().getCardId()).isNull();
+    }
+
     private Notification saveNotification(Long userId, NotificationType type, String message) {
         Notification saved = notificationRepository.save(
                 Notification.builder()
@@ -228,6 +250,14 @@ class NotificationRepositoryTest {
         );
         entityManager.flush();
         return saved;
+    }
+
+    private Long insertInquiry(Long userId) {
+        return ((Number) entityManager.createNativeQuery(
+                        "INSERT INTO inquiries (user_id, category, status, title, content) "
+                                + "VALUES (:userId, 'ETC', 'HANDLED', '제목', '내용') RETURNING id")
+                .setParameter("userId", userId)
+                .getSingleResult()).longValue();
     }
 
     private Long insertUser(String email) {
