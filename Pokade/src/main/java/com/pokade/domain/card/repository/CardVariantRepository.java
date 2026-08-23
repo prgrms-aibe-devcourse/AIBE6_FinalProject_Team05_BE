@@ -14,6 +14,13 @@ public interface CardVariantRepository extends JpaRepository<CardVariant, Long> 
     List<CardVariant> findByCardIdOrderByPrimaryDescVariantNameAsc(Long cardId);
 
     /**
+     * 요청으로 받은 variantId가 "그 카드에 실제로 속한" 변형인지 확인한다.
+     * existsById만으로는 부족하다 - watchlist.variant_id FK는 card_variants(id)만 참조하므로,
+     * 다른 카드의 변형 id를 보내도 DB 제약에 걸리지 않고 그대로 저장돼 버린다.
+     */
+    boolean existsByIdAndCardId(Long id, Long cardId);
+
+    /**
      * Scrydex 동기화 배치가 대표 판본 1개를 upsert할 때 쓰는 조회 - 현재 배치 스코프에서는 카드당
      * card_variants 행이 최대 1개뿐이므로 findByCardId 하나로 충분하다.
      */

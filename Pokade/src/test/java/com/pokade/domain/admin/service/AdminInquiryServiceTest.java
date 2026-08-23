@@ -21,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -109,6 +110,7 @@ class AdminInquiryServiceTest {
     @DisplayName("상태를 변경하면 엔티티에 반영되고 변경된 상태로 응답한다")
     void updateStatus_changesStatus() {
         Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        ReflectionTestUtils.setField(inquiry, "id", 7L);
         given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
         given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(1L)).willReturn(List.of());
 
@@ -116,7 +118,7 @@ class AdminInquiryServiceTest {
 
         assertThat(response.status()).isEqualTo(InquiryStatus.HANDLED);
         assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.HANDLED);
-        then(notificationService).should().createInquiryHandledNotification(1L, "제목");
+        then(notificationService).should().createInquiryHandledNotification(1L, 7L, "제목");
     }
 
     @Test
@@ -129,7 +131,7 @@ class AdminInquiryServiceTest {
 
         adminInquiryService.updateStatus(1L, InquiryStatus.HANDLED);
 
-        then(notificationService).should(never()).createInquiryHandledNotification(any(), any());
+        then(notificationService).should(never()).createInquiryHandledNotification(any(), any(), any());
     }
 
     @Test
@@ -143,7 +145,7 @@ class AdminInquiryServiceTest {
         InquiryResponse response = adminInquiryService.updateStatus(1L, InquiryStatus.UNHANDLED);
 
         assertThat(response.status()).isEqualTo(InquiryStatus.UNHANDLED);
-        then(notificationService).should(never()).createInquiryHandledNotification(any(), any());
+        then(notificationService).should(never()).createInquiryHandledNotification(any(), any(), any());
     }
 
     @Test
@@ -160,6 +162,7 @@ class AdminInquiryServiceTest {
     @DisplayName("답변을 등록하면 답변 내용/시각이 저장되고 상태가 HANDLED로 전환된다")
     void answerInquiry_savesAnswerAndMarksHandled() {
         Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        ReflectionTestUtils.setField(inquiry, "id", 7L);
         given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
         given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(1L)).willReturn(List.of());
 
@@ -169,13 +172,14 @@ class AdminInquiryServiceTest {
         assertThat(response.answeredAt()).isNotNull();
         assertThat(response.status()).isEqualTo(InquiryStatus.HANDLED);
         assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.HANDLED);
-        then(notificationService).should().createInquiryHandledNotification(1L, "제목");
+        then(notificationService).should().createInquiryHandledNotification(1L, 7L, "제목");
     }
 
     @Test
     @DisplayName("이미 답변한 문의를 다시 답변(수정)해도 답변 내용/시각만 갱신되고 알림은 최초 1회만 보낸다")
     void answerInquiry_updatesExistingAnswer() {
         Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        ReflectionTestUtils.setField(inquiry, "id", 7L);
         given(inquiryRepository.findById(1L)).willReturn(Optional.of(inquiry));
         given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(1L)).willReturn(List.of());
         adminInquiryService.answerInquiry(1L, "첫 답변");
@@ -183,7 +187,7 @@ class AdminInquiryServiceTest {
         InquiryResponse response = adminInquiryService.answerInquiry(1L, "수정된 답변");
 
         assertThat(response.answerContent()).isEqualTo("수정된 답변");
-        then(notificationService).should(times(1)).createInquiryHandledNotification(1L, "제목");
+        then(notificationService).should(times(1)).createInquiryHandledNotification(1L, 7L, "제목");
     }
 
     @Test
