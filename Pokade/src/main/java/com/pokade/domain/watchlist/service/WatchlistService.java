@@ -46,7 +46,7 @@ public class WatchlistService {
     private final CardNameKoResolver cardNameKoResolver;
     private final WatchlistTargetPriceEvaluator watchlistTargetPriceEvaluator;
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+    // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중
     @Timed(value = "watchlist.add.duration")
     @Transactional
     public WatchlistResponse addWatchlist(Long userId, WatchlistCreateRequest request) {
@@ -167,7 +167,7 @@ public class WatchlistService {
         return watchlistTargetPriceEvaluator.resolveReachedTargetPrice(watchlist, range) != null;
     }
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+    // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중
     @Timed(value = "watchlist.update.duration")
     @Transactional
     public WatchlistResponse updateWatchlist(Long userId, Long watchlistId, WatchlistUpdateRequest request) {

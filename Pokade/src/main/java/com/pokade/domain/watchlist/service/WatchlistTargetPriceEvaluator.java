@@ -42,11 +42,11 @@ public class WatchlistTargetPriceEvaluator {
         }
         int claimed = watchlistRepository.markAsNotifiedIfNotYet(watchlist.getId());
         if (claimed == 0) {
-            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+            // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중
             meterRegistry.counter("watchlist.notify.already_claimed.calls").increment();
             return;
         }
-        // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님
+        // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중
         meterRegistry.counter("watchlist.notify.immediate.calls").increment();
         watchlist.markAsNotified();
         notifyIfTargetAlreadyReached(watchlist, reachedTargetPrice);

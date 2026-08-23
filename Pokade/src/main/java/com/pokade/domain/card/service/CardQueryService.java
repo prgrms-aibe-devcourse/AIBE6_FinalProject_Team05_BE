@@ -92,7 +92,7 @@ public class CardQueryService {
         return search(null, types, rarities, languages, expansionId, minPrice, maxPrice, sort, pageable);
     }
 
-    // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+    // 운영 계측 - #217 도입, card 대시보드가 사용 중
     // #263: language(언어 코드, 예 EN/JA) 필터 추가 - types/rarity와 동일하게 값 화이트리스트 없이
     // 사이즈 검증만 한다(바인드 IN절이라 애초에 인젝션 여지가 없고, DB에 실제 존재하는 값과 무관하게
     // 빈 결과로 안전하게 좁혀지므로 신규 언어코드가 추가돼도 서비스가 깨지지 않는다).
@@ -144,7 +144,7 @@ public class CardQueryService {
         Card card = cardRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
         cardRepository.incrementViewCount(id);
-        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+        // 운영 계측 - #217 도입, card 대시보드가 사용 중
         meterRegistry.counter("card.view.increment.calls").increment();
         // incrementViewCount()는 벌크 UPDATE라 위에서 조회해 둔 card 엔티티의 메모리 값에는 반영되지
         // 않는다(영속성 컨텍스트를 거치지 않음) - 그래서 "이번 방문으로 +1된" 값을 직접 계산해서 응답에
@@ -334,7 +334,7 @@ public class CardQueryService {
         if (cards.isEmpty()) {
             return Map.of();
         }
-        // 임시 계측 - #217, 팀 논의 전 커밋 대상 아님
+        // 운영 계측 - #217 도입, card 대시보드가 사용 중
         meterRegistry.counter("card.grade.batch.calls").increment();
         List<Long> cardIds = cards.stream().map(Card::getId).toList();
         return groupByKey(cardRepository.findGradesByCardIds(cardIds, GRADE_WHITELIST_LIST),

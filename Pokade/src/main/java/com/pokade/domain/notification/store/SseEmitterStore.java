@@ -28,7 +28,7 @@ public class SseEmitterStore {
     // 생성자 파라미터는 이 필드 하나뿐이다.
     private final MeterRegistry meterRegistry;
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님.
+    // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중.
     // emitters 맵 자체를 상태 객체로 등록해, 스크레이프 시점마다 그 시점의 총 연결 수(유저별 리스트 크기 합)를
     // 즉석에서 계산한다 - 별도 카운터 필드를 직접 증감시키지 않아 save()/remove()의 동시성 로직과 분리된다.
     @PostConstruct

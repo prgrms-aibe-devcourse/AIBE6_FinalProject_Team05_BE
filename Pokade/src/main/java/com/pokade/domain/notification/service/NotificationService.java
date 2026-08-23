@@ -50,7 +50,7 @@ public class NotificationService {
     // #162: 다른 페이징 API(AiGradeService/CardQueryService/ChatService)와 동일한 상한
     private static final int MAX_PAGE_SIZE = 100;
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. SSE 전송 실패를 경로별로 나눠 센다.
+    // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중. SSE 전송 실패를 경로별로 나눠 센다.
     // 하트비트 실패는 "연결이 이미 끊겼다"는 신호에 가깝지만, 알림 push 실패는 사용자가 받았어야 할
     // 알림이 실제로 유실됐다는 뜻이라 성격이 다르다 - 한 지표로 합치면 이 구분이 사라진다.
     private static final String HEARTBEAT_FAILURE_METRIC = "notification.sse.heartbeat.failure.calls";
@@ -193,7 +193,7 @@ public class NotificationService {
     // 구독 중인 Emitter가 없으면(구독 중이 아니면) 조용히 스킵한다.
     private void pushToSubscribers(Long userId, NotificationResponse response) {
         for (SseEmitter emitter : sseEmitterStore.findByUserId(userId)) {
-            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. 여기서 실패하면 알림이 유실된 것이므로
+            // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중. 여기서 실패하면 알림이 유실된 것이므로
             // 하트비트와 분리된 카운터로 센다.
             sendEvent(emitter, SseEmitter.event().name("notification").data(response), PUSH_FAILURE_METRIC);
         }
@@ -204,7 +204,7 @@ public class NotificationService {
     @Scheduled(fixedRate = HEARTBEAT_INTERVAL_MILLIS)
     public void sendHeartbeat() {
         for (SseEmitter emitter : sseEmitterStore.findAll()) {
-            // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. 하트비트 전송 실패율을 별도로 본다.
+            // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중. 하트비트 전송 실패율을 별도로 본다.
             sendEvent(emitter, SseEmitter.event().comment("heartbeat"), HEARTBEAT_FAILURE_METRIC);
         }
     }
@@ -217,7 +217,7 @@ public class NotificationService {
         sendEvent(emitter, event, null);
     }
 
-    // 임시 계측 - #258, 팀 논의 전 커밋 대상 아님. failureMetricName이 있을 때만 실패 카운터를 증가시킨다.
+    // 운영 계측 - #258 도입, 워치리스트/알림 대시보드가 사용 중. failureMetricName이 있을 때만 실패 카운터를 증가시킨다.
     private void sendEvent(SseEmitter emitter, SseEmitter.SseEventBuilder event, String failureMetricName) {
         try {
             emitter.send(event);
