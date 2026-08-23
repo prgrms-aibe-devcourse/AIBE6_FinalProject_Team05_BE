@@ -42,6 +42,7 @@ public class AuthService {
     // grace는 동시 요청·네트워크 재시도로 정상 발생하므로 0이 아닌 것이 맞고, 둘을 같은
     // 이름의 태그로 나눠 재발급 대비 비율로 본다.
     private static final String REISSUE_METRIC = "auth.token.reissue";
+    private static final String LOGIN_FAILED_METRIC = "auth.login.failure";
 
     private final MeterRegistry meterRegistry;
 
@@ -77,6 +78,7 @@ public class AuthService {
     public TokenPair login(LoginRequest request) {
         String email = request.email();
         if (loginAttemptStore.isBlocked(email)) { // BCrypt 전에 차단 → DoS 증폭 컷
+            countLoginFailure("blocked");
             throw new BusinessException(ErrorCode.LOGIN_ATTEMPTS_EXCEEDED);
         }
 
@@ -85,18 +87,29 @@ public class AuthService {
         if (user == null) {
             passwordEncoder.matches(request.password(), dummyHash); //타이밍 방어
             loginAttemptStore.recordFailure(email);
+            countLoginFailure("no_account");
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             loginAttemptStore.recordFailure(email);
+            countLoginFailure("bad_password");
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
 
         switch (user.getStatus()) {
-            case PENDING -> throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
-            case SUSPENDED -> throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
-            case DELETED -> throw new BusinessException(ErrorCode.LOGIN_FAILED);
+            case PENDING -> {
+                countLoginFailure("email_unverified");
+                throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
+            }
+            case SUSPENDED -> {
+                countLoginFailure("suspended");
+                throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+            }
+            case DELETED -> {
+                countLoginFailure("deleted");
+                throw new BusinessException(ErrorCode.LOGIN_FAILED);
+            }
             case ACTIVE, WITHDRAWAL_PENDING -> {
                 // 로그인 허용
             }
@@ -165,6 +178,14 @@ public class AuthService {
     private void countReissue(String result) {
         Counter.builder(REISSUE_METRIC)
                 .tag("result", result)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    // 로그인 실패 사유를 지표에 기록한다. 응답 코드는 뭉개도 지표는 사유별로 구분한다.
+    private void countLoginFailure(String reason) {
+        Counter.builder(LOGIN_FAILED_METRIC)
+                .tag("reason", reason)
                 .register(meterRegistry)
                 .increment();
     }
