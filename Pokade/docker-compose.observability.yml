@@ -1,4 +1,6 @@
-# Actuator/Prometheus/Grafana 로컬 실험용 오버레이 - 커밋 대상 아님.
+# Actuator/Prometheus/Grafana 로컬 관측 스택 오버레이.
+# (실험용으로 시작했지만 observability/ 설정과 함께 저장소에 커밋되어 팀 공용으로 쓰인다.)
+# 실행 전 .env에 GRAFANA_ADMIN_PASSWORD를 채워야 한다 - 비어 있으면 아래 `:?`에서 바로 실패한다.
 # 기존 docker-compose.yml은 그대로 두고, 아래처럼 함께 실행한다:
 #   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 #
