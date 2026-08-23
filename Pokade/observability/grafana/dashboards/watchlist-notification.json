@@ -4,7 +4,7 @@
   "tags": ["pokade", "watchlist", "notification", "temp-258"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
@@ -97,8 +97,8 @@
       "id": 6,
       "type": "timeseries",
       "title": "SSE 하트비트 전송 실패율 (notification.sse.heartbeat.failure.calls)",
-      "description": "sendHeartbeat()에서만 집계 - 일반 알림 push(pushToSubscribers) 실패는 포함하지 않는다.",
-      "gridPos": { "x": 8, "y": 16, "w": 16, "h": 8 },
+      "description": "sendHeartbeat()에서만 집계한다. 알림 push 실패는 #343에서 notification.sse.push.failure.calls로 분리돼 오른쪽 패널에서 따로 본다 - 하트비트 실패는 \"이미 끊긴 연결\"에 가깝고 push 실패는 알림 유실이라 성격이 다르다.",
+      "gridPos": { "x": 8, "y": 16, "w": 8, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
       "targets": [
@@ -153,6 +153,23 @@
           "expr": "sum(rate(watchlist_update_duration_seconds_bucket{le=\"0.2\"}[5m])) / sum(rate(watchlist_update_duration_seconds_count[5m])) * 100",
           "legendFormat": "update within 200ms (%)",
           "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "SSE 알림 push 전송 실패율 (notification.sse.push.failure.calls)",
+      "description": "pushToSubscribers()에서 집계 - 구독 중인 Emitter로 알림을 보내다 실패한 횟수다. 하트비트 실패(왼쪽)와 달리 이 값이 0이 아니면 사용자가 받았어야 할 알림이 실제로 유실됐다는 뜻이다.",
+      "gridPos": { "x": 16, "y": 16, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(notification_sse_push_failure_calls_total[5m])",
+          "legendFormat": "push failures/s",
+          "refId": "A"
         }
       ]
     }
