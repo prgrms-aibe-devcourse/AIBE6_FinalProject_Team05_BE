@@ -2,6 +2,7 @@ package com.pokade.domain.card.filter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,10 +12,16 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class CardRateLimitFilterTest {
 
+    // #343: 프로덕션의 no-arg 생성자를 없애면서, 레지스트리는 테스트가 직접 넘긴다.
+    // 지표 값을 확인할 필요가 없는 테스트는 이 헬퍼로 일회용 레지스트리를 받는다.
+    private CardRateLimitFilter newFilter() {
+        return new CardRateLimitFilter(new SimpleMeterRegistry());
+    }
+
     @Test
     @DisplayName("t1 임계값 이내 요청은 정상적으로 다음 필터체인으로 전달된다")
     void t1() throws Exception {
-        CardRateLimitFilter filter = new CardRateLimitFilter();
+        CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
 
         for (int i = 0; i < 60; i++) {
@@ -32,7 +39,7 @@ class CardRateLimitFilterTest {
     @Test
     @DisplayName("t2 임계값을 초과한 요청은 429와 함께 차단된다")
     void t2() throws Exception {
-        CardRateLimitFilter filter = new CardRateLimitFilter();
+        CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
 
         for (int i = 0; i < 60; i++) {
@@ -55,7 +62,7 @@ class CardRateLimitFilterTest {
     @Test
     @DisplayName("t3 IP가 다르면 각각 별도로 카운트된다")
     void t3() throws Exception {
-        CardRateLimitFilter filter = new CardRateLimitFilter();
+        CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
 
         for (int i = 0; i < 60; i++) {
@@ -76,7 +83,7 @@ class CardRateLimitFilterTest {
     @Test
     @DisplayName("t4 신뢰되지 않은 origin은 X-Forwarded-For를 조작해도 실제 remoteAddr 기준으로 카운트된다")
     void t4() throws Exception {
-        CardRateLimitFilter filter = new CardRateLimitFilter();
+        CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
         String untrustedRemoteAddr = "203.0.113.10";
 
@@ -104,7 +111,7 @@ class CardRateLimitFilterTest {
     @Test
     @DisplayName("t5 신뢰된 프록시(loopback/사설 IP)에서는 X-Forwarded-For가 여전히 반영된다")
     void t5() throws Exception {
-        CardRateLimitFilter filter = new CardRateLimitFilter();
+        CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
         String trustedRemoteAddr = "127.0.0.1";
 
@@ -135,7 +142,7 @@ class CardRateLimitFilterTest {
     @Test
     @DisplayName("t6 유휴 시간이 지난 bucketsByIp 항목은 정리되어 무한정 쌓이지 않는다")
     void t6() throws Exception {
-        CardRateLimitFilter filter = new CardRateLimitFilter();
+        CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
 
         for (int i = 0; i < 5; i++) {
@@ -150,5 +157,24 @@ class CardRateLimitFilterTest {
         filter.evictIdleEntriesForTest(Long.MIN_VALUE);
 
         assertThat(filter.bucketCountForTest()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("t7 통과/차단 횟수가 각각 allowed·rejected 카운터에 기록된다")
+    void t7() throws Exception {
+        // 지표 값을 검증하는 유일한 테스트라 헬퍼 대신 레지스트리를 직접 들고 있는다.
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        CardRateLimitFilter filter = new CardRateLimitFilter(meterRegistry);
+        FilterChain filterChain = Mockito.mock(FilterChain.class);
+
+        for (int i = 0; i < 61; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
+            request.setRemoteAddr("127.0.0.7");
+            filter.doFilter(request, new MockHttpServletResponse(), filterChain);
+        }
+
+        // 61번째 요청만 분당 60회 제한에 걸린다.
+        assertThat(meterRegistry.counter("card.ratelimit.allowed").count()).isEqualTo(60.0);
+        assertThat(meterRegistry.counter("card.ratelimit.rejected").count()).isEqualTo(1.0);
     }
 }
