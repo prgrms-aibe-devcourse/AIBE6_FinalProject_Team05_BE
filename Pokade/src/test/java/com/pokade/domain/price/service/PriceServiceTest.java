@@ -9,26 +9,42 @@ import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
+import com.pokade.domain.point.client.TossPaymentClient;
+import com.pokade.domain.point.service.PointService;
+import com.pokade.domain.price.dto.BuyOfferFulfillRequest;
 import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
+import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
+import com.pokade.domain.price.dto.BuyOfferReadyRequest;
+import com.pokade.domain.price.dto.BuyOfferReadyResponse;
+import com.pokade.domain.price.dto.BuyOfferResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.entity.BuyOffer;
+import com.pokade.domain.price.entity.BuyOfferOrder;
+import com.pokade.domain.price.entity.BuyOfferOrderStatus;
+import com.pokade.domain.price.repository.BuyOfferOrderRepository;
 import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
+import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.repository.TradeRepository;
+import com.pokade.domain.trade.service.TradeService;
+import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.port.UserAccessChecker;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -37,12 +53,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -63,6 +82,9 @@ class PriceServiceTest {
     private BuyOfferRepository buyOfferRepository;
 
     @Mock
+    private BuyOfferOrderRepository buyOfferOrderRepository;
+
+    @Mock
     private TradeRepository tradeRepository;
 
     @Mock
@@ -73,6 +95,21 @@ class PriceServiceTest {
 
     @Mock
     private CardPriceRepository cardPriceRepository;
+
+    @Mock
+    private UserAccessChecker userAccessChecker;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private TossPaymentClient tossPaymentClient;
+
+    @Mock
+    private PointService pointService;
+
+    @Mock
+    private TradeService tradeService;
 
     @Spy
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
@@ -632,6 +669,267 @@ class PriceServiceTest {
         verify(buyOfferRepository, never()).findOrderbook(any(), any(), any());
     }
 
+    private BuyOfferReadyRequest buyOfferReadyRequestOf(Long cardId, Long variantId, Integer price, ListingGrade grade) {
+        return buyOfferReadyRequestOf(cardId, variantId, price, grade, 0);
+    }
+
+    private BuyOfferReadyRequest buyOfferReadyRequestOf(
+            Long cardId, Long variantId, Integer price, ListingGrade grade, int pointsToUse) {
+        return new BuyOfferReadyRequest(
+                cardId, variantId, price, grade, pointsToUse, "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
+    }
+
+    private BuyOfferOrder pendingBuyOfferOrderOf(Long buyerId, Long cardId, Long variantId, int price) {
+        return BuyOfferOrder.builder()
+                .orderId("bo-order-1")
+                .buyerId(buyerId)
+                .cardId(cardId)
+                .variantId(variantId)
+                .grade(ListingGrade.S)
+                .price(price)
+                .shippingFee(3000)
+                .recipientName("김철수")
+                .recipientPhone("010-1234-5678")
+                .recipientAddress("서울시 강남구 테헤란로 1")
+                .build();
+    }
+
+    @Test
+    @DisplayName("t37 구매입찰 결제 준비 시 매물을 잠그지 않고 상품가+배송비를 합한 금액으로 주문만 PENDING으로 기록한다")
+    void t37() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        BuyOfferReadyRequest request = buyOfferReadyRequestOf(1L, 10L, 250000, ListingGrade.S);
+
+        BuyOfferReadyResponse response = priceService.readyBuyOffer(2L, request);
+
+        assertThat(response.amount()).isEqualTo(253000);
+        assertThat(response.orderId()).isNotBlank();
+        ArgumentCaptor<BuyOfferOrder> captor = ArgumentCaptor.forClass(BuyOfferOrder.class);
+        verify(buyOfferOrderRepository).save(captor.capture());
+        assertThat(captor.getValue().getBuyerId()).isEqualTo(2L);
+        assertThat(captor.getValue().getVariantId()).isEqualTo(10L);
+        assertThat(captor.getValue().getRecipientName()).isEqualTo("김철수");
+        verify(buyOfferRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t38 존재하지 않는 카드면 CARD_NOT_FOUND 예외가 발생하고 저장하지 않는다")
+    void t38() {
+        given(cardRepository.existsById(999L)).willReturn(false);
+        BuyOfferReadyRequest request = buyOfferReadyRequestOf(999L, null, 100000, null);
+
+        assertThatThrownBy(() -> priceService.readyBuyOffer(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CARD_NOT_FOUND);
+        verify(buyOfferOrderRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t39 variantId 미지정이고 대표 변형이 없으면 PRIMARY_VARIANT_NOT_FOUND 예외가 발생한다")
+    void t39() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(java.util.Optional.empty());
+        BuyOfferReadyRequest request = buyOfferReadyRequestOf(1L, null, 100000, null);
+
+        assertThatThrownBy(() -> priceService.readyBuyOffer(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PRIMARY_VARIANT_NOT_FOUND);
+        verify(buyOfferOrderRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t40 variantId를 지정하지 않으면 대표 변형을 조회해 그 변형으로 주문을 기록한다")
+    void t40() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(cardVariantRepository.findPrimaryVariantId(1L)).willReturn(java.util.Optional.of(10L));
+        BuyOfferReadyRequest request = buyOfferReadyRequestOf(1L, null, 100000, null);
+
+        priceService.readyBuyOffer(3L, request);
+
+        ArgumentCaptor<BuyOfferOrder> captor = ArgumentCaptor.forClass(BuyOfferOrder.class);
+        verify(buyOfferOrderRepository).save(captor.capture());
+        assertThat(captor.getValue().getVariantId()).isEqualTo(10L);
+    }
+
+    @Test
+    @DisplayName("t41 결제승인 시 주문이 없으면 BUY_OFFER_ORDER_NOT_FOUND 예외가 발생한다")
+    void t41() {
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> priceService.confirmBuyOfferPurchase(2L, "pay_123", "bo-order-1", 253000))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUY_OFFER_ORDER_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("t42 결제승인 시 주문의 구매자가 아니면 ACCESS_DENIED 예외가 발생한다")
+    void t42() {
+        BuyOfferOrder order = pendingBuyOfferOrderOf(2L, 1L, 10L, 250000);
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> priceService.confirmBuyOfferPurchase(999L, "pay_123", "bo-order-1", 253000))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("t43 결제승인 시 이미 처리된 주문이면 BUY_OFFER_ORDER_ALREADY_PROCESSED 예외가 발생한다")
+    void t43() {
+        BuyOfferOrder order = pendingBuyOfferOrderOf(2L, 1L, 10L, 250000);
+        order.markConfirmed();
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> priceService.confirmBuyOfferPurchase(2L, "pay_123", "bo-order-1", 253000))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUY_OFFER_ORDER_ALREADY_PROCESSED);
+    }
+
+    @Test
+    @DisplayName("t44 결제승인 시 금액이 다르면 INVALID_INPUT 예외가 발생하고 토스 승인을 호출하지 않는다")
+    void t44() {
+        BuyOfferOrder order = pendingBuyOfferOrderOf(2L, 1L, 10L, 250000);
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> priceService.confirmBuyOfferPurchase(2L, "pay_123", "bo-order-1", 999))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+        verify(tossPaymentClient, never()).confirmPayment(any(), any(), any(Long.class));
+    }
+
+    @Test
+    @DisplayName("t45 결제승인 성공 시 구매입찰을 생성하고 주문을 CONFIRMED로 기록한다")
+    void t45() {
+        BuyOfferOrder order = pendingBuyOfferOrderOf(2L, 1L, 10L, 250000);
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+        given(buyOfferRepository.save(any(BuyOffer.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        BuyOfferResponse response = priceService.confirmBuyOfferPurchase(2L, "pay_123", "bo-order-1", 253000);
+
+        assertThat(response.buyerId()).isEqualTo(2L);
+        assertThat(response.recipientName()).isEqualTo("김철수");
+        assertThat(order.getStatus()).isEqualTo(BuyOfferOrderStatus.CONFIRMED);
+        verify(tossPaymentClient).confirmPayment("pay_123", "bo-order-1", 253000L);
+        ArgumentCaptor<BuyOffer> captor = ArgumentCaptor.forClass(BuyOffer.class);
+        verify(buyOfferRepository).save(captor.capture());
+        assertThat(captor.getValue().getTossPaymentKey()).isEqualTo("pay_123");
+    }
+
+    @Test
+    @DisplayName("t46 결제승인 실패 시 주문을 FAILED로 기록하고 예외를 다시 던진다")
+    void t46() {
+        BuyOfferOrder order = pendingBuyOfferOrderOf(2L, 1L, 10L, 250000);
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+        willThrow(new BusinessException(ErrorCode.PAYMENT_FAILED))
+                .given(tossPaymentClient).confirmPayment(any(), any(), any(Long.class));
+
+        assertThatThrownBy(() -> priceService.confirmBuyOfferPurchase(2L, "pay_123", "bo-order-1", 253000))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_FAILED);
+        verify(buyOfferOrderRepository).markFailedIfPending("bo-order-1");
+        verify(buyOfferRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t47 결제 준비 시 포인트 사용액이 결제 금액보다 크면 INVALID_INPUT 예외가 발생한다")
+    void t47() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        BuyOfferReadyRequest request = buyOfferReadyRequestOf(1L, 10L, 250000, ListingGrade.S, 300000);
+
+        assertThatThrownBy(() -> priceService.readyBuyOffer(2L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+        verify(buyOfferOrderRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t48 결제 준비 시 포인트 잔액이 부족하면 INSUFFICIENT_POINT_BALANCE 예외가 발생한다")
+    void t48() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(userRepository.findById(2L)).willReturn(Optional.of(User.builder().pointBalance(1000).build()));
+        BuyOfferReadyRequest request = buyOfferReadyRequestOf(1L, 10L, 250000, ListingGrade.S, 5000);
+
+        assertThatThrownBy(() -> priceService.readyBuyOffer(2L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INSUFFICIENT_POINT_BALANCE);
+        verify(buyOfferOrderRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("t49 결제 준비 시 포인트 사용액만큼 뺀 금액을 결제 금액으로 반환하고 주문에 남긴다")
+    void t49() {
+        given(cardRepository.existsById(1L)).willReturn(true);
+        given(userRepository.findById(2L)).willReturn(Optional.of(User.builder().pointBalance(100000).build()));
+        BuyOfferReadyRequest request = buyOfferReadyRequestOf(1L, 10L, 250000, ListingGrade.S, 50000);
+
+        BuyOfferReadyResponse response = priceService.readyBuyOffer(2L, request);
+
+        assertThat(response.amount()).isEqualTo(203000);
+        ArgumentCaptor<BuyOfferOrder> captor = ArgumentCaptor.forClass(BuyOfferOrder.class);
+        verify(buyOfferOrderRepository).save(captor.capture());
+        assertThat(captor.getValue().getPointsUsed()).isEqualTo(50000);
+    }
+
+    @Test
+    @DisplayName("t50 결제승인 시 사용한 포인트만큼 pointService.use()를 호출한다")
+    void t50() {
+        BuyOfferOrder order = BuyOfferOrder.builder()
+                .orderId("bo-order-1").buyerId(2L).cardId(1L).variantId(10L).grade(ListingGrade.S)
+                .price(250000).shippingFee(3000).pointsUsed(50000)
+                .recipientName("김철수").recipientPhone("010-1234-5678").recipientAddress("서울시 강남구 테헤란로 1")
+                .build();
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+        given(buyOfferRepository.save(any(BuyOffer.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        priceService.confirmBuyOfferPurchase(2L, "pay_123", "bo-order-1", 203000);
+
+        verify(pointService).use(2L, 50000, null);
+        verify(tossPaymentClient).confirmPayment("pay_123", "bo-order-1", 203000L);
+    }
+
+    @Test
+    @DisplayName("t51 포인트로 전액을 충당해 결제 금액이 0이면 토스 승인 없이 바로 구매입찰을 생성한다")
+    void t51() {
+        BuyOfferOrder order = BuyOfferOrder.builder()
+                .orderId("bo-order-1").buyerId(2L).cardId(1L).variantId(10L).grade(ListingGrade.S)
+                .price(250000).shippingFee(3000).pointsUsed(253000)
+                .recipientName("김철수").recipientPhone("010-1234-5678").recipientAddress("서울시 강남구 테헤란로 1")
+                .build();
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+        given(buyOfferRepository.save(any(BuyOffer.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        BuyOfferResponse response = priceService.confirmBuyOfferPurchase(2L, null, "bo-order-1", 0);
+
+        assertThat(order.getStatus()).isEqualTo(BuyOfferOrderStatus.CONFIRMED);
+        verify(pointService).use(2L, 253000, null);
+        verify(tossPaymentClient, never()).confirmPayment(any(), any(), any(Long.class));
+        ArgumentCaptor<BuyOffer> captor = ArgumentCaptor.forClass(BuyOffer.class);
+        verify(buyOfferRepository).save(captor.capture());
+        assertThat(captor.getValue().getTossPaymentKey()).isNull();
+    }
+
+    @Test
+    @DisplayName("t52 결제 금액이 남아있는데 paymentKey가 없으면 INVALID_INPUT 예외가 발생하고 토스 승인을 호출하지 않는다")
+    void t52() {
+        BuyOfferOrder order = pendingBuyOfferOrderOf(2L, 1L, 10L, 250000);
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> priceService.confirmBuyOfferPurchase(2L, null, "bo-order-1", 253000))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+        verify(tossPaymentClient, never()).confirmPayment(any(), any(), any(Long.class));
+        verify(pointService, never()).use(any(), anyInt(), any());
+    }
+
     private PriceCardStatsRepository.CardPriceChangeView cardPriceChangeView(BigDecimal changePct, BigDecimal change7dAmount) {
         return new PriceCardStatsRepository.CardPriceChangeView() {
             @Override
@@ -739,5 +1037,92 @@ class PriceServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PRIMARY_VARIANT_NOT_FOUND);
         verifyNoInteractions(cardPriceRepository);
+    }
+
+    private BuyOffer activeBuyOfferOf(Long id, Long buyerId) {
+        return BuyOffer.builder()
+                .id(id)
+                .cardId(1L)
+                .buyerId(buyerId)
+                .variantId(10L)
+                .price(250000)
+                .grade(ListingGrade.S)
+                .recipientName("김철수")
+                .recipientPhone("010-1234-5678")
+                .recipientAddress("서울시 강남구")
+                .tossPaymentKey("pay_999")
+                .pointsUsed(1000)
+                .shippingFee(3000)
+                .build();
+    }
+
+    private BuyOfferFulfillRequest buyOfferFulfillRequestOf() {
+        return new BuyOfferFulfillRequest(
+                "국민은행", "110-1234-5678", "홍길동", "홍길동", "010-9999-8888", "서울시 서초구");
+    }
+
+    @Test
+    @DisplayName("t53 즉시판매 성공 시 매물을 생성해 즉시 TRADING으로 잠그고 구매입찰을 체결 처리한다")
+    void t53() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 2L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+        given(listingRepository.save(any(Listing.class))).willAnswer(invocation -> invocation.getArgument(0));
+        TradeResponse expected = new TradeResponse(
+                100L, null, 2L, 1L, 1L, "리자몽", 250000, TradeStatus.PENDING,
+                null, null, null, null, null,
+                "김철수", "010-1234-5678", "서울시 강남구", java.time.LocalDateTime.now());
+        given(tradeService.createMatchedTrade(
+                any(), eq(2L), eq(250000), eq(252000), eq("김철수"), eq("010-1234-5678"),
+                eq("서울시 강남구"), eq("pay_999"), eq(1000)))
+                .willReturn(expected);
+
+        TradeResponse response = priceService.fulfillBuyOffer(7L, 1L, buyOfferFulfillRequestOf());
+
+        assertThat(response).isEqualTo(expected);
+        assertThat(buyOffer.getStatus()).isEqualTo("MATCHED");
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getSellerId()).isEqualTo(1L);
+        assertThat(captor.getValue().getPrice()).isEqualTo(250000);
+        assertThat(captor.getValue().getGrade()).isEqualTo(ListingGrade.S);
+    }
+
+    @Test
+    @DisplayName("t54 존재하지 않는 구매입찰이면 BUY_OFFER_NOT_FOUND 예외가 발생한다")
+    void t54() {
+        given(buyOfferRepository.findById(999L)).willReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> priceService.fulfillBuyOffer(999L, 1L, buyOfferFulfillRequestOf()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUY_OFFER_NOT_FOUND);
+        verifyNoInteractions(listingRepository, tradeService);
+    }
+
+    @Test
+    @DisplayName("t55 본인이 등록한 구매입찰이면 SELF_BUY_OFFER_NOT_ALLOWED 예외가 발생한다")
+    void t55() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+
+        assertThatThrownBy(() -> priceService.fulfillBuyOffer(7L, 1L, buyOfferFulfillRequestOf()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SELF_BUY_OFFER_NOT_ALLOWED);
+        verifyNoInteractions(listingRepository, tradeService);
+    }
+
+    @Test
+    @DisplayName("t56 이미 체결된 구매입찰이면 BUY_OFFER_ALREADY_MATCHED 예외가 발생하고 매물도 생성하지 않는다")
+    void t56() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 2L);
+        buyOffer.markMatched();
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+
+        assertThatThrownBy(() -> priceService.fulfillBuyOffer(7L, 1L, buyOfferFulfillRequestOf()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
+        verifyNoInteractions(listingRepository, tradeService);
     }
 }

@@ -21,6 +21,8 @@ import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.repository.PaymentRepository;
 import com.pokade.domain.trade.repository.TradeOrderRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
+import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
@@ -42,11 +44,16 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class TradeService {
 
+    // 즉시구매 결제 시 상품가에 더하는 고정 배송비(KRW) - domain.price의 구매입찰 결제(SHIPPING_FEE)와
+    // 동일한 값/성격이며, 두 도메인이 각자 자기 상수로 갖는다(공유 상수 모듈은 아직 없음).
+    private static final int SHIPPING_FEE = 3000;
+
     private final ListingRepository listingRepository;
     private final TradeRepository tradeRepository;
     private final PaymentRepository paymentRepository;
     private final CardRepository cardRepository;
     private final UserAccessChecker userAccessChecker;
+    private final UserRepository userRepository;
     private final TradeOrderRepository tradeOrderRepository;
     private final TossPaymentClient tossPaymentClient;
     private final PointService pointService;
@@ -74,15 +81,36 @@ public class TradeService {
             throw new BusinessException(ErrorCode.SELF_PURCHASE_NOT_ALLOWED);
         }
 
+        int totalAmount = listing.getPrice() + SHIPPING_FEE;
+        int pointsToUse = request.pointsToUse();
+        if (pointsToUse > totalAmount) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "포인트 사용액이 결제 금액보다 클 수 없습니다.");
+        }
+        if (pointsToUse > 0) {
+            // 실제 차감은 결제 승인 시점(confirmPurchase)에서 한다 - 여기서는 구매를 포기하거나
+            // 결제를 완료하지 않아도 포인트가 미리 묶이지 않도록, 잔액이 충분한지만 미리 확인해 준다.
+            User buyer = userRepository.findById(buyerId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+            if (buyer.getPointBalance() < pointsToUse) {
+                throw new BusinessException(ErrorCode.INSUFFICIENT_POINT_BALANCE);
+            }
+        }
+
         String orderId = UUID.randomUUID().toString();
+        int paymentAmount = totalAmount - pointsToUse;
         tradeOrderRepository.save(TradeOrder.builder()
                 .orderId(orderId)
                 .buyerId(buyerId)
                 .listingId(listing.getId())
-                .amount(listing.getPrice())
+                .amount(totalAmount)
+                .shippingFee(SHIPPING_FEE)
+                .pointsUsed(pointsToUse)
+                .recipientName(request.recipientName())
+                .recipientPhone(request.recipientPhone())
+                .recipientAddress(request.recipientAddress())
                 .build());
 
-        return new TradeReadyResponse(orderId, listing.getPrice());
+        return new TradeReadyResponse(orderId, paymentAmount);
     }
 
     // 결제 승인 콜백 처리 - 토스 승인이 끝난 뒤에야 매물 잠금을 시도한다. 그 사이 다른 구매자가
@@ -99,13 +127,24 @@ public class TradeService {
             // 이미 처리된 주문이면 토스 승인 API를 다시 호출하지 않고 즉시 거부한다 (중복 콜백 방어).
             throw new BusinessException(ErrorCode.TRADE_ORDER_ALREADY_PROCESSED);
         }
-        if (order.getAmount() != amount) {
+        if (order.getPaymentAmount() != amount) {
             // 리다이렉트로 전달된 금액이 최초 요청 금액과 다르면 위변조 의심 - 토스 승인 API를 호출하지 않고 거부한다.
             throw new BusinessException(ErrorCode.INVALID_INPUT, "요청 금액이 일치하지 않습니다.");
         }
+        if (order.getPaymentAmount() > 0 && (paymentKey == null || paymentKey.isBlank())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "paymentKey는 필수입니다.");
+        }
 
+        // 포인트 사용액이 있으면 토스 승인보다 먼저 차감한다 - 이후 토스 승인이 실패하거나 매물이
+        // 이미 팔려있어 예외가 다시 던져지면 이 메서드의 트랜잭션 전체가 롤백되므로(pointService.use()도
+        // 같은 트랜잭션에 참여), 별도 환불 호출 없이도 방금 차감한 포인트가 함께 되돌아간다.
         try {
-            tossPaymentClient.confirmPayment(paymentKey, orderId, order.getAmount());
+            if (order.getPointsUsed() > 0) {
+                pointService.use(buyerId, order.getPointsUsed(), null);
+            }
+            if (order.getPaymentAmount() > 0) {
+                tossPaymentClient.confirmPayment(paymentKey, orderId, order.getPaymentAmount());
+            }
         } catch (BusinessException e) {
             // 이 메서드는 결국 예외를 다시 던져 전체 트랜잭션이 롤백되므로, 실패 기록은 별도 빈(리포지토리)의
             // REQUIRES_NEW 트랜잭션으로 즉시 커밋해야 한다 - 같은 트랜잭션 안에서 엔티티만 바꾸면 유실된다.
@@ -118,8 +157,11 @@ public class TradeService {
 
         int updated = listingRepository.markAsTrading(listing.getId());
         if (updated == 0) {
-            // 결제는 승인됐지만 그 사이 다른 구매자가 먼저 사간 경우 - 승인된 결제를 즉시 취소해 환불한다.
-            tossPaymentClient.cancelPayment(paymentKey, "이미 판매된 매물입니다.");
+            // 결제는 승인됐지만 그 사이 다른 구매자가 먼저 사간 경우 - 승인된 결제(있었다면)를 즉시
+            // 취소해 환불한다. 방금 차감한 포인트는 아래 throw로 전체 트랜잭션이 롤백되며 함께 되돌아간다.
+            if (order.getPaymentAmount() > 0) {
+                tossPaymentClient.cancelPayment(paymentKey, "이미 판매된 매물입니다.");
+            }
             tradeOrderRepository.markFailedIfPending(orderId);
             throw new BusinessException(ErrorCode.TRADE_CONFLICT);
         }
@@ -129,20 +171,71 @@ public class TradeService {
                         .listing(listing)
                         .buyerId(buyerId)
                         .price(listing.getPrice())
+                        .recipientName(order.getRecipientName())
+                        .recipientPhone(order.getRecipientPhone())
+                        .recipientAddress(order.getRecipientAddress())
                         .build()
         );
 
+        // Payment.amount는 실제로 토스에 결제(에스크로)된 금액 - 배송비가 포함된 order.getPaymentAmount()이지,
+        // 판매자 정산 기준인 trade.getPrice()(상품가만)가 아니다. 판매자 정산은 계속 trade.getPrice()로
+        // 이뤄지므로(confirmTrade()의 pointService.settle() 참고) 배송비/포인트 사용액이 정산에 섞이지 않는다.
         paymentRepository.save(
                 Payment.builder()
                         .trade(trade)
                         .buyerId(buyerId)
-                        .amount(trade.getPrice())
+                        .amount(order.getPaymentAmount())
+                        .pointsUsed(order.getPointsUsed())
                         .method(PaymentMethod.CARD)
-                        .tossPaymentKey(paymentKey)
+                        .tossPaymentKey(order.getPaymentAmount() > 0 ? paymentKey : null)
                         .build()
         );
 
         order.markConfirmed();
+
+        return toResponse(trade);
+    }
+
+    // domain.price의 "구매입찰 즉시판매" 전용 진입점 - 이미 결제(토스 에스크로)가 끝난 구매입찰에
+    // 판매자가 방금 등록한 매물을 즉시 매칭시킨다. TradeOrder를 거치지 않으므로(결제를 다시 받지 않음)
+    // confirmPurchase()와 별도 메서드로 둔다. BuyOffer 타입을 직접 참조하지 않고 이미 검증된 값만
+    // 받아서, 이 서비스가 domain.price의 엔티티를 몰라도 되게 한다.
+    @Transactional
+    public TradeResponse createMatchedTrade(
+            Long listingId, Long buyerId, Integer price, Integer paymentAmount,
+            String recipientName, String recipientPhone, String recipientAddress,
+            String tossPaymentKey, Integer pointsUsed
+    ) {
+        int updated = listingRepository.markAsTrading(listingId);
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.TRADE_CONFLICT);
+        }
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+
+        Trade trade = tradeRepository.save(
+                Trade.builder()
+                        .listing(listing)
+                        .buyerId(buyerId)
+                        .price(price)
+                        .recipientName(recipientName)
+                        .recipientPhone(recipientPhone)
+                        .recipientAddress(recipientAddress)
+                        .build()
+        );
+
+        // Payment.amount는 confirmPurchase()와 동일하게 실제 결제(에스크로+포인트)된 금액인
+        // paymentAmount를 저장한다 - trade.getPrice()(=price, 상품가만)가 아니다.
+        paymentRepository.save(
+                Payment.builder()
+                        .trade(trade)
+                        .buyerId(buyerId)
+                        .amount(paymentAmount)
+                        .pointsUsed(pointsUsed)
+                        .method(PaymentMethod.CARD)
+                        .tossPaymentKey(tossPaymentKey)
+                        .build()
+        );
 
         return toResponse(trade);
     }
@@ -282,10 +375,16 @@ public class TradeService {
         listingRepository.revertToActiveIfTrading(trade.getListing().getId());
 
         // 구매 시점에 이미 토스로 실제 결제가 완료돼 에스크로로 잡혀있으므로, 취소 성공 시
-        // 저장해둔 paymentKey로 토스 결제취소(환불) API를 실제로 호출한다.
+        // 저장해둔 paymentKey로 토스 결제취소(환불) API를 실제로 호출한다. 포인트로 전액을
+        // 충당한 결제는 tossPaymentKey가 없어 토스 호출 자체가 필요 없다.
         Payment payment = paymentRepository.findByTradeId(trade.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_FAILED));
-        tossPaymentClient.cancelPayment(payment.getTossPaymentKey(), "거래 취소");
+        if (payment.getTossPaymentKey() != null) {
+            tossPaymentClient.cancelPayment(payment.getTossPaymentKey(), "거래 취소");
+        }
+        if (payment.getPointsUsed() != null && payment.getPointsUsed() > 0) {
+            pointService.refund(trade.getBuyerId(), payment.getPointsUsed(), trade.getId());
+        }
         payment.refund();
 
         return toResponse(trade);

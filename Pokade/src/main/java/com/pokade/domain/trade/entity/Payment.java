@@ -39,6 +39,11 @@ public class Payment {
     @Column(nullable = false)
     private Integer amount;
 
+    // 이 결제 중 포인트로 미리 차감된 금액 - 0이면 포인트 미사용. 거래 취소 시 이 값만큼
+    // PointService.refund()로 되돌려준다(전액 포인트 결제라 tossPaymentKey가 없는 경우 포함).
+    @Column(name = "points_used")
+    private Integer pointsUsed;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PaymentMethod method;
@@ -62,10 +67,12 @@ public class Payment {
     private LocalDateTime createdAt;
 
     @Builder
-    public Payment(Trade trade, Long buyerId, Integer amount, PaymentMethod method, String tossPaymentKey) {
+    public Payment(Trade trade, Long buyerId, Integer amount, Integer pointsUsed,
+                   PaymentMethod method, String tossPaymentKey) {
         this.trade = trade;
         this.buyerId = buyerId;
         this.amount = amount;
+        this.pointsUsed = pointsUsed != null ? pointsUsed : 0;
         this.method = method;
         this.tossPaymentKey = tossPaymentKey;
         this.status = PaymentStatus.ESCROW_HELD;
