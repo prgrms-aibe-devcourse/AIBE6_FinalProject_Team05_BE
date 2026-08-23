@@ -4,7 +4,7 @@
   "tags": ["pokade", "watchlist", "notification", "temp-258"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
@@ -12,7 +12,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "워치리스트 등록 평균 응답시간 (watchlist.add.duration)",
-      "description": "@Timed는 count/sum/max만 노출(히스토그램 버킷 없음) - p50/p95 대신 sum/count 비율(평균)을 사용한다.",
+      "description": "#343에서 SLO 버킷이 추가돼 p95도 볼 수 있게 됐다(아래 P95 패널) - 이 패널은 평균(sum/count)이라 이상치에 둔감하니 p95와 함께 볼 것.",
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
@@ -29,7 +29,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "워치리스트 수정 평균 응답시간 (watchlist.update.duration)",
-      "description": "@Timed는 count/sum/max만 노출(히스토그램 버킷 없음) - p50/p95 대신 sum/count 비율(평균)을 사용한다.",
+      "description": "#343에서 SLO 버킷이 추가돼 p95도 볼 수 있게 됐다(아래 P95 패널) - 이 패널은 평균(sum/count)이라 이상치에 둔감하니 p95와 함께 볼 것.",
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
@@ -107,6 +107,52 @@
           "expr": "rate(notification_sse_heartbeat_failure_calls_total[5m])",
           "legendFormat": "heartbeat failures/s",
           "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "워치리스트 P95 응답시간 (SLO 버킷 기반)",
+      "description": "#343에서 추가한 SLO 버킷으로 계산한 p95. 평균 패널과 달리 느린 꼬리 요청을 드러낸다.",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(watchlist_add_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "add p95 (ms)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(watchlist_update_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "update p95 (ms)",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "워치리스트 SLO 달성률 - 200ms 이내 비율",
+      "description": "SLO 경계 200ms(le=\"0.2\") 이내로 처리된 요청 비율. 트래픽이 없는 구간은 0/0이라 값이 비는데, 이때 0%로 채우면 정상인 상태가 SLO 전면 미달처럼 보이므로 일부러 채우지 않는다.",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(watchlist_add_duration_seconds_bucket{le=\"0.2\"}[5m])) / sum(rate(watchlist_add_duration_seconds_count[5m])) * 100",
+          "legendFormat": "add within 200ms (%)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(watchlist_update_duration_seconds_bucket{le=\"0.2\"}[5m])) / sum(rate(watchlist_update_duration_seconds_count[5m])) * 100",
+          "legendFormat": "update within 200ms (%)",
+          "refId": "B"
         }
       ]
     }
