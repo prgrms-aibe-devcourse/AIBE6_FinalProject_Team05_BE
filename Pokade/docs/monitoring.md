@@ -30,7 +30,7 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 
 ## 현재 지표 인벤토리
 
-SLO 버킷이 붙는 타이머는 `MetricsConfig`가 이름으로 지정한 6개뿐이다. 나머지는 Counter/Gauge이거나
+SLO 버킷이 붙는 타이머는 `MetricsConfig`가 이름으로 지정한 7개뿐이다. 나머지는 Counter/Gauge이거나
 버킷 대상이 아니다.
 
 | 지표 | 종류 | SLO 버킷 | 소비처 |
@@ -40,8 +40,9 @@ SLO 버킷이 붙는 타이머는 `MetricsConfig`가 이름으로 지정한 6개
 | `watchlist.add.duration` | Timer | 조회성 | watchlist 대시보드 |
 | `watchlist.update.duration` | Timer | 조회성 | watchlist 대시보드 |
 | `price.ranking.duration` | Timer | 조회성 | 없음 |
-| `ai.grade.duration` | Timer | AI 진단 | 없음 |
-| `ai.grade.vision.duration` | Timer | **없음** | 없음 |
+| `ai.grade.duration` | Timer | AI 진단 | ai 대시보드 |
+| `ai.grade.vision.duration` | Timer | **없음** | ai 대시보드(평균) |
+| `chat.llm.duration` | Timer | AI 진단(LLM 호출 특성 공유) | 없음 |
 | `card.ratelimit.allowed` / `.rejected` | Counter | - | card 대시보드 |
 | `card.view.increment.calls` / `card.grade.batch.calls` | Counter | - | card 대시보드 |
 | `watchlist.notify.immediate.calls` / `.already_claimed.calls` | Counter | - | watchlist 대시보드 |
@@ -49,7 +50,10 @@ SLO 버킷이 붙는 타이머는 `MetricsConfig`가 이름으로 지정한 6개
 | `notification.sse.heartbeat.failure.calls` / `.push.failure.calls` | Counter | - | watchlist 대시보드 |
 | `site.visits` | Counter | - | **관리자 대시보드(제품 기능)** |
 | `price.chart.requests` / `price.ranking.requests` | Counter | - | 없음 |
-| `ai.grade.result` / `.local_fail` / `.vision.retries` | Counter | - | 없음 |
+| `ai.grade.result` / `.local_fail` / `.vision.retries` | Counter | - | ai 대시보드 |
+| `ai.grade.cache.hits` | Counter | - | ai 대시보드 |
+| `chat.llm.calls`(status=success/error) | Counter | - | 없음 |
+| `chat.llm.grounding_fail` | Counter | - | 없음 |
 
 `site.visits`는 `domain/admin/metrics`가 `site_visits_total`로 조회하는 **실제 제품 기능**이므로
 지우면 관리자 대시보드가 깨진다. 나머지 계측은 Grafana 패널만 의존한다.
@@ -92,8 +96,9 @@ TimedAspect는 `global/config/MetricsConfig`에 이미 등록돼 있어 추가 �
 
 마지막 줄이 중요하다. `@Mock MeterRegistry`로 두면 `counter()`가 null을
 돌려줘서 생성자 안에서 NPE가 나고, Mockito가 `InjectMocksException`으로
-감싸버려 원인이 안 보인다(2026-08-23 기준 AiGradeServiceTest 2건이 정확히
-이 이유로 develop에서 실패 중이다).
+감싸버려 원인이 안 보인다(`AiGradeServiceTest`가 정확히 이 이유로 실패했다가
+`@Spy MeterRegistry meterRegistry = new SimpleMeterRegistry()`로 고쳐진
+사례다 — 새 테스트를 추가할 때 그대로 참고할 것).
 
 Counter/Gauge를 직접 쓸 때도 MeterRegistry는 생성자로 받는다.
 
