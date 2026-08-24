@@ -22,6 +22,8 @@ import com.pokade.domain.price.dto.BuyOfferReadyResponse;
 import com.pokade.domain.price.dto.BuyOfferResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.DailyMarketStatResponse;
+import com.pokade.domain.price.dto.MarketOverviewResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
@@ -45,12 +47,15 @@ import com.pokade.global.port.UserAccessChecker;
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -71,6 +76,13 @@ public class PriceService {
     private static final int STATS_PERIOD_DAYS = 7;
     private static final ListingGrade STATS_GRADE = ListingGrade.S;
     private static final int RANKING_LIMIT = 10;
+    // CacheConfig에 TTL(안전망)까지 등록된 캐시 이름 - PriceRankingRefreshScheduler가 주기적으로 갱신한다.
+    private static final String RANKING_CACHE = "priceRanking";
+    // 시세 랭킹 페이지의 "거래 현황" 개요 차트가 보여주는 기간(일).
+    private static final int MARKET_OVERVIEW_DAYS = 30;
+    // 거래가 중간값의 "30일 전 대비" 변화율 계산에 필요한 최대 조회 범위(일) - 차트 표시 기간(30일)과
+    // 우연히 같은 값이지만 의미가 다르다(하나는 표시 범위, 하나는 비교 기준점).
+    private static final int MEDIAN_COMPARISON_MAX_DAYS = 30;
     // CardUpsertService가 Scrydex 동기화 시 raw NM 시세를 저장하는 키와 동일해야 한다(card_prices 조회 fallback용).
     private static final String RAW_PRICE_TYPE = "raw";
     private static final String RAW_GRADE = "";
@@ -560,12 +572,35 @@ public class PriceService {
     private record PeriodDays(int days, Function<CardPrice, BigDecimal> changePct) {
     }
 
+    // 카드 수가 많아지면(운영 기준 2만+) 매 요청마다 전체 카드의 최근/이전 7일 블록 평균가를 스캔하는
+    // 비용이 커진다 - PriceRankingRefreshScheduler가 주기적으로 재계산해 캐시에 채워두고, 이 메서드는
+    // 캐시만 읽는다(사용자 요청, 2026-08-24). 캐시가 아직 없는 첫 요청(배포 직후 등)에는 이 메서드가
+    // 직접 계산해서 채운다 - 그 이후로는 스케줄러가 갱신할 때까지 이 값을 그대로 반환한다.
+    // @Timed는 여기(캐시 적중이면 거의 즉시 반환하는 진입점)에 둬서, 캐싱이 실제로 사용자 체감 지연을
+    // 줄이는지 그대로 보여주게 한다 - 배치 자체의 계산 비용은 refreshRanking() 쪽 별도 지표로 분리했다.
+    @Cacheable(cacheNames = RANKING_CACHE, key = "#type")
+    @Timed(value = "price.ranking.duration")
+    public List<PriceRankingResponse> getRanking(String type) {
+        return computeRanking(type);
+    }
+
+    // PriceRankingRefreshScheduler 전용 - 캐시 적중 여부와 무관하게 항상 재계산해서 캐시를 갱신한다.
+    // getRanking()과 달리 @CachePut이라 호출할 때마다 무조건 메서드 본문을 실행한다. 이 메서드 자체가
+    // 무거운 배치 연산이라 별도 지표(price.ranking.refresh.duration)로 소요 시간을 추적한다.
+    @CachePut(cacheNames = RANKING_CACHE, key = "#type")
+    @Timed(value = "price.ranking.refresh.duration")
+    public List<PriceRankingResponse> refreshRanking(String type) {
+        return computeRanking(type);
+    }
+
     // FR-PRICE-06: getStats()와 같은 방식(자체 AI등급 S, COMPLETED 거래, 최근 7일 vs 이전 7일 블록 평균 비교)을
     // 전체 카드로 확장해 등락률 상위/하위 10개 카드를 랭킹으로 뽑는다. card_prices(Scrydex 동기화)는 쓰지 않는다 —
     // 그 테이블은 PSA/CGC 같은 공인 등급만 있고 우리 자체 S등급 데이터가 없다(getStats와 동일한 이유).
-    // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
-    @Timed(value = "price.ranking.duration")
-    public List<PriceRankingResponse> getRanking(String type) {
+    // private이라 @Timed/@Cacheable 같은 프록시 기반 어노테이션을 붙여도 동작하지 않는다(같은 클래스
+    // 내부에서 this.computeRanking()으로 직접 호출되므로 Spring AOP 프록시를 안 거침 - CardSyncService/
+    // CardUpsertService가 @Transactional/@Async 때문에 별도 빈으로 분리된 것과 동일한 이유) - 그래서
+    // 계측은 이 메서드가 아니라 이 메서드를 외부에서 호출하는 getRanking()/refreshRanking()에 붙였다.
+    private List<PriceRankingResponse> computeRanking(String type) {
         RankingType rankingType = RankingType.from(type);
         // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
         meterRegistry.counter("price.ranking.requests", "type", rankingType.name()).increment();
@@ -629,5 +664,88 @@ public class PriceService {
     }
 
     private record CardChangeRate(Long cardId, BigDecimal recentAvgAmount, BigDecimal changeRate, BigDecimal diff) {
+    }
+
+    // 시세 랭킹 페이지의 "거래 현황" 개요 - getRanking()의 카드별 등락률과는 별개로, 플랫폼 전체(카드/등급
+    // 구분 없음) 체결의 일별 거래량과 거래가 중간값(median)을 보여준다. 평균 대신 중간값을 쓰는 이유는
+    // 소수의 초고가/초저가 체결 때문에 평균이 왜곡되는 걸 피하기 위함(사용자 요청, KREAM TCG 시세 페이지
+    // 참고). 최근 30일치를 항상 30개(빈 날짜는 volume=0/medianPrice=null로) 반환하고, 오늘 대비 전일/
+    // 일주일 전/30일 전 세 시점으로 거래가 중간값 변화율을 각각 계산한다(사용자 요청 - 하루 단위 변화만
+    // 보여주면 단기 잡음에 흔들리는 인상을 줄 수 있어, 더 긴 기준선도 함께 보여준다).
+    public MarketOverviewResponse getMarketOverview() {
+        LocalDate today = LocalDate.now();
+        LocalDate chartFrom = today.minusDays(MARKET_OVERVIEW_DAYS - 1L);
+        // 30일 전 대비 비교를 하려면 차트 표시 범위(chartFrom)보다 하루 더 과거 체결까지 조회해야 한다.
+        LocalDate queryFrom = today.minusDays(MEDIAN_COMPARISON_MAX_DAYS);
+
+        Map<LocalDate, PriceTradeStatsRepository.DailyMarketStatView> statsByDate = priceTradeStatsRepository
+                .findDailyMarketStats(TradeStatus.COMPLETED, queryFrom.atStartOfDay()).stream()
+                .collect(Collectors.toMap(PriceTradeStatsRepository.DailyMarketStatView::getTradeDate, v -> v));
+
+        List<DailyMarketStatResponse> dailyStats = new ArrayList<>();
+        for (int i = 0; i < MARKET_OVERVIEW_DAYS; i++) {
+            LocalDate date = chartFrom.plusDays(i);
+            dailyStats.add(toDailyMarketStatResponse(date, statsByDate.get(date)));
+        }
+
+        DailyMarketStatResponse todayStat = dailyStats.get(dailyStats.size() - 1);
+        DailyMarketStatResponse yesterdayStat = dailyStats.get(dailyStats.size() - 2);
+        long totalVolume = dailyStats.stream().mapToLong(DailyMarketStatResponse::volume).sum();
+
+        Long median7dAgo = toDailyMarketStatResponse(today.minusDays(7), statsByDate.get(today.minusDays(7))).medianPrice();
+        Long median30dAgo = toDailyMarketStatResponse(today.minusDays(MEDIAN_COMPARISON_MAX_DAYS),
+                statsByDate.get(today.minusDays(MEDIAN_COMPARISON_MAX_DAYS))).medianPrice();
+
+        return new MarketOverviewResponse(
+                todayStat.volume(),
+                computeVolumeChangeRate(yesterdayStat.volume(), todayStat.volume()),
+                todayStat.medianPrice(),
+                computeMedianChangeRate(yesterdayStat.medianPrice(), todayStat.medianPrice()),
+                computeMedianChangeAmount(yesterdayStat.medianPrice(), todayStat.medianPrice()),
+                computeMedianChangeRate(median7dAgo, todayStat.medianPrice()),
+                computeMedianChangeRate(median30dAgo, todayStat.medianPrice()),
+                totalVolume,
+                dailyStats
+        );
+    }
+
+    private DailyMarketStatResponse toDailyMarketStatResponse(LocalDate date,
+                                                                PriceTradeStatsRepository.DailyMarketStatView view) {
+        long volume = view != null ? view.getVolume() : 0L;
+        Long medianPrice = view != null && view.getMedianPrice() != null
+                ? Math.round(view.getMedianPrice())
+                : null;
+        return new DailyMarketStatResponse(date, volume, medianPrice);
+    }
+
+    // 어제 거래가 0건이면 "증가율"이라는 지표 자체가 의미 없어(0에서 몇 건이 늘어도 무한대%) null로 남긴다.
+    private BigDecimal computeVolumeChangeRate(long previousVolume, long todayVolume) {
+        if (previousVolume == 0) {
+            return null;
+        }
+        return BigDecimal.valueOf(todayVolume - previousVolume)
+                .divide(BigDecimal.valueOf(previousVolume), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    // 오늘 또는 어제 중 하루라도 체결이 없어 중간값을 못 구했으면 변화율도 계산할 수 없다.
+    private BigDecimal computeMedianChangeRate(Long previousMedian, Long todayMedian) {
+        if (previousMedian == null || todayMedian == null || previousMedian == 0) {
+            return null;
+        }
+        return BigDecimal.valueOf(todayMedian - previousMedian)
+                .divide(BigDecimal.valueOf(previousMedian), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    // 전일 대비 거래가 중간값 변동을 원화 금액으로도 보여주기 위한 값(사용자 요청) - 비율과 달리 어제
+    // 중간값이 0이어도(이론상 없는 값이지만) 계산 가능하나, 둘 중 하나가 아예 없으면(체결 없음) 계산 불가.
+    private Long computeMedianChangeAmount(Long previousMedian, Long todayMedian) {
+        if (previousMedian == null || todayMedian == null) {
+            return null;
+        }
+        return todayMedian - previousMedian;
     }
 }
