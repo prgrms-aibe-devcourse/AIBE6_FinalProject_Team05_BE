@@ -33,8 +33,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 public class CardRateLimitFilter extends OncePerRequestFilter {
 
-    // 분당 허용 요청 수 — 임시값(검색/자동완성 debounce 감안 여유치), 팀 정책 확정 시 조정 필요
-    private static final int CAPACITY_PER_MINUTE = 60;
+    // 분당 허용 요청 수 — 임시값(검색/자동완성 debounce 감안 여유치), 팀 정책 확정 시 조정 필요.
+    // #386: 발표 시연 대응으로 60 → 600 임시 상향. 버킷 키가 IP라, 발표장 NAT/공유 와이파이에서는
+    // 발표자와 청중이 하나의 버킷을 공유해 60회로는 시연 중 429가 터진다. 팀 정책 확정 시 재조정.
+    // private이 아닌 이유: CardRateLimitFilterTest가 이 값을 직접 참조해 루프 횟수를 정한다 —
+    // 테스트에 임계값을 복사해 두면 이 상수를 조정할 때마다 테스트가 조용히 어긋난다
+    // (bucketCountForTest()/evictIdleEntriesForTest()와 같은 패키지 전용 테스트 seam).
+    static final int CAPACITY_PER_MINUTE = 600;
     // bucketsByIp 무한 증가 방지용 유휴 만료 기준 — 이 시간 동안 요청이 없으면 정리 대상
     private static final Duration IDLE_TTL = Duration.ofMinutes(10);
     private static final Duration CLEANUP_INTERVAL = Duration.ofMinutes(5);
