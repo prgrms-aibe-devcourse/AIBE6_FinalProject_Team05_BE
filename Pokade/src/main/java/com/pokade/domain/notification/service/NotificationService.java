@@ -112,18 +112,15 @@ public class NotificationService {
 
     // 워치리스트 목표가 도달 알림 생성 (reachedTargetPrice: 도달한 것으로 판정된 목표가 - 구매/판매 목표가 중 실제로 도달한 쪽)
     // card: 호출자(WatchlistTargetPriceEvaluator/WatchlistTargetPriceNoticeProcessor)가 목표가 판정을 위해
-    // 이미 조회해 둔 카드 - 여기서 다시 조회하지 않고 그대로 재사용해 SSE 즉시 푸시에도 카드 이미지를 채운다.
+    // 이미 조회해 둔 카드 - 여기서 다시 조회하지 않고 그대로 재사용해 푸시 payload의 카드 이미지를 채운다.
+    //
+    // #392: 예전에는 여기서 pushToSubscribers()를 직접 불러 커밋 전에 SSE를 쏘았다. 아래
+    // createInquiryHandledNotification 주석이 설명하는 바로 그 문제(유저는 알림을 받았는데 이후 롤백돼
+    // 레코드는 없는 불일치)를 이 경로만 그대로 안고 있었다 - 나머지 타입과 같이 AFTER_COMMIT 이벤트로 통일했다.
     @Transactional
     public void createPriceTargetNotification(Watchlist watchlist, String cardName, Card card, Integer reachedTargetPrice) {
-        Notification notification = Notification.builder()
-                .userId(watchlist.getUserId())
-                .type(NotificationType.PRICE_TARGET)
-                .message(buildPriceTargetMessage(watchlist, cardName, reachedTargetPrice))
-                .cardId(watchlist.getCardId())
-                .build();
-
-        notificationRepository.save(notification);
-        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification, card));
+        saveAndPublish(watchlist.getUserId(), NotificationType.PRICE_TARGET, watchlist.getCardId(),
+                buildPriceTargetMessage(watchlist, cardName, reachedTargetPrice), card);
     }
 
     private String buildPriceTargetMessage(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
@@ -133,18 +130,12 @@ public class NotificationService {
 
     // #300: 워치리스트에 등록한 카드에 매물이 없다가 새로 등록됐을 때(재입고) 알림 생성.
     // card: 호출자(WatchlistListingAvailableNoticeListener)가 이미 조회해 둔 카드 - createPriceTargetNotification과
-    // 동일하게 여기서 다시 조회하지 않고 재사용해 SSE 즉시 푸시에도 카드 이미지를 채운다.
+    // 동일하게 여기서 다시 조회하지 않고 재사용해 푸시 payload의 카드 이미지를 채운다.
+    // #392: 위와 같은 이유로 커밋 전 직접 푸시에서 AFTER_COMMIT 이벤트로 통일했다.
     @Transactional
     public void createListingAvailableNotification(Watchlist watchlist, String cardName, Card card) {
-        Notification notification = Notification.builder()
-                .userId(watchlist.getUserId())
-                .type(NotificationType.LISTING_AVAILABLE)
-                .message(String.format("%s 카드에 상품이 새로 등록됐어요. 지금 확인해보세요!", cardName))
-                .cardId(watchlist.getCardId())
-                .build();
-
-        notificationRepository.save(notification);
-        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification, card));
+        saveAndPublish(watchlist.getUserId(), NotificationType.LISTING_AVAILABLE, watchlist.getCardId(),
+                String.format("%s 카드에 상품이 새로 등록됐어요. 지금 확인해보세요!", cardName), card);
     }
 
     // 1:1 문의 처리 완료 알림 생성 - 관리자의 답변 등록, 또는 상태를 HANDLED로 변경한 경우 호출된다.
@@ -162,6 +153,160 @@ public class NotificationService {
 
         notificationRepository.save(notification);
         eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification, null)));
+    }
+
+    // #392: 구매자가 구매확정을 눌러 에스크로가 해제되고 판매대금이 판매자에게 정산된 시점에, 판매자에게
+    // 그 사실을 알린다. 판매자 입장에서는 자기가 하지 않은 액션(구매자의 확정)으로 잔액이 늘어나는
+    // 지점이라 앱 안에 알림이 없으면 정산 사실을 알 방법이 없었다.
+    //
+    // card를 조회하지 않고 null로 넘기는 이유: 호출부(TradeService.confirmTrade)는 cardId만 알고 Card
+    // 엔티티는 갖고 있지 않은데, 썸네일 하나 때문에 거래 확정 경로에 조회를 한 번 더 넣지 않는다.
+    // cardId는 레코드에 저장되므로 목록 조회 시 getNotifications()의 배치 조회가 이미지까지 채워준다
+    // (createInquiryHandledNotification과 동일한 선택).
+    @Transactional
+    public void createTradeConfirmedNotification(Long sellerId, Long cardId, String cardName, Integer settledAmount) {
+        Notification notification = Notification.builder()
+                .userId(sellerId)
+                .type(NotificationType.TRADE_CONFIRMED)
+                .message(String.format("%s 거래가 완료되어 %,d원이 정산되었습니다.", cardName, settledAmount))
+                .cardId(cardId)
+                .build();
+
+        notificationRepository.save(notification);
+        eventPublisher.publishEvent(new NotificationPushEvent(sellerId, NotificationResponse.of(notification, null)));
+    }
+
+    // #392: 30일간 팔리지 않은 매물을 판매자에게 알린다. 기존에도 ListingStaleNoticeService가 같은 내용을
+    // 이메일로 보내고 있었지만, 인앱 알림이 없어 앱 안에서는 이 사실이 어디에도 드러나지 않았다.
+    // 이메일 발송은 그대로 두고 인앱 알림을 나란히 추가하는 것이라, 둘 중 하나가 실패해도 다른 하나는
+    // 나가야 한다(호출부에서 try 범위를 분리해 처리).
+    //
+    // 문구를 카드명이 아니라 매물 번호로 쓰는 이유: 같은 내용을 보내는 기존 이메일
+    // (ListingStaleNoticeService.notify)이 "매물 #{id}" 형식이라 둘을 맞춰 두 채널이 갈라지지 않게 한다.
+    // 어느 카드인지는 cardId를 함께 저장해 목록의 카드 썸네일과 링크(/cards/{id})가 알려준다 -
+    // 그래서 이 메서드는 카드명 조회를 요구하지 않고, 호출부에 CardRepository 의존성이 생기지 않는다.
+    @Transactional
+    public void createListingStaleNotification(Long sellerId, Long cardId, Long listingId) {
+        Notification notification = Notification.builder()
+                .userId(sellerId)
+                .type(NotificationType.LISTING_STALE)
+                .message(String.format("매물 #%d가 30일간 판매되지 않았습니다. 가격을 확인해보세요.", listingId))
+                .cardId(cardId)
+                .build();
+
+        notificationRepository.save(notification);
+        eventPublisher.publishEvent(new NotificationPushEvent(sellerId, NotificationResponse.of(notification, null)));
+    }
+
+    /**
+     * #392: 사용자가 1:1 문의를 등록했을 때 활성 관리자 전원에게 알린다(팬아웃).
+     *
+     * <p>수신자가 여러 명이라 지금까지의 단건 생성 메서드들과 구조가 다르다:
+     * <ul>
+     *   <li>저장은 {@code saveAll()}로 묶어 관리자 수와 무관하게 INSERT 왕복을 1회로 만든다.</li>
+     *   <li>SSE 푸시는 {@link NotificationPushEvent}가 userId 단건 기준이라 관리자 수만큼 이벤트를
+     *       발행한다. AFTER_COMMIT 리스너는 요청 스레드에서 동기 실행되므로, 관리자가 두 자릿수로
+     *       늘고 그중 느린 연결이 있으면 문의 등록 API 응답이 그만큼 지연된다 - 그때는 푸시를
+     *       비동기로 돌리는 별도 작업이 필요하다.</li>
+     * </ul>
+     *
+     * <p>관리자가 한 명도 없으면(조회 결과가 빈 목록) 조용히 아무것도 하지 않는다 - 관리자 부재로
+     * 사용자의 문의 등록 자체가 실패하면 안 되기 때문이다.
+     *
+     * @param adminIds 활성(ACTIVE) 관리자 id 목록 - 호출부가 조회해서 넘긴다
+     */
+    @Transactional
+    public void createInquiryReceivedNotification(List<Long> adminIds, Long inquiryId, String inquiryTitle) {
+        if (adminIds == null || adminIds.isEmpty()) {
+            return;
+        }
+
+        String message = String.format("새 문의가 등록되었습니다: '%s'", inquiryTitle);
+        List<Notification> notifications = adminIds.stream()
+                .map(adminId -> Notification.builder()
+                        .userId(adminId)
+                        .type(NotificationType.INQUIRY_RECEIVED)
+                        .message(message)
+                        .inquiryId(inquiryId)
+                        .build())
+                .toList();
+
+        // saveAll()이 돌려주는 인스턴스를 그대로 쓴다 - id가 채워진 건 이쪽이라, 인자로 넘긴 목록으로
+        // 응답 DTO를 만들면 id가 null인 알림이 SSE로 나간다.
+        for (Notification saved : notificationRepository.saveAll(notifications)) {
+            eventPublisher.publishEvent(
+                    new NotificationPushEvent(saved.getUserId(), NotificationResponse.of(saved, null)));
+        }
+    }
+
+    // #392: 결제가 끝나 판매자가 상품을 발송해야 하는 시점. 즉시구매(confirmPurchase)와 즉시판매
+    // (createMatchedTrade) 양쪽에서 같은 문구로 나간다 - 판매자 입장에서는 어느 경로로 팔렸든
+    // "발송해야 한다"는 할 일이 동일하기 때문이다.
+    @Transactional
+    public void createTradeShippingRequiredNotification(Long sellerId, Long cardId, String cardName) {
+        saveAndPublish(sellerId, NotificationType.TRADE_SHIPPING_REQUIRED, cardId,
+                String.format("%s 카드가 판매되었습니다. 상품을 플랫폼으로 발송해 주세요.", cardName));
+    }
+
+    // #392: 검수를 마친 상품이 구매자에게 배송 완료된 시점. 구매자가 구매확정을 눌러야 판매자 정산이
+    // 이뤄지므로(TradeService.confirmTrade), 확정을 잊으면 거래가 그 상태로 멈춘다.
+    @Transactional
+    public void createTradeDeliveredNotification(Long buyerId, Long cardId, String cardName) {
+        saveAndPublish(buyerId, NotificationType.TRADE_DELIVERED, cardId,
+                String.format("%s 카드가 배송 완료되었습니다. 확인 후 구매확정을 해주세요.", cardName));
+    }
+
+    /**
+     * #392: 거래 취소 알림 - 취소를 누른 당사자가 아니라 <b>상대방</b>에게만 보낸다(누른 사람은 방금
+     * 자기가 한 일이라 알림이 소음이다).
+     *
+     * <p>같은 사건이라도 받는 사람의 역할에 따라 알아야 할 내용이 다르다: 구매자는 돈이 돌아온다는 것을,
+     * 판매자는 매물이 다시 판매 중이 됐다는 것을 알아야 한다. 그래서 문구를 역할별로 가른다.
+     *
+     * <p>구매자 문구를 "환불되었습니다"가 아니라 "환불됩니다"로 두는 이유: 토스 취소는 실제 환급까지
+     * 시차가 있고 포인트 전액 결제는 토스 호출 자체가 없다 - 완료형으로 단정하면 잔액을 확인한
+     * 사용자와 어긋난다.
+     *
+     * @param recipientIsBuyer 수신자가 구매자면 true, 판매자면 false
+     */
+    @Transactional
+    public void createTradeCancelledNotification(Long recipientId, Long cardId, String cardName, boolean recipientIsBuyer) {
+        String message = recipientIsBuyer
+                ? String.format("%s 카드 거래가 취소되어 결제 금액이 환불됩니다.", cardName)
+                : String.format("%s 카드 거래가 취소되었습니다. 매물이 다시 판매 중으로 돌아갔습니다.", cardName);
+        saveAndPublish(recipientId, NotificationType.TRADE_CANCELLED, cardId, message);
+    }
+
+    // #392: 등록해 둔 구매 입찰이 판매자의 즉시판매로 체결된 시점. 입찰자는 아무 행동도 하지 않았는데
+    // 거래가 시작되므로, 같은 트리거(createMatchedTrade)에서 판매자에게 가는 발송 요청 알림과 짝을 이룬다.
+    @Transactional
+    public void createBuyOfferMatchedNotification(Long bidderId, Long cardId, String cardName, Integer matchedPrice) {
+        saveAndPublish(bidderId, NotificationType.BUY_OFFER_MATCHED, cardId,
+                String.format("%s 카드 구매 입찰이 %,d원에 체결되었습니다.", cardName, matchedPrice));
+    }
+
+    // #392: "저장 → 커밋 후 푸시용 이벤트 발행"이라는 똑같은 절차를 공용화했다. 알림 레코드에 카드를
+    // 붙이지 않는(=푸시 시점에 썸네일이 없는) 타입들이 쓴다 - 목록 조회 시 getNotifications()의 배치
+    // 조회가 이미지를 채워준다.
+    private void saveAndPublish(Long userId, NotificationType type, Long cardId, String message) {
+        saveAndPublish(userId, type, cardId, message, null);
+    }
+
+    /**
+     * 호출자가 이미 조회해 둔 {@link Card}가 있으면 그대로 넘겨 푸시 payload의 썸네일까지 채우는 오버로드.
+     * 워치리스트 계열(PRICE_TARGET/LISTING_AVAILABLE)이 쓴다 - 목표가 판정·재입고 판정을 위해 카드를
+     * 이미 로드해 둔 상태라 다시 조회할 이유가 없다.
+     */
+    private void saveAndPublish(Long userId, NotificationType type, Long cardId, String message, Card card) {
+        Notification notification = Notification.builder()
+                .userId(userId)
+                .type(type)
+                .message(message)
+                .cardId(cardId)
+                .build();
+
+        notificationRepository.save(notification);
+        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification, card)));
     }
 
     // 트랜잭션이 없는 컨텍스트(단위 테스트 등)에서도 그대로 실행되도록 fallbackExecution=true.

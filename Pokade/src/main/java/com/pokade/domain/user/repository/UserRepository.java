@@ -26,6 +26,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findAllByStatusAndWithdrawalRequestedAtBefore(UserStatus status, LocalDateTime cutoff);
 
+    // #392: 관리자 대상 알림(INQUIRY_RECEIVED) 팬아웃 수신자 조회. status를 함께 받는 이유는
+    // DELETED/WITHDRAWAL_PENDING 계정에 알림이 쌓이지 않도록 호출부가 ACTIVE만 지정하기 때문이다.
+    List<User> findByRoleAndStatus(Role role, UserStatus status);
+
     // 포인트 충전/차감처럼 잔액을 읽고 바로 갱신하는 작업에서, 동시 요청이 같은 유저 행을 함께
     // 갱신해 갱신유실이 나지 않도록 비관적 쓰기 락을 건다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -96,12 +96,22 @@ public class Watchlist {
         this.isNotified = false;
     }
 
-    // 안 보낸 필드(null)는 "기존 값 유지"로 해석한다. 목표가를 "지우는" 기능은 없다 - 한쪽만 지우는 것도,
-    // 두 필드를 한꺼번에 지우는 것도 지원하지 않는다(관심 자체를 없애려면 DELETE). 그래서 null은 언제나
-    // "변경 없음"이지 "삭제"가 아니다.
+    // 안 보낸 필드(null)는 "기존 값 유지"로 해석한다 - null은 언제나 "변경 없음"이지 "삭제"가 아니다.
+    // 지우기가 필요하면 아래 4-인자 오버로드에 clear 플래그를 넘긴다(#392) - 한쪽만 지우는 것도,
+    // 두 필드를 한꺼번에 지워 미설정으로 되돌리는 것도 가능하다(등록이 목표가 없이 되는 것과 대칭).
     public void updateTargetPrices(Integer targetBuyPrice, Integer targetSellPrice) {
-        Integer resolvedBuyPrice = resolveUpdatedPrice(targetBuyPrice, this.targetBuyPrice);
-        Integer resolvedSellPrice = resolveUpdatedPrice(targetSellPrice, this.targetSellPrice);
+        updateTargetPrices(targetBuyPrice, targetSellPrice, false, false);
+    }
+
+    /**
+     * clear 플래그까지 받는 실제 구현. {@code clearBuyPrice}가 true면 {@code targetBuyPrice}가 무엇이든
+     * null로 되돌린다 - 값과 플래그를 동시에 보내는 모순 조합은 DTO(WatchlistUpdateRequest)에서 이미
+     * 거절되므로 여기서는 플래그를 우선한다는 규칙만 단순하게 지킨다.
+     */
+    public void updateTargetPrices(Integer targetBuyPrice, Integer targetSellPrice,
+                                    boolean clearBuyPrice, boolean clearSellPrice) {
+        Integer resolvedBuyPrice = resolveUpdatedPrice(targetBuyPrice, this.targetBuyPrice, clearBuyPrice);
+        Integer resolvedSellPrice = resolveUpdatedPrice(targetSellPrice, this.targetSellPrice, clearSellPrice);
         boolean changed = !Objects.equals(this.targetBuyPrice, resolvedBuyPrice)
                 || !Objects.equals(this.targetSellPrice, resolvedSellPrice);
 
@@ -134,7 +144,12 @@ public class Watchlist {
         }
     }
 
-    private static Integer resolveUpdatedPrice(Integer requested, Integer current) {
+    // 우선순위: 지움 > 새 값 > 기존 값 유지. clear가 켜져 있으면 requested는 볼 필요가 없다
+    // (둘을 함께 보내는 조합 자체를 DTO가 막는다).
+    private static Integer resolveUpdatedPrice(Integer requested, Integer current, boolean clear) {
+        if (clear) {
+            return null;
+        }
         return requested != null ? requested : current;
     }
 }

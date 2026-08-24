@@ -304,6 +304,123 @@ class WatchlistServiceTest {
         assertThat(target.getTargetBuyPrice()).isEqualTo(5000);
     }
 
+    // ===== #392: 목표가 지우기(clear 플래그) =====
+    // null은 여전히 "변경 없음"이고, 지움은 clear 플래그로만 표현된다.
+
+    @Test
+    @DisplayName("수정/지우기: 구매가만 지우면 판매가는 그대로 남는다")
+    void updateWatchlist_clearBuyPriceOnly_keepsSellPrice() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(1000).targetSellPrice(3000)
+                .build();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L,
+                new WatchlistUpdateRequest(null, null, null, true, null));
+
+        assertThat(response.targetBuyPrice()).isNull();
+        assertThat(response.targetSellPrice()).isEqualTo(3000);
+    }
+
+    @Test
+    @DisplayName("수정/지우기: 둘 다 지우면 미설정 상태가 되고 targetReached는 false다")
+    void updateWatchlist_clearBoth_becomesUnsetAndNotReached() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(1000).targetSellPrice(3000)
+                .build();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L,
+                new WatchlistUpdateRequest(null, null, null, true, true));
+
+        assertThat(response.targetBuyPrice()).isNull();
+        assertThat(response.targetSellPrice()).isNull();
+        // WatchlistTargetPriceEvaluator를 바꾸지 않고도 false가 나와야 한다 - 목표가가 둘 다 null이면
+        // resolveReachedTargetPrice()가 어떤 체결 범위에서도 null을 돌려주기 때문이다. 그 null 가드가
+        // 리팩터링으로 사라지면 이 단정이 먼저 깨지도록 여기서 고정한다.
+        assertThat(response.targetReached()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수정/지우기: 목표가를 지우면 값이 바뀐 것이므로 isNotified가 리셋된다")
+    void updateWatchlist_clear_resetsNotifiedFlag() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(1000).targetSellPrice(3000)
+                .build();
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L,
+                new WatchlistUpdateRequest(null, null, null, true, null));
+
+        assertThat(response.isNotified()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수정/지우기: 값과 clear 플래그를 함께 보내면 INVALID_INPUT으로 거절된다")
+    void updateWatchlist_valueWithClearFlag_rejected() {
+        // DTO 생성 시점(compact 생성자)에서 걸리므로 서비스까지 가지도 않는다.
+        assertThatThrownBy(() -> new WatchlistUpdateRequest(5000, null, null, true, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+
+        assertThatThrownBy(() -> new WatchlistUpdateRequest(null, 5000, null, null, true))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("수정/지우기: 가격도 clear 플래그도 없는 빈 요청은 여전히 TARGET_PRICE_REQUIRED")
+    void updateWatchlist_emptyRequest_stillRequiresTargetPrice() {
+        assertThatThrownBy(() -> watchlistService.updateWatchlist(1L, 1L,
+                new WatchlistUpdateRequest(null, null, null, false, false)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TARGET_PRICE_REQUIRED);
+
+        // 검증에서 막혔으므로 조회조차 하지 않는다(기존 3-인자 경로와 동일한 동작).
+        then(watchlistRepository).should(never()).findByIdAndUserId(any(), any());
+    }
+
+    @Test
+    @DisplayName("수정/지우기: 재알림 요청과 함께 지워도 예외 없이 처리되고 배치 대상 조건에서 빠진다")
+    void updateWatchlist_clearWithResend_isHandledAndDropsOutOfBatch() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(1000).targetSellPrice(3000)
+                .build();
+        target.markAsNotified();
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        WatchlistResponse response = watchlistService.updateWatchlist(1L, 1L,
+                new WatchlistUpdateRequest(null, null, true, true, true));
+
+        // "알릴 목표가가 없는데 재알림"이라는 모순된 조합이지만 막지 않는다 - 배치 조회
+        // (WatchlistRepository.findByIsNotifiedFalse)가 "목표가가 하나라도 있는" 행만 가져오므로,
+        // 목표가가 둘 다 null이 된 이 워치리스트는 isNotified=false여도 대상에서 자동으로 빠진다.
+        assertThat(response.isNotified()).isFalse();
+        assertThat(target.getTargetBuyPrice()).isNull();
+        assertThat(target.getTargetSellPrice()).isNull();
+    }
+
+    @Test
+    @DisplayName("수정/지우기: 지워도 createdAt은 유지된다(삭제 후 재등록 우회로와 달리 판정 스코프가 리셋되지 않는다)")
+    void updateWatchlist_clear_keepsCreatedAt() {
+        Watchlist target = Watchlist.builder()
+                .userId(1L).cardId(10L).targetBuyPrice(1000).targetSellPrice(3000)
+                .build();
+        // createdAt은 @CreationTimestamp라 빌더로 만든 인스턴스에서는 null이다. 그대로 두면
+        // null == null 비교가 되어 단정이 아무것도 증명하지 못하므로, 다른 테스트들과 같은 방식
+        // (ReflectionTestUtils)으로 실제 등록 시각을 심어 둔다.
+        LocalDateTime registeredAt = LocalDateTime.now().minusDays(30);
+        ReflectionTestUtils.setField(target, "createdAt", registeredAt);
+        given(watchlistRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(target));
+
+        watchlistService.updateWatchlist(1L, 1L, new WatchlistUpdateRequest(null, null, null, true, true));
+
+        // 이 기능의 존재 이유 자체다 - 지금까지의 우회로(DELETE 후 재등록)는 createdAt을 갱신해
+        // 도달 판정 스코프(resolveWatchScopeStart)까지 되돌려버렸다.
+        assertThat(target.getCreatedAt()).isEqualTo(registeredAt);
+    }
+
     @Test
     @DisplayName("등록: 검증 통과하면 저장 후 WatchlistResponse 반환")
     void addWatchlist_success() {

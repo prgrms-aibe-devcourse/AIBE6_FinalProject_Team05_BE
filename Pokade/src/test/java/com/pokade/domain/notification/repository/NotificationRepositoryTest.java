@@ -240,6 +240,96 @@ class NotificationRepositoryTest extends AbstractIntegrationTest {
         assertThat(found.get().getCardId()).isNull();
     }
 
+    // ===== #392: 이번에 추가한 알림 타입 5종의 저장·조회 왕복 =====
+    // 서비스 단위 테스트(NotificationServiceTest)는 전부 mock이라 "새 enum 값이 실제 DB에 들어갔다가
+    // 그대로 돌아오는지"를 아무도 확인하지 않았다. type 컬럼이 VARCHAR(30)이고 @Enumerated(STRING)이라
+    // 이름이 길어지거나 매핑이 어긋나면 런타임에서야 드러나므로, 여기서 실제 왕복으로 고정한다
+    // (현재 가장 긴 값은 TRADE_SHIPPING_REQUIRED = 23자).
+
+    @Test
+    void 이번에_추가한_알림_타입_5종이_모두_저장되고_findByUserId로_그대로_조회된다() {
+        Long userId = insertUser("new-types@test.com");
+        List<NotificationType> addedTypes = List.of(
+                NotificationType.INQUIRY_RECEIVED,
+                NotificationType.TRADE_SHIPPING_REQUIRED,
+                NotificationType.TRADE_DELIVERED,
+                NotificationType.TRADE_CANCELLED,
+                NotificationType.BUY_OFFER_MATCHED);
+        addedTypes.forEach(type -> saveNotification(userId, type, type.name() + " 메시지"));
+        entityManager.clear();
+
+        Page<Notification> found = notificationRepository.findByUserId(
+                userId, PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "id")));
+
+        assertThat(found.getContent()).extracting(Notification::getType)
+                .containsExactlyElementsOf(addedTypes);
+    }
+
+    @Test
+    void 새_문의_도착_알림은_inquiry_id를_저장하고_그대로_조회된다() {
+        Long adminId = insertUser("admin-received@test.com");
+        Long inquiryId = insertInquiry(adminId);
+
+        Notification saved = notificationRepository.save(
+                Notification.builder()
+                        .userId(adminId)
+                        .type(NotificationType.INQUIRY_RECEIVED)
+                        .message("새 문의가 등록되었습니다: '제목'")
+                        .inquiryId(inquiryId)
+                        .build()
+        );
+        entityManager.flush();
+        entityManager.clear();
+
+        Optional<Notification> found = notificationRepository.findById(saved.getId());
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getType()).isEqualTo(NotificationType.INQUIRY_RECEIVED);
+        assertThat(found.get().getInquiryId()).isEqualTo(inquiryId);
+        // 관리자에게 가는 문의 알림은 카드와 무관하다.
+        assertThat(found.get().getCardId()).isNull();
+    }
+
+    @Test
+    void 거래_알림_4종은_card_id를_저장하고_그대로_조회된다() {
+        Long userId = insertUser("trade-types@test.com");
+        Long cardId = insertCard("notif-trade-card");
+        List<NotificationType> tradeTypes = List.of(
+                NotificationType.TRADE_SHIPPING_REQUIRED,
+                NotificationType.TRADE_DELIVERED,
+                NotificationType.TRADE_CANCELLED,
+                NotificationType.BUY_OFFER_MATCHED);
+
+        for (NotificationType type : tradeTypes) {
+            Notification saved = notificationRepository.save(
+                    Notification.builder()
+                            .userId(userId)
+                            .type(type)
+                            .message(type.name() + " 메시지")
+                            .cardId(cardId)
+                            .build()
+            );
+            entityManager.flush();
+            entityManager.clear();
+
+            Optional<Notification> found = notificationRepository.findById(saved.getId());
+
+            assertThat(found).isPresent();
+            assertThat(found.get().getType()).as("타입 %s", type).isEqualTo(type);
+            // card_id는 cards(id)를 참조하는 FK라, 실재하지 않는 id를 넣으면 여기서 제약 위반으로 드러난다.
+            assertThat(found.get().getCardId()).as("타입 %s의 cardId", type).isEqualTo(cardId);
+            // 거래 알림은 문의와 무관하므로 inquiry_id는 비어 있어야 한다.
+            assertThat(found.get().getInquiryId()).as("타입 %s의 inquiryId", type).isNull();
+        }
+    }
+
+    private Long insertCard(String externalId) {
+        return ((Number) entityManager.createNativeQuery(
+                        "INSERT INTO cards (external_id, name) VALUES (:externalId, 'Notification Test Card') RETURNING id")
+                .setParameter("externalId", externalId)
+                .getSingleResult()).longValue();
+    }
+
     private Notification saveNotification(Long userId, NotificationType type, String message) {
         Notification saved = notificationRepository.save(
                 Notification.builder()

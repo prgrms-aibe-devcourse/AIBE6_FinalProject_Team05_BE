@@ -6,6 +6,11 @@ import com.pokade.domain.inquiry.entity.Inquiry;
 import com.pokade.domain.inquiry.entity.InquiryImage;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
+import com.pokade.domain.notification.service.NotificationService;
+import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.entity.type.Role;
+import com.pokade.domain.user.entity.type.UserStatus;
+import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
@@ -37,6 +42,9 @@ public class InquiryService {
     private final InquiryRepository inquiryRepository;
     private final InquiryImageRepository inquiryImageRepository;
     private final S3FileStorage s3FileStorage;
+    // #392: 문의 등록 시 관리자 전원에게 알림을 보내기 위한 의존성 - createInquiry()에서만 쓴다.
+    private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public InquiryResponse createInquiry(Long userId, InquiryCreateRequest request, List<MultipartFile> images) {
@@ -50,6 +58,14 @@ public class InquiryService {
                 .category(request.category())
                 .build();
         inquiryRepository.save(inquiry);
+
+        // #392: 활성 관리자 전원에게 새 문의 도착을 알린다. 관리자가 없으면 NotificationService가 조용히
+        // 넘어가므로(빈 목록 가드) 관리자 부재로 문의 등록이 실패하지 않는다. 아래 S3 업로드가 실패하면
+        // 이 알림도 같은 트랜잭션에서 롤백되고, AFTER_COMMIT이라 SSE 푸시도 나가지 않는다 - 의도한 동작이다.
+        notificationService.createInquiryReceivedNotification(
+                userRepository.findByRoleAndStatus(Role.ADMIN, UserStatus.ACTIVE).stream().map(User::getId).toList(),
+                inquiry.getId(),
+                inquiry.getTitle());
 
         List<String> imageUrls = uploadImages(inquiry.getId(), files);
 
