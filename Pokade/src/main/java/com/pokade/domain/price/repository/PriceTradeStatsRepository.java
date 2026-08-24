@@ -40,16 +40,23 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
                                            @Param("status") TradeStatus status,
                                            @Param("from") LocalDateTime from);
 
-    // 카드별 가장 최근 체결가 1건(grade 지정 시 해당 등급만)
-    @Query("SELECT l.cardId AS cardId, t.price AS price FROM Trade t JOIN t.listing l "
-            + "WHERE l.cardId IN (:cardIds) AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
-            + "AND t.confirmedAt = ("
-            + "    SELECT MAX(t2.confirmedAt) FROM Trade t2 JOIN t2.listing l2 "
-            + "    WHERE l2.cardId = l.cardId AND (:grade IS NULL OR l2.grade = :grade) AND t2.status = :status"
-            + ")")
-    List<CardPriceView> findRecentCompletedTradePricesByCardIds(@Param("cardIds") List<Long> cardIds,
-                                                                  @Param("grade") ListingGrade grade,
-                                                                  @Param("status") TradeStatus status);
+    // 카드별 최근 체결가 1건: confirmedAt 동률 시 MAX()만으로는 2건이 반환돼 Collectors.toMap()이
+    // 깨지므로 DISTINCT ON으로 확정한다. 네이티브 쿼리라 enum은 문자열로 변환해서 넘긴다.
+    default List<CardPriceView> findRecentCompletedTradePricesByCardIds(List<Long> cardIds, ListingGrade grade,
+                                                                          TradeStatus status) {
+        return findRecentCompletedTradePricesByCardIdsNative(cardIds, grade == null ? null : grade.name(),
+                status.name());
+    }
+
+    @Query(value = """
+            SELECT DISTINCT ON (l.card_id) l.card_id AS cardId, t.price AS price
+            FROM trades t JOIN listings l ON l.id = t.listing_id
+            WHERE l.card_id IN (:cardIds) AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status
+            ORDER BY l.card_id, t.confirmed_at DESC, t.id DESC
+            """, nativeQuery = true)
+    List<CardPriceView> findRecentCompletedTradePricesByCardIdsNative(@Param("cardIds") List<Long> cardIds,
+                                                                        @Param("grade") String grade,
+                                                                        @Param("status") String status);
 
     interface CardPriceView {
         Long getCardId();
