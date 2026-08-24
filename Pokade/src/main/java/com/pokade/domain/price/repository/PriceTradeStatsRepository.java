@@ -146,9 +146,7 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
 
     /**
      * 시세 랭킹 페이지의 "거래 현황" 개요용: 플랫폼 전체(카드/등급 구분 없음) 체결가를 일 단위로 묶어
-     * 거래 건수와 거래가 중간값(median)을 계산한다. 평균(AVG)이 아니라 PERCENTILE_CONT(0.5)로 중간값을
-     * 구하는 이유는 소수의 초고가/초저가 체결이 평균을 크게 왜곡할 수 있어서다(FR-PRICE-06 랭킹의
-     * 평균 기반 등락률과는 별개 지표). JPQL은 PERCENTILE_CONT/날짜 절삭을 지원하지 않아 네이티브 쿼리로
+     * 거래 건수와 거래가 평균(AVG)을 계산한다. JPQL은 날짜 절삭을 지원하지 않아 네이티브 쿼리로
      * 작성했고, enum을 네이티브 쿼리에 그대로 바인딩하면 ordinal로 전송되는 문제(findPriceRangesByCardIdsSincePerCard
      * 주석 참고)와 동일하게 상태값도 문자열로 변환해서 넘긴다.
      */
@@ -159,7 +157,7 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
     @Query(value = """
             SELECT CAST(t.confirmed_at AS date) AS tradeDate,
                    COUNT(*) AS volume,
-                   PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY t.price) AS medianPrice
+                   AVG(t.price) AS avgPrice
             FROM trades t
             WHERE t.status = :status AND t.confirmed_at >= :from
             GROUP BY CAST(t.confirmed_at AS date)
@@ -171,6 +169,6 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
     interface DailyMarketStatView {
         LocalDate getTradeDate();
         Long getVolume();
-        Double getMedianPrice();
+        Double getAvgPrice();
     }
 }

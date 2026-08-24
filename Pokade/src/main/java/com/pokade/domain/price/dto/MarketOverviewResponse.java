@@ -7,11 +7,11 @@ public record MarketOverviewResponse(
         long todayVolume,
         BigDecimal volumeChangeRate,
         long volumeChangeAmount,
-        Long todayMedianPrice,
-        BigDecimal medianChangeRate1d,
-        Long medianChangeAmount1d,
-        BigDecimal medianChangeRate7d,
-        BigDecimal medianChangeRate30d,
+        Long todayAvgPrice,
+        BigDecimal avgChangeRate1d,
+        Long avgChangeAmount1d,
+        BigDecimal avgChangeRate7d,
+        BigDecimal avgChangeRate30d,
         long totalVolume,
         List<DailyMarketStatResponse> dailyStats
 ) {

@@ -422,7 +422,36 @@ class PriceControllerTest {
     }
 
     @Test
-    void 거래_현황_개요를_조회하면_200과_오늘_거래량_중간값_전일_일주일_30일_변화율을_반환한다() throws Exception {
+    void 랭킹_갱신시각_조회에_성공하면_200과_시각을_반환한다() throws Exception {
+        given(priceService.getRankingRefreshedAt("rise"))
+                .willReturn(java.time.LocalDateTime.of(2026, 8, 25, 4, 0, 0));
+
+        mockMvc.perform(get("/api/prices/ranking/refreshed-at").param("type", "rise"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.refreshedAt").value("2026-08-25T04:00:00"));
+    }
+
+    @Test
+    void 랭킹_갱신시각이_아직_없으면_200과_null을_반환한다() throws Exception {
+        given(priceService.getRankingRefreshedAt("rise")).willReturn(null);
+
+        mockMvc.perform(get("/api/prices/ranking/refreshed-at").param("type", "rise"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.refreshedAt").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void 랭킹_갱신시각_조회시_잘못된_type_값이면_400을_반환한다() throws Exception {
+        given(priceService.getRankingRefreshedAt("up"))
+                .willThrow(new BusinessException(ErrorCode.INVALID_RANKING_TYPE));
+
+        mockMvc.perform(get("/api/prices/ranking/refreshed-at").param("type", "up"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_RANKING_TYPE"));
+    }
+
+    @Test
+    void 거래_현황_개요를_조회하면_200과_오늘_거래량_평균_전일_일주일_30일_변화율을_반환한다() throws Exception {
         MarketOverviewResponse overview = new MarketOverviewResponse(
                 12L,
                 new BigDecimal("20.00"),
@@ -442,11 +471,11 @@ class PriceControllerTest {
                 .andExpect(jsonPath("$.data.todayVolume").value(12))
                 .andExpect(jsonPath("$.data.volumeChangeRate").value(20.00))
                 .andExpect(jsonPath("$.data.volumeChangeAmount").value(2))
-                .andExpect(jsonPath("$.data.todayMedianPrice").value(3100000))
-                .andExpect(jsonPath("$.data.medianChangeRate1d").value(3.33))
-                .andExpect(jsonPath("$.data.medianChangeAmount1d").value(100000))
-                .andExpect(jsonPath("$.data.medianChangeRate7d").value(10.71))
-                .andExpect(jsonPath("$.data.medianChangeRate30d").value(55.00))
+                .andExpect(jsonPath("$.data.todayAvgPrice").value(3100000))
+                .andExpect(jsonPath("$.data.avgChangeRate1d").value(3.33))
+                .andExpect(jsonPath("$.data.avgChangeAmount1d").value(100000))
+                .andExpect(jsonPath("$.data.avgChangeRate7d").value(10.71))
+                .andExpect(jsonPath("$.data.avgChangeRate30d").value(55.00))
                 .andExpect(jsonPath("$.data.totalVolume").value(250))
                 .andExpect(jsonPath("$.data.dailyStats.length()").value(1));
     }

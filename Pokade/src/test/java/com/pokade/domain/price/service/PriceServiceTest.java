@@ -33,6 +33,7 @@ import com.pokade.domain.price.repository.BuyOfferOrderRepository;
 import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
+import com.pokade.domain.price.store.PriceRankingRefreshStore;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
@@ -101,6 +102,9 @@ class PriceServiceTest {
 
     @Mock
     private PriceTradeStatsRepository priceTradeStatsRepository;
+
+    @Mock
+    private PriceRankingRefreshStore priceRankingRefreshStore;
 
     @Mock
     private PriceCardStatsRepository priceCardStatsRepository;
@@ -557,6 +561,36 @@ class PriceServiceTest {
 
         assertThat(result).isEmpty();
         verify(cardRepository, never()).findAllById(any());
+    }
+
+    @Test
+    @DisplayName("t20b getRanking 호출 시 랭킹이 계산된 시각을 기록한다")
+    void t20b() {
+        given(priceTradeStatsRepository.findAveragePricesByGradeSince(eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of());
+
+        priceService.getRanking("rise");
+
+        verify(priceRankingRefreshStore).recordNow(eq("rise"), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("t20c getRankingRefreshedAt은 저장소에 기록된 시각을 그대로 반환한다")
+    void t20c() {
+        LocalDateTime refreshedAt = LocalDateTime.now().minusHours(3);
+        given(priceRankingRefreshStore.findRefreshedAt("rise")).willReturn(refreshedAt);
+
+        assertThat(priceService.getRankingRefreshedAt("rise")).isEqualTo(refreshedAt);
+    }
+
+    @Test
+    @DisplayName("t20d getRankingRefreshedAt은 잘못된 type이면 INVALID_RANKING_TYPE 예외가 발생한다")
+    void t20d() {
+        assertThatThrownBy(() -> priceService.getRankingRefreshedAt("up"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_RANKING_TYPE);
+        verifyNoInteractions(priceRankingRefreshStore);
     }
 
     @Test
@@ -1139,7 +1173,7 @@ class PriceServiceTest {
     }
 
     private PriceTradeStatsRepository.DailyMarketStatView dailyMarketStatView(
-            LocalDate date, long volume, Double medianPrice) {
+            LocalDate date, long volume, Double avgPrice) {
         return new PriceTradeStatsRepository.DailyMarketStatView() {
             @Override
             public LocalDate getTradeDate() {
@@ -1152,14 +1186,14 @@ class PriceServiceTest {
             }
 
             @Override
-            public Double getMedianPrice() {
-                return medianPrice;
+            public Double getAvgPrice() {
+                return avgPrice;
             }
         };
     }
 
     @Test
-    @DisplayName("t57 오늘/어제 모두 체결이 있으면 전일 대비 거래량/중간값 변화율을 계산하고 30일치 일별 통계를 반환한다")
+    @DisplayName("t57 오늘/어제 모두 체결이 있으면 전일 대비 거래량/평균 변화율을 계산하고 30일치 일별 통계를 반환한다")
     void t57() {
         LocalDate today = LocalDate.now();
         LocalDate yesterday = today.minusDays(1);
@@ -1174,10 +1208,10 @@ class PriceServiceTest {
         assertThat(result.todayVolume()).isEqualTo(12L);
         assertThat(result.volumeChangeRate()).isEqualByComparingTo("20.00");
         assertThat(result.volumeChangeAmount()).isEqualTo(2L);
-        assertThat(result.todayMedianPrice()).isEqualTo(3100000L);
+        assertThat(result.todayAvgPrice()).isEqualTo(3100000L);
         // (3100000-3000000)/3000000*100 = 3.3333... -> 3.33
-        assertThat(result.medianChangeRate1d()).isEqualByComparingTo("3.33");
-        assertThat(result.medianChangeAmount1d()).isEqualTo(100000L);
+        assertThat(result.avgChangeRate1d()).isEqualByComparingTo("3.33");
+        assertThat(result.avgChangeAmount1d()).isEqualTo(100000L);
         assertThat(result.totalVolume()).isEqualTo(22L);
         assertThat(result.dailyStats()).hasSize(30);
         assertThat(result.dailyStats().get(29).date()).isEqualTo(today);
@@ -1195,12 +1229,12 @@ class PriceServiceTest {
 
         assertThat(result.todayVolume()).isEqualTo(5L);
         assertThat(result.volumeChangeRate()).isNull();
-        assertThat(result.medianChangeRate1d()).isNull();
-        assertThat(result.medianChangeAmount1d()).isNull();
+        assertThat(result.avgChangeRate1d()).isNull();
+        assertThat(result.avgChangeAmount1d()).isNull();
     }
 
     @Test
-    @DisplayName("t59 오늘 체결이 전혀 없으면 오늘의 거래량/중간값이 0과 null이고 변화율도 null이다")
+    @DisplayName("t59 오늘 체결이 전혀 없으면 오늘의 거래량/평균이 0과 null이고 변화율도 null이다")
     void t59() {
         given(priceTradeStatsRepository.findDailyMarketStats(eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
                 .willReturn(List.of());
@@ -1208,18 +1242,18 @@ class PriceServiceTest {
         MarketOverviewResponse result = priceService.getMarketOverview();
 
         assertThat(result.todayVolume()).isZero();
-        assertThat(result.todayMedianPrice()).isNull();
+        assertThat(result.todayAvgPrice()).isNull();
         assertThat(result.volumeChangeRate()).isNull();
-        assertThat(result.medianChangeRate1d()).isNull();
-        assertThat(result.medianChangeAmount1d()).isNull();
-        assertThat(result.medianChangeRate7d()).isNull();
-        assertThat(result.medianChangeRate30d()).isNull();
+        assertThat(result.avgChangeRate1d()).isNull();
+        assertThat(result.avgChangeAmount1d()).isNull();
+        assertThat(result.avgChangeRate7d()).isNull();
+        assertThat(result.avgChangeRate30d()).isNull();
         assertThat(result.totalVolume()).isZero();
         assertThat(result.dailyStats()).hasSize(30);
     }
 
     @Test
-    @DisplayName("t60 일주일 전/30일 전 체결이 있으면 오늘 중간값과 비교해 각 기준의 변화율을 계산한다")
+    @DisplayName("t60 일주일 전/30일 전 체결이 있으면 오늘 평균과 비교해 각 기준의 변화율을 계산한다")
     void t60() {
         LocalDate today = LocalDate.now();
         given(priceTradeStatsRepository.findDailyMarketStats(eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
@@ -1232,9 +1266,9 @@ class PriceServiceTest {
         MarketOverviewResponse result = priceService.getMarketOverview();
 
         // (3000000-2500000)/2500000*100 = 20.00
-        assertThat(result.medianChangeRate7d()).isEqualByComparingTo("20.00");
+        assertThat(result.avgChangeRate7d()).isEqualByComparingTo("20.00");
         // (3000000-2000000)/2000000*100 = 50.00
-        assertThat(result.medianChangeRate30d()).isEqualByComparingTo("50.00");
+        assertThat(result.avgChangeRate30d()).isEqualByComparingTo("50.00");
     }
 
     @Test
@@ -1246,8 +1280,8 @@ class PriceServiceTest {
 
         MarketOverviewResponse result = priceService.getMarketOverview();
 
-        assertThat(result.medianChangeRate7d()).isNull();
-        assertThat(result.medianChangeRate30d()).isNull();
+        assertThat(result.avgChangeRate7d()).isNull();
+        assertThat(result.avgChangeRate30d()).isNull();
     }
 
     @Test
