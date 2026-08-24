@@ -404,6 +404,25 @@ class PriceServiceTest {
                 new CardPriceSummaryResponse(1L, 3000000, null, null, "KRW", new BigDecimal("25.60"), "USD"));
     }
 
+    @Test
+    @DisplayName("t32b PSA10처럼 공인 감정 등급을 요청하면 raw 대신 그 등급의 감정 시세(graded)를 fallback으로 반환한다")
+    void t32b() {
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(List.of(1L)))
+                .willReturn(List.of(primaryVariantIdView(1L, 10L)));
+        given(listingRepository.findLowestActivePricesByVariantIds(List.of(10L), ListingStatus.ACTIVE, ListingGrade.PSA10))
+                .willReturn(List.of());
+        given(buyOfferRepository.findHighestActivePricesByVariantIds(List.of(10L)))
+                .willReturn(List.of());
+        given(cardPriceRepository.findMarketPricesByVariantIds(List.of(10L), "graded", "10", "PSA"))
+                .willReturn(List.of(variantMarketPriceView(10L, new BigDecimal("51.20"), "USD")));
+
+        List<CardPriceSummaryResponse> result = priceService.getSummaries(List.of(1L), ListingGrade.PSA10, false);
+
+        assertThat(result).containsExactly(
+                new CardPriceSummaryResponse(1L, null, null, null, "KRW", new BigDecimal("51.20"), "USD"));
+        verify(cardPriceRepository, never()).findMarketPricesByVariantIds(any(), eq("raw"), any(), any());
+    }
+
     private CardPriceRepository.VariantMarketPriceView variantMarketPriceView(Long variantId, BigDecimal market, String currency) {
         return new CardPriceRepository.VariantMarketPriceView() {
             @Override
