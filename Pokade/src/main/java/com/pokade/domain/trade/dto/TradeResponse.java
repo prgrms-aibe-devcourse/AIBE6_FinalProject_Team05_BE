@@ -12,6 +12,7 @@ public record TradeResponse(
         Long sellerId,
         Long cardId,
         String cardName,
+        String cardImageUrl,
         Integer price,
         TradeStatus status,
         LocalDateTime shippedAt,
@@ -26,7 +27,7 @@ public record TradeResponse(
         Integer pointsUsed
 ) {
 
-    public static TradeResponse of(Trade trade, String cardName, Integer pointsUsed) {
+    public static TradeResponse of(Trade trade, String cardName, String cardImageUrl, Integer pointsUsed) {
         return new TradeResponse(
                 trade.getId(),
                 trade.getListing().getId(),
@@ -34,6 +35,7 @@ public record TradeResponse(
                 trade.getListing().getSellerId(),
                 trade.getListing().getCardId(),
                 cardName,
+                cardImageUrl,
                 trade.getPrice(),
                 trade.getStatus(),
                 trade.getShippedAt(),
