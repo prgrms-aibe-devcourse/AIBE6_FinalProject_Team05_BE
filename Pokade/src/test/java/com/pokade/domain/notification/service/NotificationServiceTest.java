@@ -277,39 +277,50 @@ class NotificationServiceTest {
                 .contains("구매");
     }
 
+    // #392: 예전에는 이 세 테스트가 "생성 메서드가 Emitter로 직접 쏜다"를 검증했다. 커밋 전 푸시를
+    // AFTER_COMMIT 이벤트로 통일하면서, 전송 자체(구독자 유무·IOException·실패 카운터)의 책임은
+    // onNotificationPush 쪽으로 옮겨졌고 그쪽 테스트가 이미 덮고 있다. 여기서는 "커밋 전에 쏘지 않고
+    // 이벤트만 발행한다"는 새 계약을 대신 고정한다.
     @Test
-    @DisplayName("목표가 도달 알림 생성: 구독 중인 Emitter가 있으면 notification 이벤트를 전송한다")
-    void createPriceTargetNotification_pushes_to_subscriber() throws Exception {
+    @DisplayName("목표가 도달 알림 생성: 커밋 전에 Emitter로 직접 쏘지 않고 푸시 이벤트만 발행한다")
+    void createPriceTargetNotification_publishesEventInsteadOfDirectPush() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
-        SseEmitter emitter = mock(SseEmitter.class);
-        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
         notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000);
 
-        then(emitter).should().send(any(SseEmitter.SseEventBuilder.class));
+        ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
+        then(eventPublisher).should().publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().userId()).isEqualTo(1L);
+        assertThat(eventCaptor.getValue().response().type()).isEqualTo(NotificationType.PRICE_TARGET);
+        // 커밋 전이므로 구독자 조회조차 하지 않아야 한다.
+        then(sseEmitterStore).should(never()).findByUserId(any());
     }
 
     @Test
-    @DisplayName("목표가 도달 알림 생성: 구독 중인 Emitter가 없으면 예외 없이 조용히 스킵된다")
-    void createPriceTargetNotification_no_subscriber_noop() {
+    @DisplayName("목표가 도달 알림 생성: 호출자가 넘긴 카드로 푸시 payload의 썸네일을 채운다")
+    void createPriceTargetNotification_reusesCallerCardForThumbnail() {
         Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
-        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of());
-
-        assertThatCode(() -> notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000))
-                .doesNotThrowAnyException();
-    }
-
-    @Test
-    @DisplayName("목표가 도달 알림 생성: 전송 중 IOException이 발생하면 Emitter를 종료 처리한다")
-    void createPriceTargetNotification_send_fails_completesWithError() throws Exception {
-        Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).targetBuyPrice(100000).build();
-        SseEmitter emitter = mock(SseEmitter.class);
-        doThrow(new IOException("broken pipe")).when(emitter).send(any(SseEmitter.SseEventBuilder.class));
-        given(sseEmitterStore.findByUserId(1L)).willReturn(List.of(emitter));
 
         notificationService.createPriceTargetNotification(watchlist, "리자몽", card(), 100000);
 
-        then(emitter).should().completeWithError(any(IOException.class));
+        ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
+        then(eventPublisher).should().publishEvent(eventCaptor.capture());
+        // 이벤트 방식으로 바꾸면서 card 인자를 흘리면 썸네일이 조용히 사라진다 - 그 회귀를 막는다.
+        assertThat(eventCaptor.getValue().response().cardImageUrl()).isEqualTo("medium.png");
+    }
+
+    @Test
+    @DisplayName("재입고 알림 생성: 커밋 전 직접 푸시 없이 이벤트를 발행하고 카드 썸네일을 채운다")
+    void createListingAvailableNotification_publishesEventWithCard() {
+        Watchlist watchlist = Watchlist.builder().userId(1L).cardId(10L).build();
+
+        notificationService.createListingAvailableNotification(watchlist, "리자몽", card());
+
+        ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
+        then(eventPublisher).should().publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().response().type()).isEqualTo(NotificationType.LISTING_AVAILABLE);
+        assertThat(eventCaptor.getValue().response().cardImageUrl()).isEqualTo("medium.png");
+        then(sseEmitterStore).should(never()).findByUserId(any());
     }
 
     // ===== 1:1 문의 처리 완료 알림 생성 =====

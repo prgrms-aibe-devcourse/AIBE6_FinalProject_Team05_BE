@@ -112,18 +112,15 @@ public class NotificationService {
 
     // 워치리스트 목표가 도달 알림 생성 (reachedTargetPrice: 도달한 것으로 판정된 목표가 - 구매/판매 목표가 중 실제로 도달한 쪽)
     // card: 호출자(WatchlistTargetPriceEvaluator/WatchlistTargetPriceNoticeProcessor)가 목표가 판정을 위해
-    // 이미 조회해 둔 카드 - 여기서 다시 조회하지 않고 그대로 재사용해 SSE 즉시 푸시에도 카드 이미지를 채운다.
+    // 이미 조회해 둔 카드 - 여기서 다시 조회하지 않고 그대로 재사용해 푸시 payload의 카드 이미지를 채운다.
+    //
+    // #392: 예전에는 여기서 pushToSubscribers()를 직접 불러 커밋 전에 SSE를 쏘았다. 아래
+    // createInquiryHandledNotification 주석이 설명하는 바로 그 문제(유저는 알림을 받았는데 이후 롤백돼
+    // 레코드는 없는 불일치)를 이 경로만 그대로 안고 있었다 - 나머지 타입과 같이 AFTER_COMMIT 이벤트로 통일했다.
     @Transactional
     public void createPriceTargetNotification(Watchlist watchlist, String cardName, Card card, Integer reachedTargetPrice) {
-        Notification notification = Notification.builder()
-                .userId(watchlist.getUserId())
-                .type(NotificationType.PRICE_TARGET)
-                .message(buildPriceTargetMessage(watchlist, cardName, reachedTargetPrice))
-                .cardId(watchlist.getCardId())
-                .build();
-
-        notificationRepository.save(notification);
-        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification, card));
+        saveAndPublish(watchlist.getUserId(), NotificationType.PRICE_TARGET, watchlist.getCardId(),
+                buildPriceTargetMessage(watchlist, cardName, reachedTargetPrice), card);
     }
 
     private String buildPriceTargetMessage(Watchlist watchlist, String cardName, Integer reachedTargetPrice) {
@@ -133,18 +130,12 @@ public class NotificationService {
 
     // #300: 워치리스트에 등록한 카드에 매물이 없다가 새로 등록됐을 때(재입고) 알림 생성.
     // card: 호출자(WatchlistListingAvailableNoticeListener)가 이미 조회해 둔 카드 - createPriceTargetNotification과
-    // 동일하게 여기서 다시 조회하지 않고 재사용해 SSE 즉시 푸시에도 카드 이미지를 채운다.
+    // 동일하게 여기서 다시 조회하지 않고 재사용해 푸시 payload의 카드 이미지를 채운다.
+    // #392: 위와 같은 이유로 커밋 전 직접 푸시에서 AFTER_COMMIT 이벤트로 통일했다.
     @Transactional
     public void createListingAvailableNotification(Watchlist watchlist, String cardName, Card card) {
-        Notification notification = Notification.builder()
-                .userId(watchlist.getUserId())
-                .type(NotificationType.LISTING_AVAILABLE)
-                .message(String.format("%s 카드에 상품이 새로 등록됐어요. 지금 확인해보세요!", cardName))
-                .cardId(watchlist.getCardId())
-                .build();
-
-        notificationRepository.save(notification);
-        pushToSubscribers(watchlist.getUserId(), NotificationResponse.of(notification, card));
+        saveAndPublish(watchlist.getUserId(), NotificationType.LISTING_AVAILABLE, watchlist.getCardId(),
+                String.format("%s 카드에 상품이 새로 등록됐어요. 지금 확인해보세요!", cardName), card);
     }
 
     // 1:1 문의 처리 완료 알림 생성 - 관리자의 답변 등록, 또는 상태를 HANDLED로 변경한 경우 호출된다.
@@ -294,10 +285,19 @@ public class NotificationService {
                 String.format("%s 카드 구매 입찰이 %,d원에 체결되었습니다.", cardName, matchedPrice));
     }
 
-    // #392: 위 4종이 "저장 → 커밋 후 푸시용 이벤트 발행"이라는 똑같은 절차만 반복해서 공용화했다.
-    // 기존 생성 메서드들(PRICE_TARGET/LISTING_AVAILABLE/INQUIRY_HANDLED 등)은 각자 사연이 달라
-    // (card 인자를 그대로 재사용하거나, 커밋 전 푸시를 하거나) 이쪽으로 합치지 않았다.
+    // #392: "저장 → 커밋 후 푸시용 이벤트 발행"이라는 똑같은 절차를 공용화했다. 알림 레코드에 카드를
+    // 붙이지 않는(=푸시 시점에 썸네일이 없는) 타입들이 쓴다 - 목록 조회 시 getNotifications()의 배치
+    // 조회가 이미지를 채워준다.
     private void saveAndPublish(Long userId, NotificationType type, Long cardId, String message) {
+        saveAndPublish(userId, type, cardId, message, null);
+    }
+
+    /**
+     * 호출자가 이미 조회해 둔 {@link Card}가 있으면 그대로 넘겨 푸시 payload의 썸네일까지 채우는 오버로드.
+     * 워치리스트 계열(PRICE_TARGET/LISTING_AVAILABLE)이 쓴다 - 목표가 판정·재입고 판정을 위해 카드를
+     * 이미 로드해 둔 상태라 다시 조회할 이유가 없다.
+     */
+    private void saveAndPublish(Long userId, NotificationType type, Long cardId, String message, Card card) {
         Notification notification = Notification.builder()
                 .userId(userId)
                 .type(type)
@@ -306,7 +306,7 @@ public class NotificationService {
                 .build();
 
         notificationRepository.save(notification);
-        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification, null)));
+        eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification, card)));
     }
 
     // 트랜잭션이 없는 컨텍스트(단위 테스트 등)에서도 그대로 실행되도록 fallbackExecution=true.
