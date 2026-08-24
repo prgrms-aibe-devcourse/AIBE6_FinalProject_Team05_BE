@@ -116,5 +116,10 @@ jobs:
             fi
 
             echo "$TARGET" > ~/pokade-active-slot
+
+            # 48시간 지난 미사용 이미지 정리 - EC2 로컬 디스크가 무한정 쌓이는 걸 방지.
+            # GHCR 쪽 정리(cleanup-old-images job)는 레지스트리만 청소하고 로컬 pull 이미지는
+            # 안 지워서, 배포를 반복할수록 디스크가 가득 차 배포가 실패하는 문제가 있었다.
+            docker image prune -af --filter "until=48h" || true
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
