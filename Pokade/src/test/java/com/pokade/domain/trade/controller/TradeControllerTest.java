@@ -146,7 +146,7 @@ class TradeControllerTest {
     void 결제승인에_성공하면_200과_생성된_거래를_반환한다() throws Exception {
         TradePaymentConfirmRequest request = new TradePaymentConfirmRequest("pay_123", "order-1", 10000L);
         TradeResponse response = new TradeResponse(
-                1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
+                1L, 1L, 200L, 100L, 1L, "테스트카드", null, 10000, TradeStatus.PENDING,
                 null, null, null, null, null, null, null, null, LocalDateTime.now(), null);
 
         given(tradeService.confirmPurchase(200L, "pay_123", "order-1", 10000L))
@@ -181,7 +181,7 @@ class TradeControllerTest {
         // paymentKey 없이도 요청 자체는 컨트롤러를 통과하는지만 확인한다.
         TradePaymentConfirmRequest request = new TradePaymentConfirmRequest(null, "order-1", 0L);
         TradeResponse response = new TradeResponse(
-                1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
+                1L, 1L, 200L, 100L, 1L, "테스트카드", null, 10000, TradeStatus.PENDING,
                 null, null, null, null, null, null, null, null, LocalDateTime.now(), null);
 
         given(tradeService.confirmPurchase(200L, null, "order-1", 0L)).willReturn(response);
@@ -212,7 +212,7 @@ class TradeControllerTest {
     @Test
     void 본인_거래를_조회하면_200과_거래정보를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
-                1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.PENDING,
+                1L, 1L, 200L, 100L, 1L, "테스트카드", null, 10000, TradeStatus.PENDING,
                 null, null, null, null, null, null, null, null, LocalDateTime.now(), null);
 
         given(tradeService.getTrade(200L, 1L)).willReturn(response);
@@ -254,7 +254,7 @@ class TradeControllerTest {
         LocalDateTime deliveredAt = LocalDateTime.now().minusDays(1);
         LocalDateTime confirmedAt = LocalDateTime.now();
         TradeResponse response = new TradeResponse(
-                1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.COMPLETED,
+                1L, 1L, 200L, 100L, 1L, "테스트카드", null, 10000, TradeStatus.COMPLETED,
                 shippedAt, inspectedAt, deliveredAt, confirmedAt, confirmedAt, null, null, null, confirmedAt, null);
 
         given(tradeService.confirmTrade(200L, 1L)).willReturn(response);
@@ -304,7 +304,7 @@ class TradeControllerTest {
     @Test
     void 구매자가_취소하면_200과_CANCELLED_상태를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
-                1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.CANCELLED,
+                1L, 1L, 200L, 100L, 1L, "테스트카드", null, 10000, TradeStatus.CANCELLED,
                 null, null, null, null, null, null, null, null, LocalDateTime.now(), null);
 
         given(tradeService.cancelTrade(200L, 1L)).willReturn(response);
@@ -318,7 +318,7 @@ class TradeControllerTest {
     @Test
     void 판매자가_취소하면_200과_CANCELLED_상태를_반환한다() throws Exception {
         TradeResponse response = new TradeResponse(
-                1L, 1L, 200L, 100L, 1L, "테스트카드", 10000, TradeStatus.CANCELLED,
+                1L, 1L, 200L, 100L, 1L, "테스트카드", null, 10000, TradeStatus.CANCELLED,
                 null, null, null, null, null, null, null, null, LocalDateTime.now(), null);
 
         given(tradeService.cancelTrade(100L, 1L)).willReturn(response);

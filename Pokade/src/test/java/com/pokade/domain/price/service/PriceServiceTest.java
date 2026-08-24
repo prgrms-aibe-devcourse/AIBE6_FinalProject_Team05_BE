@@ -1068,7 +1068,7 @@ class PriceServiceTest {
         given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
         given(listingRepository.save(any(Listing.class))).willAnswer(invocation -> invocation.getArgument(0));
         TradeResponse expected = new TradeResponse(
-                100L, null, 2L, 1L, 1L, "리자몽", 250000, TradeStatus.PENDING,
+                100L, null, 2L, 1L, 1L, "리자몽", null, 250000, TradeStatus.PENDING,
                 null, null, null, null, null,
                 "김철수", "010-1234-5678", "서울시 강남구", java.time.LocalDateTime.now(), null);
         given(tradeService.createMatchedTrade(
