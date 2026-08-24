@@ -12,6 +12,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class CardRateLimitFilterTest {
 
+    // #386: 분당 임계값을 테스트에 리터럴로 복사해 두면(예전엔 60이 9곳에 박혀 있었다) 프로덕션 상수를
+    // 조정할 때마다 테스트가 조용히 어긋난다. 같은 패키지이므로 프로덕션 상수를 직접 참조한다.
+    private static final int CAPACITY = CardRateLimitFilter.CAPACITY_PER_MINUTE;
+
     // #343: 프로덕션의 no-arg 생성자를 없애면서, 레지스트리는 테스트가 직접 넘긴다.
     // 지표 값을 확인할 필요가 없는 테스트는 이 헬퍼로 일회용 레지스트리를 받는다.
     private CardRateLimitFilter newFilter() {
@@ -24,7 +28,7 @@ class CardRateLimitFilterTest {
         CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
 
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < CAPACITY; i++) {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
             request.setRemoteAddr("127.0.0.1");
             MockHttpServletResponse response = new MockHttpServletResponse();
@@ -33,7 +37,7 @@ class CardRateLimitFilterTest {
 
             assertThat(response.getStatus()).isEqualTo(200);
         }
-        Mockito.verify(filterChain, Mockito.times(60)).doFilter(Mockito.any(), Mockito.any());
+        Mockito.verify(filterChain, Mockito.times(CAPACITY)).doFilter(Mockito.any(), Mockito.any());
     }
 
     @Test
@@ -42,7 +46,7 @@ class CardRateLimitFilterTest {
         CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
 
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < CAPACITY; i++) {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
             request.setRemoteAddr("127.0.0.2");
             filter.doFilter(request, new MockHttpServletResponse(), filterChain);
@@ -56,7 +60,7 @@ class CardRateLimitFilterTest {
 
         assertThat(overLimitResponse.getStatus()).isEqualTo(429);
         assertThat(overLimitResponse.getContentAsString()).contains("CARD_RATE_LIMIT_EXCEEDED");
-        Mockito.verify(filterChain, Mockito.times(60)).doFilter(Mockito.any(), Mockito.any());
+        Mockito.verify(filterChain, Mockito.times(CAPACITY)).doFilter(Mockito.any(), Mockito.any());
     }
 
     @Test
@@ -65,7 +69,7 @@ class CardRateLimitFilterTest {
         CardRateLimitFilter filter = newFilter();
         FilterChain filterChain = Mockito.mock(FilterChain.class);
 
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < CAPACITY; i++) {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
             request.setRemoteAddr("127.0.0.3");
             filter.doFilter(request, new MockHttpServletResponse(), filterChain);
@@ -87,7 +91,7 @@ class CardRateLimitFilterTest {
         FilterChain filterChain = Mockito.mock(FilterChain.class);
         String untrustedRemoteAddr = "203.0.113.10";
 
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < CAPACITY; i++) {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
             request.setRemoteAddr(untrustedRemoteAddr);
             request.addHeader("X-Forwarded-For", "1.1.1." + i);
@@ -115,7 +119,7 @@ class CardRateLimitFilterTest {
         FilterChain filterChain = Mockito.mock(FilterChain.class);
         String trustedRemoteAddr = "127.0.0.1";
 
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < CAPACITY; i++) {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
             request.setRemoteAddr(trustedRemoteAddr);
             request.addHeader("X-Forwarded-For", "10.1.2.3");
@@ -167,14 +171,14 @@ class CardRateLimitFilterTest {
         CardRateLimitFilter filter = new CardRateLimitFilter(meterRegistry);
         FilterChain filterChain = Mockito.mock(FilterChain.class);
 
-        for (int i = 0; i < 61; i++) {
+        for (int i = 0; i < CAPACITY + 1; i++) {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/cards");
             request.setRemoteAddr("127.0.0.7");
             filter.doFilter(request, new MockHttpServletResponse(), filterChain);
         }
 
-        // 61번째 요청만 분당 60회 제한에 걸린다.
-        assertThat(meterRegistry.counter("card.ratelimit.allowed").count()).isEqualTo(60.0);
+        // 임계값을 딱 1회 넘긴 마지막 요청만 제한에 걸린다.
+        assertThat(meterRegistry.counter("card.ratelimit.allowed").count()).isEqualTo((double) CAPACITY);
         assertThat(meterRegistry.counter("card.ratelimit.rejected").count()).isEqualTo(1.0);
     }
 }
