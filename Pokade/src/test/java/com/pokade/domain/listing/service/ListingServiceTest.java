@@ -1,10 +1,13 @@
 package com.pokade.domain.listing.service;
 
+import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
+import com.pokade.domain.listing.dto.MyListingResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
@@ -49,6 +52,9 @@ class ListingServiceTest {
 
     @Mock
     private CardVariantRepository cardVariantRepository;
+
+    @Mock
+    private CardNameKoResolver cardNameKoResolver;
 
     @Mock
     private UserAccessChecker userAccessChecker;
@@ -158,5 +164,51 @@ class ListingServiceTest {
                 .filter(r -> r.id().equals(20L)).findFirst().orElseThrow();
         assertThat(tradingSummary.tradeId()).isEqualTo(500L);
         assertThat(activeSummary.tradeId()).isNull();
+    }
+
+    @Test
+    void 본인_매물_주문서를_조회하면_카드_정보와_함께_반환한다() {
+        Listing listing = Listing.builder()
+                .cardId(1L)
+                .sellerId(100L)
+                .price(10000)
+                .grade(ListingGrade.A)
+                .build();
+        org.springframework.test.util.ReflectionTestUtils.setField(listing, "id", 5L);
+        given(listingRepository.findById(5L)).willReturn(Optional.of(listing));
+        given(cardRepository.findById(1L)).willReturn(
+                Optional.of(Card.builder().id(1L).name("Charizard").build()));
+        given(cardNameKoResolver.resolve(any())).willReturn("리자몽");
+
+        MyListingResponse response = listingService.getMyListing(100L, 5L);
+
+        assertThat(response.id()).isEqualTo(5L);
+        assertThat(response.cardName()).isEqualTo("Charizard");
+        assertThat(response.cardNameKo()).isEqualTo("리자몽");
+        assertThat(response.price()).isEqualTo(10000);
+    }
+
+    @Test
+    void 존재하지_않는_매물_주문서를_조회하면_LISTING_NOT_FOUND_예외가_발생한다() {
+        given(listingRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> listingService.getMyListing(100L, 999L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.LISTING_NOT_FOUND);
+    }
+
+    @Test
+    void 본인_것이_아닌_매물_주문서를_조회하면_ACCESS_DENIED_예외가_발생한다() {
+        Listing listing = Listing.builder()
+                .cardId(1L)
+                .sellerId(200L)
+                .price(10000)
+                .build();
+        org.springframework.test.util.ReflectionTestUtils.setField(listing, "id", 5L);
+        given(listingRepository.findById(5L)).willReturn(Optional.of(listing));
+
+        assertThatThrownBy(() -> listingService.getMyListing(100L, 5L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
     }
 }

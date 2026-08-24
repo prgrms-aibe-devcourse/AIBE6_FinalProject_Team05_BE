@@ -3,9 +3,11 @@ package com.pokade.domain.listing.service;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
+import com.pokade.domain.listing.dto.MyListingResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.domain.listing.dto.OrderbookEntryResponse;
 import com.pokade.domain.listing.entity.Listing;
@@ -27,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,6 +41,7 @@ public class ListingService {
     private final TradeRepository tradeRepository;
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
+    private final CardNameKoResolver cardNameKoResolver;
     private final UserAccessChecker userAccessChecker;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -66,11 +70,12 @@ public class ListingService {
     }
 
     public List<ListingSummaryResponse> getActiveListings(Long cardId) {
-        String cardName = cardRepository.findById(cardId).map(Card::getName).orElse(null);
+        Card card = cardRepository.findById(cardId).orElse(null);
+        String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
 
         return listingRepository.findByCardIdAndStatusOrderByPriceAsc(cardId, ListingStatus.ACTIVE)
                 .stream()
-                .map(listing -> ListingSummaryResponse.of(listing, cardName))
+                .map(listing -> ListingSummaryResponse.of(listing, card, cardNameKo))
                 .toList();
     }
 
@@ -98,18 +103,27 @@ public class ListingService {
 
         List<Listing> listings = listingsPage.getContent();
         List<Long> cardIds = listings.stream().map(Listing::getCardId).distinct().toList();
-        Map<Long, String> cardNamesById = cardRepository.findAllById(cardIds).stream()
-                .collect(Collectors.toMap(Card::getId, Card::getName));
+        Map<Long, Card> cardsById = cardRepository.findAllById(cardIds).stream()
+                .collect(Collectors.toMap(Card::getId, Function.identity()));
 
         // 거래 진행 상황 화면으로 연결하기 위해 매물별 거래 ID를 배치 조회 (건건이 조회하면 목록 크기만큼 쿼리가 나간다).
         List<Long> listingIds = listings.stream().map(Listing::getId).toList();
         Map<Long, Long> tradeIdByListingId = tradeRepository.findByListingIdIn(listingIds).stream()
                 .collect(Collectors.toMap(trade -> trade.getListing().getId(), Trade::getId));
 
-        return listingsPage.map(listing -> ListingSummaryResponse.of(
-                listing,
-                cardNamesById.get(listing.getCardId()),
-                tradeIdByListingId.get(listing.getId())));
+        return listingsPage.map(listing -> {
+            Card card = cardsById.get(listing.getCardId());
+            String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+            return ListingSummaryResponse.of(listing, card, cardNameKo, tradeIdByListingId.get(listing.getId()));
+        });
+    }
+
+    // 마이페이지 "입찰" 섹션(판매 등록 탭)에서 항목을 클릭했을 때의 주문서 상세.
+    public MyListingResponse getMyListing(Long sellerId, Long listingId) {
+        Listing listing = getOwnedListing(sellerId, listingId);
+        Card card = cardRepository.findById(listing.getCardId()).orElse(null);
+        String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+        return MyListingResponse.of(listing, card, cardNameKo);
     }
 
     @Transactional
