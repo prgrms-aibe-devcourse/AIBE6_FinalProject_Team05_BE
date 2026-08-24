@@ -401,6 +401,25 @@ class TradeServiceTest {
     }
 
     @Test
+    void 조회시_결제에_사용된_포인트를_함께_반환한다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+        given(paymentRepository.findByTradeId(any())).willReturn(Optional.of(
+                Payment.builder()
+                        .trade(trade)
+                        .buyerId(200L)
+                        .amount(trade.getPrice())
+                        .pointsUsed(5000)
+                        .method(com.pokade.domain.trade.entity.PaymentMethod.CARD)
+                        .tossPaymentKey("pay_123")
+                        .build()));
+
+        TradeResponse response = tradeService.getTrade(200L, 1L);
+
+        assertThat(response.pointsUsed()).isEqualTo(5000);
+    }
+
+    @Test
     void 판매자_본인이_조회하면_거래정보를_반환한다() {
         Trade trade = tradeOf(100L, 200L);
         given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));

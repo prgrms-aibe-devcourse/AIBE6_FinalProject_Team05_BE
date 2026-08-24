@@ -63,7 +63,10 @@ public class TradeService {
         String cardName = cardRepository.findById(trade.getListing().getCardId())
                 .map(Card::getName)
                 .orElse(null);
-        return TradeResponse.of(trade, cardName);
+        Integer pointsUsed = paymentRepository.findByTradeId(trade.getId())
+                .map(Payment::getPointsUsed)
+                .orElse(null);
+        return TradeResponse.of(trade, cardName, pointsUsed);
     }
 
     // 결제창을 띄우기 전에 주문을 먼저 PENDING으로 기록한다 - 매물은 아직 잠그지 않는다(TRADING으로

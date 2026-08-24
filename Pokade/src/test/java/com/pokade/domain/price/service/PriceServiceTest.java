@@ -1072,7 +1072,7 @@ class PriceServiceTest {
         TradeResponse expected = new TradeResponse(
                 100L, null, 2L, 1L, 1L, "리자몽", 250000, TradeStatus.PENDING,
                 null, null, null, null, null,
-                "김철수", "010-1234-5678", "서울시 강남구", java.time.LocalDateTime.now());
+                "김철수", "010-1234-5678", "서울시 강남구", java.time.LocalDateTime.now(), null);
         given(tradeService.createMatchedTrade(
                 any(), eq(2L), eq(250000), eq(252000), eq("김철수"), eq("010-1234-5678"),
                 eq("서울시 강남구"), eq("pay_999"), eq(1000)))

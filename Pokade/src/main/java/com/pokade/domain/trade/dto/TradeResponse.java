@@ -22,10 +22,11 @@ public record TradeResponse(
         String recipientName,
         String recipientPhone,
         String recipientAddress,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        Integer pointsUsed
 ) {
 
-    public static TradeResponse of(Trade trade, String cardName) {
+    public static TradeResponse of(Trade trade, String cardName, Integer pointsUsed) {
         return new TradeResponse(
                 trade.getId(),
                 trade.getListing().getId(),
@@ -43,7 +44,8 @@ public record TradeResponse(
                 trade.getRecipientName(),
                 trade.getRecipientPhone(),
                 trade.getRecipientAddress(),
-                trade.getCreatedAt()
+                trade.getCreatedAt(),
+                pointsUsed
         );
     }
 }
