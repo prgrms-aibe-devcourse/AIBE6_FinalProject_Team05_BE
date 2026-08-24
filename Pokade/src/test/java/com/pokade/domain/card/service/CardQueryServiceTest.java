@@ -368,9 +368,12 @@ class CardQueryServiceTest {
         assertThat(result.variants().get(0).variantName()).isEqualTo("unlimitedHolofoil");
         assertThat(result.variants().get(0).grades()).containsExactly("A");
         assertThat(result.variants().get(1).grades()).containsExactly("B");
-        verify(cardRepository).incrementViewCount(1L);
-        // #308 후속: incrementViewCount()는 벌크 UPDATE라 메모리상 card.viewCount(0)에는 반영되지
+        // #377: 누적 view_count와 인기순 정렬용 daily_view_count를 한 문장으로 올리므로 호출은 1회다
+        // (두 컬럼이 실제로 함께 증가하는지는 CardRepositoryTest t24/t25에서 DB로 검증한다).
+        verify(cardRepository).incrementViewCounts(1L);
+        // #308 후속: incrementViewCounts()는 벌크 UPDATE라 메모리상 card.viewCount(0)에는 반영되지
         // 않는데, 응답은 "이번 방문으로 증가된 값"(0+1=1)을 보여줘야 한다 - 증가 전 값(0)이 아니라야 한다.
+        // 일간 카운터는 정렬 기준으로만 쓰이고 응답 DTO에 필드 자체가 없다.
         assertThat(result.viewCount()).isEqualTo(1);
     }
 
@@ -383,7 +386,7 @@ class CardQueryServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.CARD_NOT_FOUND);
-        verify(cardRepository, never()).incrementViewCount(any());
+        verify(cardRepository, never()).incrementViewCounts(any());
     }
 
     @Test

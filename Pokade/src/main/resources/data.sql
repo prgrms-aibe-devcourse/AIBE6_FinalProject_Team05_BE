@@ -100,6 +100,9 @@ UPDATE cards SET view_count = 2500 WHERE external_id = 'me1-12';
 UPDATE cards SET view_count = 1800 WHERE external_id = 'xy7-54';
 UPDATE cards SET view_count = 1200 WHERE external_id = 'sm11-95';
 UPDATE cards SET view_count = 300 WHERE external_id = 'sv10_ja-1';
+-- 인기순 정렬은 daily_view_count 기준(#377)이라 시드도 같은 값으로 맞춘다. 위 12건을 복제하지 않고
+-- view_count를 그대로 옮겨 담아 두 값이 갈라지지 않게 한다(시드 대상이 아닌 카드는 양쪽 모두 0).
+UPDATE cards SET daily_view_count = view_count;
 
 
 -- =========================================================

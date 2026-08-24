@@ -142,10 +142,12 @@ public class CardQueryService {
     public CardDetailResponse getDetail(Long id) {
         Card card = cardRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
-        cardRepository.incrementViewCount(id);
+        cardRepository.incrementViewCounts(id);
         // 운영 계측 - #217 도입, card 대시보드가 사용 중
         meterRegistry.counter("card.view.increment.calls").increment();
-        // incrementViewCount()는 벌크 UPDATE라 위에서 조회해 둔 card 엔티티의 메모리 값에는 반영되지
+        // #377: incrementViewCounts()는 누적 view_count와 인기순 정렬용 daily_view_count를 함께 올린다.
+        // 응답에 노출하는 건 누적값(displayedViewCount)뿐이고, 일간값은 정렬 기준으로만 쓰인다.
+        // incrementViewCounts()는 벌크 UPDATE라 위에서 조회해 둔 card 엔티티의 메모리 값에는 반영되지
         // 않는다(영속성 컨텍스트를 거치지 않음) - 그래서 "이번 방문으로 +1된" 값을 직접 계산해서 응답에
         // 쓴다. card.setViewCount()로 엔티티 자체를 고치지 않는 이유는 CardDetailResponse.of() 주석 참고 -
         // 영속 엔티티를 mutate하면 커밋 시 dirty checking으로 별도 UPDATE가 나가면서 동시 요청의 원자적
