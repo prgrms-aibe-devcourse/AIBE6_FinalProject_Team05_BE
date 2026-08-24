@@ -8,6 +8,11 @@ import com.pokade.domain.inquiry.entity.InquiryImage;
 import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
+import com.pokade.domain.notification.service.NotificationService;
+import com.pokade.domain.user.entity.User;
+import com.pokade.domain.user.entity.type.Role;
+import com.pokade.domain.user.entity.type.UserStatus;
+import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.infra.storage.S3FileStorage;
@@ -41,6 +46,10 @@ class InquiryServiceTest {
     private InquiryImageRepository inquiryImageRepository;
     @Mock
     private S3FileStorage s3FileStorage;
+    @Mock
+    private UserRepository userRepository;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private InquiryService inquiryService;
@@ -151,5 +160,55 @@ class InquiryServiceTest {
         assertThat(responses.get(0).title()).isEqualTo("제목");
         assertThat(responses.get(0).category()).isEqualTo(InquiryCategory.SECURITY);
         assertThat(responses.get(0).imageUrls()).isEmpty();
+    }
+
+    // #392: 관리자 알림 팬아웃. 수신자 조회는 ACTIVE 관리자만 대상으로 해야 하고(DELETED/탈퇴대기
+    // 계정에 알림이 쌓이지 않도록), 조회 결과를 그대로 id 목록으로 넘긴다.
+    @Test
+    @DisplayName("문의를 등록하면 활성 관리자 전원에게 알림이 발송된다")
+    void createInquiry_notifiesEveryActiveAdmin() {
+        InquiryCreateRequest request = new InquiryCreateRequest(InquiryCategory.PAYMENT, "제목", "내용");
+        // 관리자 mock의 스터빙을 given(...) 인자 안에서 하면 스터빙이 중첩돼
+        // UnfinishedStubbingException이 난다 - 먼저 만들어 두고 그 값을 넘긴다.
+        List<User> admins = List.of(adminWithId(10L), adminWithId(11L));
+        given(userRepository.findByRoleAndStatus(Role.ADMIN, UserStatus.ACTIVE)).willReturn(admins);
+
+        inquiryService.createInquiry(1L, request, List.of());
+
+        then(notificationService).should()
+                .createInquiryReceivedNotification(eq(List.of(10L, 11L)), any(), eq("제목"));
+    }
+
+    @Test
+    @DisplayName("관리자가 한 명도 없어도 문의 등록은 성공한다")
+    void createInquiry_withNoAdmin_stillSucceeds() {
+        InquiryCreateRequest request = new InquiryCreateRequest(InquiryCategory.PAYMENT, "제목", "내용");
+        given(userRepository.findByRoleAndStatus(Role.ADMIN, UserStatus.ACTIVE)).willReturn(List.of());
+
+        InquiryResponse response = inquiryService.createInquiry(1L, request, List.of());
+
+        assertThat(response.title()).isEqualTo("제목");
+        // 빈 목록이어도 호출 자체는 나가고, 걸러내는 책임은 NotificationService의 빈 목록 가드에 있다.
+        then(notificationService).should().createInquiryReceivedNotification(eq(List.of()), any(), eq("제목"));
+    }
+
+    @Test
+    @DisplayName("이미지 검증에서 걸리면 문의가 저장되지도, 관리자 알림이 나가지도 않는다")
+    void createInquiry_whenImageInvalid_doesNotNotify() {
+        InquiryCreateRequest request = new InquiryCreateRequest(InquiryCategory.PAYMENT, "제목", "내용");
+        MultipartFile tooMany = png(10);
+
+        assertThatThrownBy(() -> inquiryService.createInquiry(
+                1L, request, List.of(tooMany, tooMany, tooMany, tooMany)))
+                .isInstanceOf(BusinessException.class);
+
+        then(inquiryRepository).should(never()).save(any());
+        then(notificationService).should(never()).createInquiryReceivedNotification(any(), any(), any());
+    }
+
+    private User adminWithId(Long id) {
+        User admin = org.mockito.Mockito.mock(User.class);
+        given(admin.getId()).willReturn(id);
+        return admin;
     }
 }
