@@ -42,6 +42,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -475,7 +476,7 @@ public class AiGradeService {
             return vision;
         }
 
-        List<BigDecimal> scores = List.of(vision.centeringScore(), vision.edgeScore(),
+        List<BigDecimal> scores = Arrays.asList(vision.centeringScore(), vision.edgeScore(),
                 vision.surfaceScore(), vision.cornerScore());
         if (scores.contains(null)) {
             throw new AiServiceUnavailableException("Vision 응답에 필수 점수가 누락되었습니다.");
