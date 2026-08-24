@@ -38,6 +38,7 @@ import com.pokade.domain.price.repository.BuyOfferOrderRepository;
 import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
+import com.pokade.domain.price.store.PriceRankingRefreshStore;
 import com.pokade.domain.trade.repository.TradeRepository;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.TradeStatus;
@@ -104,6 +105,7 @@ public class PriceService {
     private final BuyOfferOrderRepository buyOfferOrderRepository;
     private final TradeRepository tradeRepository;
     private final PriceTradeStatsRepository priceTradeStatsRepository;
+    private final PriceRankingRefreshStore priceRankingRefreshStore;
     private final PriceCardStatsRepository priceCardStatsRepository;
     private final CardPriceRepository cardPriceRepository;
     private final UserAccessChecker userAccessChecker;
@@ -644,6 +646,12 @@ public class PriceService {
         return computeRanking(type);
     }
 
+    // 화면에 "마지막 갱신: ..." 안내를 보여주기 위한 조회 - 아직 한 번도 계산된 적이 없으면(배포 직후 등) null.
+    public LocalDateTime getRankingRefreshedAt(String type) {
+        RankingType.from(type);
+        return priceRankingRefreshStore.findRefreshedAt(type);
+    }
+
     // FR-PRICE-06: getStats()와 같은 방식(자체 AI등급 S, COMPLETED 거래, 최근 7일 vs 이전 7일 블록 평균 비교)을
     // 전체 카드로 확장해 등락률 상위/하위 10개 카드를 랭킹으로 뽑는다. card_prices(Scrydex 동기화)는 쓰지 않는다 —
     // 그 테이블은 PSA/CGC 같은 공인 등급만 있고 우리 자체 S등급 데이터가 없다(getStats와 동일한 이유).
@@ -655,6 +663,8 @@ public class PriceService {
         RankingType rankingType = RankingType.from(type);
         // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
         meterRegistry.counter("price.ranking.requests", "type", rankingType.name()).increment();
+        // "언제 갱신됐는지" 화면 안내용 - 캐시 자체는 값만 들고 있어 시각을 알 수 없으므로 별도로 기록한다.
+        priceRankingRefreshStore.recordNow(type, LocalDateTime.now());
 
         LocalDateTime recentFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS);
         LocalDateTime previousFrom = LocalDateTime.now().minusDays(STATS_PERIOD_DAYS * 2L);

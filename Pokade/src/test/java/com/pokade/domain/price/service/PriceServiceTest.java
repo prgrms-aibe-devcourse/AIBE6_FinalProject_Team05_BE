@@ -33,6 +33,7 @@ import com.pokade.domain.price.repository.BuyOfferOrderRepository;
 import com.pokade.domain.price.repository.BuyOfferRepository;
 import com.pokade.domain.price.repository.PriceCardStatsRepository;
 import com.pokade.domain.price.repository.PriceTradeStatsRepository;
+import com.pokade.domain.price.store.PriceRankingRefreshStore;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
@@ -101,6 +102,9 @@ class PriceServiceTest {
 
     @Mock
     private PriceTradeStatsRepository priceTradeStatsRepository;
+
+    @Mock
+    private PriceRankingRefreshStore priceRankingRefreshStore;
 
     @Mock
     private PriceCardStatsRepository priceCardStatsRepository;
@@ -557,6 +561,36 @@ class PriceServiceTest {
 
         assertThat(result).isEmpty();
         verify(cardRepository, never()).findAllById(any());
+    }
+
+    @Test
+    @DisplayName("t20b getRanking 호출 시 랭킹이 계산된 시각을 기록한다")
+    void t20b() {
+        given(priceTradeStatsRepository.findAveragePricesByGradeSince(eq(ListingGrade.S), eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of());
+
+        priceService.getRanking("rise");
+
+        verify(priceRankingRefreshStore).recordNow(eq("rise"), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("t20c getRankingRefreshedAt은 저장소에 기록된 시각을 그대로 반환한다")
+    void t20c() {
+        LocalDateTime refreshedAt = LocalDateTime.now().minusHours(3);
+        given(priceRankingRefreshStore.findRefreshedAt("rise")).willReturn(refreshedAt);
+
+        assertThat(priceService.getRankingRefreshedAt("rise")).isEqualTo(refreshedAt);
+    }
+
+    @Test
+    @DisplayName("t20d getRankingRefreshedAt은 잘못된 type이면 INVALID_RANKING_TYPE 예외가 발생한다")
+    void t20d() {
+        assertThatThrownBy(() -> priceService.getRankingRefreshedAt("up"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_RANKING_TYPE);
+        verifyNoInteractions(priceRankingRefreshStore);
     }
 
     @Test

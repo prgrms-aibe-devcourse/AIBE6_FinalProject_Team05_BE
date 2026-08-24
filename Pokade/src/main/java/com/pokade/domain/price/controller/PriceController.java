@@ -8,6 +8,7 @@ import com.pokade.domain.price.dto.MarketOverviewResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
+import com.pokade.domain.price.dto.RankingRefreshedAtResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.response.ApiResponse;
@@ -88,6 +89,11 @@ public class PriceController {
     @GetMapping("/ranking")
     public ApiResponse<List<PriceRankingResponse>> getRanking(@RequestParam String type) {
         return ApiResponse.ok(priceService.getRanking(type));
+    }
+
+    @GetMapping("/ranking/refreshed-at")
+    public ApiResponse<RankingRefreshedAtResponse> getRankingRefreshedAt(@RequestParam String type) {
+        return ApiResponse.ok(new RankingRefreshedAtResponse(priceService.getRankingRefreshedAt(type)));
     }
 
     @GetMapping("/market-overview")

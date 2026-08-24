@@ -422,6 +422,35 @@ class PriceControllerTest {
     }
 
     @Test
+    void 랭킹_갱신시각_조회에_성공하면_200과_시각을_반환한다() throws Exception {
+        given(priceService.getRankingRefreshedAt("rise"))
+                .willReturn(java.time.LocalDateTime.of(2026, 8, 25, 4, 0, 0));
+
+        mockMvc.perform(get("/api/prices/ranking/refreshed-at").param("type", "rise"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.refreshedAt").value("2026-08-25T04:00:00"));
+    }
+
+    @Test
+    void 랭킹_갱신시각이_아직_없으면_200과_null을_반환한다() throws Exception {
+        given(priceService.getRankingRefreshedAt("rise")).willReturn(null);
+
+        mockMvc.perform(get("/api/prices/ranking/refreshed-at").param("type", "rise"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.refreshedAt").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void 랭킹_갱신시각_조회시_잘못된_type_값이면_400을_반환한다() throws Exception {
+        given(priceService.getRankingRefreshedAt("up"))
+                .willThrow(new BusinessException(ErrorCode.INVALID_RANKING_TYPE));
+
+        mockMvc.perform(get("/api/prices/ranking/refreshed-at").param("type", "up"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_RANKING_TYPE"));
+    }
+
+    @Test
     void 거래_현황_개요를_조회하면_200과_오늘_거래량_평균_전일_일주일_30일_변화율을_반환한다() throws Exception {
         MarketOverviewResponse overview = new MarketOverviewResponse(
                 12L,
