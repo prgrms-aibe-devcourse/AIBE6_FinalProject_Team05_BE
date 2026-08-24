@@ -40,16 +40,29 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
                                            @Param("status") TradeStatus status,
                                            @Param("from") LocalDateTime from);
 
-    // 카드별 가장 최근 체결가 1건(grade 지정 시 해당 등급만)
-    @Query("SELECT l.cardId AS cardId, t.price AS price FROM Trade t JOIN t.listing l "
-            + "WHERE l.cardId IN (:cardIds) AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status "
-            + "AND t.confirmedAt = ("
-            + "    SELECT MAX(t2.confirmedAt) FROM Trade t2 JOIN t2.listing l2 "
-            + "    WHERE l2.cardId = l.cardId AND (:grade IS NULL OR l2.grade = :grade) AND t2.status = :status"
-            + ")")
-    List<CardPriceView> findRecentCompletedTradePricesByCardIds(@Param("cardIds") List<Long> cardIds,
-                                                                  @Param("grade") ListingGrade grade,
-                                                                  @Param("status") TradeStatus status);
+    /**
+     * 카드별 가장 최근 체결가 1건(grade 지정 시 해당 등급만). confirmedAt이 동률인 체결이 2건 이상이면
+     * "t.confirmedAt = MAX(...)" 방식은 둘 다 반환해 호출부의 Collectors.toMap()이 "Duplicate key"
+     * 예외를 던진다(실제로 더미 시드 데이터의 초 단위 미만 timestamp 충돌로 재현됨) - DISTINCT ON으로
+     * 동률이어도 항상 정확히 1건(그중 id가 가장 큰, 즉 가장 나중에 생성된 체결)만 반환하도록 네이티브
+     * 쿼리로 재작성했다. enum을 네이티브 쿼리에 그대로 바인딩하면 ordinal로 전송되는 문제
+     * (findPriceRangesByCardIdsSincePerCard 주석 참고)와 동일하게 문자열로 변환해서 넘긴다.
+     */
+    default List<CardPriceView> findRecentCompletedTradePricesByCardIds(List<Long> cardIds, ListingGrade grade,
+                                                                          TradeStatus status) {
+        return findRecentCompletedTradePricesByCardIdsNative(cardIds, grade == null ? null : grade.name(),
+                status.name());
+    }
+
+    @Query(value = """
+            SELECT DISTINCT ON (l.card_id) l.card_id AS cardId, t.price AS price
+            FROM trades t JOIN listings l ON l.id = t.listing_id
+            WHERE l.card_id IN (:cardIds) AND (:grade IS NULL OR l.grade = :grade) AND t.status = :status
+            ORDER BY l.card_id, t.confirmed_at DESC, t.id DESC
+            """, nativeQuery = true)
+    List<CardPriceView> findRecentCompletedTradePricesByCardIdsNative(@Param("cardIds") List<Long> cardIds,
+                                                                        @Param("grade") String grade,
+                                                                        @Param("status") String status);
 
     interface CardPriceView {
         Long getCardId();
