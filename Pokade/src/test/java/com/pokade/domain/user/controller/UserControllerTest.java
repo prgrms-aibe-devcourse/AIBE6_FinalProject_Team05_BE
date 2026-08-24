@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -48,6 +49,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -208,5 +210,21 @@ class UserControllerTest {
                 .andExpect(status().isOk());
 
         then(profileImageService).should().upload(eq(1L), any());
+    }
+
+    @Test
+    @DisplayName("닉네임에 공백이 섞이면 400을 반환하고 변경 서비스를 호출하지 않는다")
+    void updateNickname_withWhitespace() throws Exception {
+        String[] nicknames = {"홍 길동", " 홍길동", "홍길동 ", "  "};
+
+        for (String nickname : nicknames) {
+            mockMvc.perform(patch("/api/users/me")
+                            .with(userId(1L))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"nickname\":\"" + nickname + "\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        then(userService).should(never()).updateNickname(any(), any());
     }
 }
