@@ -5,6 +5,7 @@ import com.pokade.domain.card.entity.CardPrice;
 import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.entity.ListingStatus;
@@ -76,6 +77,9 @@ class PriceServiceTest {
 
     @Mock
     private CardVariantRepository cardVariantRepository;
+
+    @Mock
+    private CardNameKoResolver cardNameKoResolver;
 
     @Mock
     private ListingRepository listingRepository;

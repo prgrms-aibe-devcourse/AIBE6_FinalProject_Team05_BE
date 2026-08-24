@@ -5,6 +5,7 @@ import com.pokade.domain.card.entity.CardPrice;
 import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.listing.repository.ListingRepository;
@@ -93,6 +94,7 @@ public class PriceService {
 
     private final CardRepository cardRepository;
     private final CardVariantRepository cardVariantRepository;
+    private final CardNameKoResolver cardNameKoResolver;
     private final ListingRepository listingRepository;
     private final BuyOfferRepository buyOfferRepository;
     private final BuyOfferOrderRepository buyOfferOrderRepository;
@@ -654,6 +656,7 @@ public class PriceService {
                     return new PriceRankingResponse(
                             change.cardId(),
                             card != null ? card.getName() : null,
+                            card != null ? cardNameKoResolver.resolve(card) : null,
                             card != null ? card.getImageSmall() : null,
                             change.recentAvgAmount().setScale(0, RoundingMode.HALF_UP).longValue(),
                             change.changeRate(),

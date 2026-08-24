@@ -76,7 +76,7 @@ class ChatServiceTest {
     }
 
     private PriceRankingResponse ranking(String cardName) {
-        return new PriceRankingResponse(1L, cardName, null, 10000, BigDecimal.TEN, 1000);
+        return new PriceRankingResponse(1L, cardName, null, null, 10000, BigDecimal.TEN, 1000);
     }
 
     private void allowRateLimit() {
