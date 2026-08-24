@@ -62,9 +62,10 @@ public class AiGradeService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final int VISION_MAX_ATTEMPTS = 3;
 
-    // OpenAI Vision이 실제로 지원하는 이미지 포맷 (ImageIO는 디코딩되지만 Vision은 거부하는 bmp/tiff 등을 사전 차단)
+    // 실제 카메라로 촬영한 "사진"만 받는다 — GIF는 Vision이 첫 프레임만 읽어 애니메이션/움짤이면
+    // 실제로 찍은 카드 사진이 아닐 가능성이 높고, bmp/tiff 등은 Vision이 아예 거부하므로 사전 차단.
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
-            Set.of("image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp");
+            Set.of("image/png", "image/jpeg", "image/jpg", "image/webp");
 
     // 매 요청마다 new로 생성하지 않도록 공유 인스턴스 사용 (ObjectMapper는 thread-safe)
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -368,7 +369,7 @@ public class AiGradeService {
             String contentType = file.getContentType();
             if (contentType == null || !SUPPORTED_IMAGE_TYPES.contains(contentType.toLowerCase())) {
                 throw new IllegalArgumentException(
-                        "지원하지 않는 이미지 형식입니다(png/jpeg/gif/webp만 가능): " + file.getOriginalFilename());
+                        "지원하지 않는 사진 형식입니다(jpeg/png/webp만 가능): " + file.getOriginalFilename());
             }
         }
     }
