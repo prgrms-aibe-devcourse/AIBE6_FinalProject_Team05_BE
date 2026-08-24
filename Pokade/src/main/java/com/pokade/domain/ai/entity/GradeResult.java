@@ -72,6 +72,11 @@ public class GradeResult {
     @Column(name = "retry_of_id")
     private Long retryOfId;
 
+    // 제출 이미지 6장의 SHA-256 해시 — 같은 이미지로 재요청 시 Vision을 다시 부르지 않고 이 값으로 캐시
+    // 조회한다(등급 비일관성 방지 + 비용 절감). 기존 행은 마이그레이션 이전 데이터라 null일 수 있다.
+    @Column(name = "image_hash", length = 64)
+    private String imageHash;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -80,7 +85,8 @@ public class GradeResult {
                        String grade, BigDecimal centeringScore, BigDecimal edgeScore,
                        BigDecimal surfaceScore, BigDecimal cornerScore, boolean isFree,
                        int pointUsed, BigDecimal confidence, String visionCardId,
-                       BigDecimal visionConfidence, boolean retryAllowed, Long retryOfId) {
+                       BigDecimal visionConfidence, boolean retryAllowed, Long retryOfId,
+                       String imageHash) {
         this.userId = userId;
         this.cardId = cardId;
         this.variantId = variantId;
@@ -98,6 +104,7 @@ public class GradeResult {
         this.retryAllowed = retryAllowed;
         this.retryUsed = false;
         this.retryOfId = retryOfId;
+        this.imageHash = imageHash;
         this.createdAt = LocalDateTime.now();
     }
 
