@@ -49,6 +49,14 @@ public class PortfolioService {
     private static final String EMPTY_GRADE = "";
     private static final String EMPTY_COMPANY = "";
     private static final String UNCLASSIFIED = "미분류";
+    private static final String KRW = "KRW";
+
+    // card_prices는 카드에 따라 USD/JPY로 저장돼 있어 KRW 금액과 그대로 합산할 수 없다.
+    // 실시간 환율 API가 없어 프론트(lib/currency.ts)와 동일한 고정 근사치를 사용한다.
+    private static final Map<String, BigDecimal> FX_TO_KRW = Map.of(
+            "KRW", BigDecimal.ONE,
+            "USD", BigDecimal.valueOf(1400),
+            "JPY", BigDecimal.valueOf(9));
 
     private final PortfolioItemRepository portfolioItemRepository;
     private final CardRepository cardRepository;
@@ -143,20 +151,22 @@ public class PortfolioService {
             if (price == null || price.getMarket() == null) {
                 continue;
             }
+            BigDecimal marketInKrw = toKrw(price.getMarket(), price.getCurrency());
+            if (marketInKrw == null) {
+                continue;
+            }
 
             BigDecimal quantity = BigDecimal.valueOf(item.getQuantity());
-            totalValue = totalValue.add(price.getMarket().multiply(quantity));
-            if (currency == null) {
-                currency = price.getCurrency();
-            }
+            totalValue = totalValue.add(marketInKrw.multiply(quantity));
+            currency = KRW;
 
             BigDecimal change1dPct = price.getChange1dPct();
             BigDecimal divisor = change1dPct == null
                     ? BigDecimal.ONE
                     : BigDecimal.ONE.add(change1dPct.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
             BigDecimal previousUnitPrice = divisor.signum() == 0
-                    ? price.getMarket()
-                    : price.getMarket().divide(divisor, 2, RoundingMode.HALF_UP);
+                    ? marketInKrw
+                    : marketInKrw.divide(divisor, 2, RoundingMode.HALF_UP);
             previousValue = previousValue.add(previousUnitPrice.multiply(quantity));
         }
 
@@ -192,10 +202,14 @@ public class PortfolioService {
         if (price == null || price.getMarket() == null) {
             throw new BusinessException(ErrorCode.PORTFOLIO_PRICE_NOT_FOUND);
         }
+        BigDecimal marketInKrw = toKrw(price.getMarket(), price.getCurrency());
+        if (marketInKrw == null) {
+            throw new BusinessException(ErrorCode.PORTFOLIO_PRICE_NOT_FOUND);
+        }
 
         BigDecimal quantity = BigDecimal.valueOf(item.getQuantity());
         BigDecimal acquiredTotal = BigDecimal.valueOf(item.getAcquiredPrice()).multiply(quantity);
-        BigDecimal currentTotal = price.getMarket().multiply(quantity);
+        BigDecimal currentTotal = marketInKrw.multiply(quantity);
         BigDecimal pnlAmount = currentTotal.subtract(acquiredTotal).setScale(0, RoundingMode.HALF_UP);
         BigDecimal pnlRate = acquiredTotal.signum() == 0
                 ? BigDecimal.ZERO
@@ -313,6 +327,12 @@ public class PortfolioService {
                 })
                 .sorted(Comparator.comparing(PortfolioSetCompletionResponse::completionRate).reversed())
                 .toList();
+    }
+
+    // 지원하지 않는 통화면 null을 반환한다 - 환율 1배로 조용히 잘못된 값을 합산하지 않기 위함(프론트 toKrw()와 동일한 원칙).
+    private BigDecimal toKrw(BigDecimal amount, String currency) {
+        BigDecimal rate = currency != null ? FX_TO_KRW.get(currency) : null;
+        return rate != null ? amount.multiply(rate) : null;
     }
 
     // variantId가 명시된 항목은 그대로, null인 항목은 카드의 대표 변형으로 일괄 해석한다(enrich()의 변형 해석 로직과 동일한 규칙).
