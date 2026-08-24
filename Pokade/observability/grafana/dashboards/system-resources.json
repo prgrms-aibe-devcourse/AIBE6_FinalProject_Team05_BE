@@ -1,0 +1,104 @@
+{
+  "title": "시스템 자원 포화 (#341)",
+  "uid": "pokade-system-resources",
+  "tags": ["pokade", "system"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "CPU 사용률",
+      "description": "부하 중 이 값이 1.0(100%)에 붙으면 처리량 상한은 CPU가 정한 것이다. 로그인은 BCrypt 때문에 CPU 바운드이므로 인증 부하에서 가장 먼저 바닥날 후보. 부하 생성기(k6)도 같은 머신에서 CPU를 쓰므로 system 값에는 k6 몫이 섞인다 — 앱 자체는 process 쪽을 본다.",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "process_cpu_usage",
+          "legendFormat": "JVM 프로세스",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "system_cpu_usage",
+          "legendFormat": "시스템 전체 (k6 포함)",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "DB 커넥션 풀 (HikariCP)",
+      "description": "active가 max(10)에 붙고 pending(커넥션을 기다리는 스레드)이 0을 넘기 시작하면 DB 풀이 병목이다. pending이 진짜 포화 신호 — active가 10이어도 pending이 0이면 아직 여유가 있다.",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "풀 한도" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "hikaricp_connections_active",
+          "legendFormat": "사용 중",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "hikaricp_connections_pending",
+          "legendFormat": "대기 스레드",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "hikaricp_connections_max",
+          "legendFormat": "풀 한도",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "비동기 실행기 (applicationTaskExecutor)",
+      "description": "@Async 메일 발송이 쓰는 Spring Boot 기본 실행기. queued가 쌓이기 시작하면 발송이 처리 속도를 넘어선 것이다. 부하 시나리오는 메일 API를 제외하므로 평소 0이 정상이며, 여기가 움직이면 시나리오가 잘못 짜인 것. taskScheduler는 @Scheduled 지연 큐라 queued가 상시 존재하는 게 정상이므로 일부러 제외했다.",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0 },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "executor_queued_tasks{name=\"applicationTaskExecutor\"}",
+          "legendFormat": "대기 작업",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "executor_active_threads{name=\"applicationTaskExecutor\"}",
+          "legendFormat": "실행 중 스레드",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}
