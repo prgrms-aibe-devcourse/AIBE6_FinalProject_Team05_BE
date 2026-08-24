@@ -368,8 +368,8 @@ class PriceControllerTest {
     @Test
     void 급등_랭킹을_조회하면_200과_변동률_상위_목록을_반환한다() throws Exception {
         List<PriceRankingResponse> ranking = List.of(
-                new PriceRankingResponse(2L, "Charizard-GX", "img-2", 340000L, new BigDecimal("13.33"), 40000L),
-                new PriceRankingResponse(1L, "Blastoise", "img-1", 900000L, new BigDecimal("12.5"), 100000L)
+                new PriceRankingResponse(2L, "Charizard-GX", null, "img-2", 340000L, new BigDecimal("13.33"), 40000L),
+                new PriceRankingResponse(1L, "Blastoise", null, "img-1", 900000L, new BigDecimal("12.5"), 100000L)
         );
         given(priceService.getRanking("rise")).willReturn(ranking);
 
@@ -384,7 +384,7 @@ class PriceControllerTest {
     @Test
     void 급락_랭킹을_조회하면_200과_변동률_하위_목록을_반환한다() throws Exception {
         List<PriceRankingResponse> ranking = List.of(
-                new PriceRankingResponse(4L, "Charizard ex", "img-4", 430000L, new BigDecimal("-14"), -70000L)
+                new PriceRankingResponse(4L, "Charizard ex", null, "img-4", 430000L, new BigDecimal("-14"), -70000L)
         );
         given(priceService.getRanking("fall")).willReturn(ranking);
 
