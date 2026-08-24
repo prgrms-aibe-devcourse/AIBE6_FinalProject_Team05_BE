@@ -14,6 +14,7 @@ import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeOrder;
 import com.pokade.domain.trade.entity.TradeOrderStatus;
 import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.trade.repository.PaymentRepository;
 import com.pokade.domain.trade.repository.TradeOrderRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
@@ -77,6 +78,9 @@ class TradeServiceTest {
 
     @Mock
     private PortfolioService portfolioService;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private TradeService tradeService;
@@ -470,6 +474,8 @@ class TradeServiceTest {
 
         assertThat(response.status()).isEqualTo(TradeStatus.COMPLETED);
         verify(pointService).settle(eq(100L), eq(10000), any());
+        // #392: 정산과 같은 지점에서 판매자(100L)에게 알림이 나가야 한다 - 구매자가 아니라 판매자다.
+        verify(notificationService).createTradeConfirmedNotification(eq(100L), any(), any(), eq(10000));
     }
 
     @Test
@@ -480,6 +486,8 @@ class TradeServiceTest {
         assertThatThrownBy(() -> tradeService.confirmTrade(100L, 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
+        // #392: 확정이 거부되면 정산도 알림도 없어야 한다(유령 정산 알림 방지).
+        verify(notificationService, never()).createTradeConfirmedNotification(any(), any(), any(), any());
     }
 
     @Test

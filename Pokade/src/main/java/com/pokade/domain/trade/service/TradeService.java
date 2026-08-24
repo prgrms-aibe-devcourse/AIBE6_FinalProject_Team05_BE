@@ -18,6 +18,7 @@ import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeOrder;
 import com.pokade.domain.trade.entity.TradeOrderStatus;
 import com.pokade.domain.trade.entity.TradeStatus;
+import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.trade.repository.PaymentRepository;
 import com.pokade.domain.trade.repository.TradeOrderRepository;
 import com.pokade.domain.trade.repository.TradeRepository;
@@ -58,6 +59,8 @@ public class TradeService {
     private final TossPaymentClient tossPaymentClient;
     private final PointService pointService;
     private final PortfolioService portfolioService;
+    // #392: 구매확정(정산) 시 판매자에게 보내는 알림 - confirmTrade()에서만 쓴다.
+    private final NotificationService notificationService;
 
     private TradeResponse toResponse(Trade trade) {
         Card card = cardRepository.findById(trade.getListing().getCardId()).orElse(null);
@@ -308,6 +311,16 @@ public class TradeService {
                 listing.getVariantId(),
                 trade.getPrice()
         );
+
+        // #392: 판매자에게 정산 완료를 알린다. 판매자 입장에서는 자기가 하지 않은 액션(구매자의 구매확정)으로
+        // 잔액이 늘어나는 지점이라, 앱 안에 알림이 없으면 정산 사실을 알 방법이 없었다.
+        // 카드명 조회가 추가 쿼리로 보이지만, 바로 아래 toResponse()가 같은 트랜잭션에서 같은 id를 다시
+        // 조회하므로 둘 중 하나는 영속성 컨텍스트 1차 캐시에서 해결된다 - DB 왕복 횟수는 그대로다.
+        notificationService.createTradeConfirmedNotification(
+                listing.getSellerId(),
+                listing.getCardId(),
+                cardRepository.findById(listing.getCardId()).map(Card::getName).orElse("카드"),
+                trade.getPrice());
 
         return toResponse(trade);
     }

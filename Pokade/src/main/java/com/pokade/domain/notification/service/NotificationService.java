@@ -164,6 +164,90 @@ public class NotificationService {
         eventPublisher.publishEvent(new NotificationPushEvent(userId, NotificationResponse.of(notification, null)));
     }
 
+    // #392: 구매자가 구매확정을 눌러 에스크로가 해제되고 판매대금이 판매자에게 정산된 시점에, 판매자에게
+    // 그 사실을 알린다. 판매자 입장에서는 자기가 하지 않은 액션(구매자의 확정)으로 잔액이 늘어나는
+    // 지점이라 앱 안에 알림이 없으면 정산 사실을 알 방법이 없었다.
+    //
+    // card를 조회하지 않고 null로 넘기는 이유: 호출부(TradeService.confirmTrade)는 cardId만 알고 Card
+    // 엔티티는 갖고 있지 않은데, 썸네일 하나 때문에 거래 확정 경로에 조회를 한 번 더 넣지 않는다.
+    // cardId는 레코드에 저장되므로 목록 조회 시 getNotifications()의 배치 조회가 이미지까지 채워준다
+    // (createInquiryHandledNotification과 동일한 선택).
+    @Transactional
+    public void createTradeConfirmedNotification(Long sellerId, Long cardId, String cardName, Integer settledAmount) {
+        Notification notification = Notification.builder()
+                .userId(sellerId)
+                .type(NotificationType.TRADE_CONFIRMED)
+                .message(String.format("%s 거래가 완료되어 %,d원이 정산되었습니다.", cardName, settledAmount))
+                .cardId(cardId)
+                .build();
+
+        notificationRepository.save(notification);
+        eventPublisher.publishEvent(new NotificationPushEvent(sellerId, NotificationResponse.of(notification, null)));
+    }
+
+    // #392: 30일간 팔리지 않은 매물을 판매자에게 알린다. 기존에도 ListingStaleNoticeService가 같은 내용을
+    // 이메일로 보내고 있었지만, 인앱 알림이 없어 앱 안에서는 이 사실이 어디에도 드러나지 않았다.
+    // 이메일 발송은 그대로 두고 인앱 알림을 나란히 추가하는 것이라, 둘 중 하나가 실패해도 다른 하나는
+    // 나가야 한다(호출부에서 try 범위를 분리해 처리).
+    //
+    // 문구를 카드명이 아니라 매물 번호로 쓰는 이유: 같은 내용을 보내는 기존 이메일
+    // (ListingStaleNoticeService.notify)이 "매물 #{id}" 형식이라 둘을 맞춰 두 채널이 갈라지지 않게 한다.
+    // 어느 카드인지는 cardId를 함께 저장해 목록의 카드 썸네일과 링크(/cards/{id})가 알려준다 -
+    // 그래서 이 메서드는 카드명 조회를 요구하지 않고, 호출부에 CardRepository 의존성이 생기지 않는다.
+    @Transactional
+    public void createListingStaleNotification(Long sellerId, Long cardId, Long listingId) {
+        Notification notification = Notification.builder()
+                .userId(sellerId)
+                .type(NotificationType.LISTING_STALE)
+                .message(String.format("매물 #%d가 30일간 판매되지 않았습니다. 가격을 확인해보세요.", listingId))
+                .cardId(cardId)
+                .build();
+
+        notificationRepository.save(notification);
+        eventPublisher.publishEvent(new NotificationPushEvent(sellerId, NotificationResponse.of(notification, null)));
+    }
+
+    /**
+     * #392: 사용자가 1:1 문의를 등록했을 때 활성 관리자 전원에게 알린다(팬아웃).
+     *
+     * <p>수신자가 여러 명이라 지금까지의 단건 생성 메서드들과 구조가 다르다:
+     * <ul>
+     *   <li>저장은 {@code saveAll()}로 묶어 관리자 수와 무관하게 INSERT 왕복을 1회로 만든다.</li>
+     *   <li>SSE 푸시는 {@link NotificationPushEvent}가 userId 단건 기준이라 관리자 수만큼 이벤트를
+     *       발행한다. AFTER_COMMIT 리스너는 요청 스레드에서 동기 실행되므로, 관리자가 두 자릿수로
+     *       늘고 그중 느린 연결이 있으면 문의 등록 API 응답이 그만큼 지연된다 - 그때는 푸시를
+     *       비동기로 돌리는 별도 작업이 필요하다.</li>
+     * </ul>
+     *
+     * <p>관리자가 한 명도 없으면(조회 결과가 빈 목록) 조용히 아무것도 하지 않는다 - 관리자 부재로
+     * 사용자의 문의 등록 자체가 실패하면 안 되기 때문이다.
+     *
+     * @param adminIds 활성(ACTIVE) 관리자 id 목록 - 호출부가 조회해서 넘긴다
+     */
+    @Transactional
+    public void createInquiryReceivedNotification(List<Long> adminIds, Long inquiryId, String inquiryTitle) {
+        if (adminIds == null || adminIds.isEmpty()) {
+            return;
+        }
+
+        String message = String.format("새 문의가 등록되었습니다: '%s'", inquiryTitle);
+        List<Notification> notifications = adminIds.stream()
+                .map(adminId -> Notification.builder()
+                        .userId(adminId)
+                        .type(NotificationType.INQUIRY_RECEIVED)
+                        .message(message)
+                        .inquiryId(inquiryId)
+                        .build())
+                .toList();
+
+        // saveAll()이 돌려주는 인스턴스를 그대로 쓴다 - id가 채워진 건 이쪽이라, 인자로 넘긴 목록으로
+        // 응답 DTO를 만들면 id가 null인 알림이 SSE로 나간다.
+        for (Notification saved : notificationRepository.saveAll(notifications)) {
+            eventPublisher.publishEvent(
+                    new NotificationPushEvent(saved.getUserId(), NotificationResponse.of(saved, null)));
+        }
+    }
+
     // 트랜잭션이 없는 컨텍스트(단위 테스트 등)에서도 그대로 실행되도록 fallbackExecution=true.
     // AFTER_COMMIT 리스너는 이미 커밋되어 끝난 트랜잭션 밖에서 호출되므로, 클래스 레벨 @Transactional을
     // 그대로 상속하면 Spring이 기동 시점에 예외를 던진다 - NOT_SUPPORTED로 명시적으로 트랜잭션을 배제한다.

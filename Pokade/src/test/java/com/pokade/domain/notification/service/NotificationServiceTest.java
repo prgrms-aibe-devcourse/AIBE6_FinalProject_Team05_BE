@@ -37,13 +37,16 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
@@ -332,6 +335,81 @@ class NotificationServiceTest {
 
         // 이벤트 발행 시점엔 아직 커밋 전이므로, 이 메서드 자체는 Emitter로 직접 전송하지 않는다.
         then(sseEmitterStore).should(never()).findByUserId(any());
+    }
+
+    // ===== #392: 거래 정산 완료 알림 생성 =====
+    @Test
+    @DisplayName("정산 완료 알림 생성: TRADE_CONFIRMED 타입으로 판매자에게 저장하고, 커밋 이후 푸시 이벤트를 발행한다")
+    void createTradeConfirmedNotification_savesAndPublishesEvent() {
+        notificationService.createTradeConfirmedNotification(100L, 55L, "리자몽 ex", 10000);
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        then(notificationRepository).should().save(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getUserId()).isEqualTo(100L);
+        assertThat(saved.getType()).isEqualTo(NotificationType.TRADE_CONFIRMED);
+        assertThat(saved.getCardId()).isEqualTo(55L);
+        assertThat(saved.getMessage()).contains("리자몽 ex").contains("10,000");
+
+        ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
+        then(eventPublisher).should().publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().userId()).isEqualTo(100L);
+        // card=null로 넘기므로 푸시 시점엔 썸네일이 없다(목록 재조회 때 배치 조회가 채운다).
+        assertThat(eventCaptor.getValue().response().cardImageUrl()).isNull();
+        then(sseEmitterStore).should(never()).findByUserId(any());
+    }
+
+    // ===== #392: 미체결 매물 인앱 알림 생성 =====
+    @Test
+    @DisplayName("미체결 매물 알림 생성: LISTING_STALE 타입으로 저장하고, 문구는 기존 이메일과 같은 매물 번호 형식을 쓴다")
+    void createListingStaleNotification_savesAndPublishesEvent() {
+        notificationService.createListingStaleNotification(100L, 55L, 777L);
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        then(notificationRepository).should().save(notificationCaptor.capture());
+        Notification saved = notificationCaptor.getValue();
+        assertThat(saved.getUserId()).isEqualTo(100L);
+        assertThat(saved.getType()).isEqualTo(NotificationType.LISTING_STALE);
+        assertThat(saved.getCardId()).isEqualTo(55L);
+        assertThat(saved.getMessage()).contains("매물 #777");
+
+        then(eventPublisher).should().publishEvent(any(NotificationPushEvent.class));
+        then(sseEmitterStore).should(never()).findByUserId(any());
+    }
+
+    // ===== #392: 관리자 새 문의 도착 알림(팬아웃) =====
+    @Test
+    @DisplayName("새 문의 도착 알림 생성: 관리자 수만큼 saveAll로 한 번에 저장하고 각각 푸시 이벤트를 발행한다")
+    void createInquiryReceivedNotification_fansOutToEveryAdmin() {
+        // saveAll이 돌려주는 인스턴스로 이벤트를 만들어야 id가 채워진다 - 여기서는 인자를 그대로 되돌려준다.
+        given(notificationRepository.saveAll(anyList()))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.createInquiryReceivedNotification(List.of(10L, 11L), 7L, "결제 문의");
+
+        ArgumentCaptor<List<Notification>> savedCaptor = ArgumentCaptor.forClass(List.class);
+        then(notificationRepository).should().saveAll(savedCaptor.capture());
+        // 저장은 관리자 수와 무관하게 saveAll 1회 - 개별 save로 새지 않았는지 함께 고정한다.
+        then(notificationRepository).should(never()).save(any());
+        assertThat(savedCaptor.getValue())
+                .extracting(Notification::getUserId, Notification::getType, Notification::getInquiryId)
+                .containsExactly(
+                        tuple(10L, NotificationType.INQUIRY_RECEIVED, 7L),
+                        tuple(11L, NotificationType.INQUIRY_RECEIVED, 7L));
+
+        ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
+        then(eventPublisher).should(times(2)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).extracting(NotificationPushEvent::userId)
+                .containsExactly(10L, 11L);
+    }
+
+    @Test
+    @DisplayName("새 문의 도착 알림 생성: 관리자가 없으면 저장도 이벤트 발행도 하지 않는다")
+    void createInquiryReceivedNotification_withNoAdmin_doesNothing() {
+        notificationService.createInquiryReceivedNotification(List.of(), 7L, "결제 문의");
+
+        then(notificationRepository).should(never()).saveAll(anyList());
+        then(eventPublisher).should(never()).publishEvent(any(NotificationPushEvent.class));
     }
 
     // ===== 커밋 후 알림 푸시 (AFTER_COMMIT 리스너) =====
