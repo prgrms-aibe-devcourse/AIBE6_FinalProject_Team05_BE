@@ -20,10 +20,12 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -33,7 +35,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +64,33 @@ public class AiGradeService {
     // 매 요청마다 new로 생성하지 않도록 공유 인스턴스 사용 (ObjectMapper는 thread-safe)
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    // OpenAI Structured Outputs(response_format=json_schema, strict) 강제용 스키마.
+    // 모델이 이 형태를 벗어난 값(예: grade에 "S+" 같은 임의 문자열, 점수 필드에 문자열)을 아예 생성하지
+    // 못하게 API 레벨에서 막아준다 - 프롬프트로 "JSON만 답하라"고 부탁하는 것과 차원이 다르다.
+    // strict 모드 제약: properties에 있는 필드는 전부 required에도 있어야 하고(선택적 필드는 type에
+    // "null"을 추가해서 표현), 모든 object는 additionalProperties:false가 필요하다.
+    private static final String VISION_RESPONSE_SCHEMA = """
+            {
+              "type": "object",
+              "properties": {
+                "grade": { "type": ["string", "null"], "enum": ["S", "A", "B", null] },
+                "centering_score": { "type": ["number", "null"] },
+                "edge_score": { "type": ["number", "null"] },
+                "surface_score": { "type": ["number", "null"] },
+                "corner_score": { "type": ["number", "null"] },
+                "overall_confidence": { "type": ["number", "null"] },
+                "quality_issue": { "type": "boolean" },
+                "quality_issue_reason": { "type": ["string", "null"] },
+                "card_external_id": { "type": ["string", "null"] },
+                "card_confidence": { "type": ["number", "null"] }
+              },
+              "required": ["grade", "centering_score", "edge_score", "surface_score", "corner_score",
+                           "overall_confidence", "quality_issue", "quality_issue_reason",
+                           "card_external_id", "card_confidence"],
+              "additionalProperties": false
+            }
+            """;
+
     private static final int GRADE_COST = 100;
 
     private final ChatClient chatClient;
@@ -83,6 +115,8 @@ public class AiGradeService {
     private final Timer visionTimer;
     // ai.grade.vision.retries — Vision API 재시도 횟수 (Grafana: Vision 불안정 탐지용 경보 기준)
     private final Counter visionRetryCounter;
+    // ai.grade.cache.hits — 동일 이미지 재요청으로 Vision 호출을 생략한 횟수 (비용 절감 + 등급 일관성 지표)
+    private final Counter cacheHitCounter;
 
     public AiGradeService(ChatClient chatClient, S3FileStorage s3FileStorage,
                           ImageQualityChecker imageQualityChecker,
@@ -120,6 +154,9 @@ public class AiGradeService {
         this.visionRetryCounter = Counter.builder("ai.grade.vision.retries")
                 .description("Vision API 재시도 횟수 — 높으면 Vision 불안정 신호")
                 .register(meterRegistry);
+        this.cacheHitCounter = Counter.builder("ai.grade.cache.hits")
+                .description("동일 이미지 해시로 Vision 호출을 생략하고 캐시된 결과를 반환한 횟수")
+                .register(meterRegistry);
     }
 
     // S3 업로드·Vision API 호출은 느린 외부 I/O라 DB 트랜잭션 밖에서 실행 — 커넥션을 오래 점유하지 않도록
@@ -127,6 +164,19 @@ public class AiGradeService {
     @Timed(value = "ai.grade.duration", description = "AI 등급 진단 전체 처리 시간")
     public GradeResponse grade(Long userId, GradeRequest request) {
         validateImageFormats(request);
+
+        // ── 동일 이미지 캐시 조회 ────────────────────────────────────────────
+        // 같은 6장을 다시 보내면 Vision을 또 부르지 않고 이전 SUCCESS 결과를 그대로 돌려준다(무료).
+        // 등급 비일관성(같은 카드인데 S/A 왔다갔다)을 원천 차단하는 게 우선이라는 팀 결정(B안).
+        // retryOfId/포인트 로직보다 먼저 검사해서, 캐시로 끝날 요청이 무료 재시도 기회를 소모하거나
+        // 잔액을 검증하는 일이 없게 한다.
+        String imageHash = computeImageHash(request.files());
+        Optional<GradeResult> cached = gradeResultRepository
+                .findFirstByUserIdAndImageHashAndStatusOrderByCreatedAtDesc(userId, imageHash, GradeStatus.SUCCESS);
+        if (cached.isPresent()) {
+            cacheHitCounter.increment();
+            return buildCachedResponse(cached.get());
+        }
 
         // ── 재업로드 요청 검증 ───────────────────────────────────────────────
         // claimRetry: 조건 확인 + retryUsed=true 마킹을 단일 UPDATE로 원자 처리 (check-then-act 경쟁 방지).
@@ -161,8 +211,19 @@ public class AiGradeService {
         // ── 결과 저장 ────────────────────────────────────────────────────────
         GradeResult gradeResult = buildGradeResult(
                 userId, visionResult, isFree,
-                isFreeRetry ? request.retryOfId() : null);
-        gradeResultRepository.save(gradeResult);
+                isFreeRetry ? request.retryOfId() : null, imageHash);
+        try {
+            gradeResultRepository.save(gradeResult);
+        } catch (DataIntegrityViolationException e) {
+            // 위 캐시 조회 이후 저장 사이에 같은 사진으로 온 다른 요청이 먼저 커밋된 경우(더블클릭 등
+            // TOCTOU 경쟁) - uq_grade_results_user_image_hash_success 유니크 인덱스가 막아준다. 아직
+            // 포인트 차감 전이라 이중 과금은 없고, 먼저 저장된 그 결과를 대신 반환하면 된다.
+            log.info("동일 이미지 경쟁 감지 - 먼저 저장된 SUCCESS 결과로 대체 반환: userId={}", userId);
+            return gradeResultRepository
+                    .findFirstByUserIdAndImageHashAndStatusOrderByCreatedAtDesc(userId, imageHash, GradeStatus.SUCCESS)
+                    .map(this::buildCachedResponse)
+                    .orElseThrow(() -> e);
+        }
 
         // 이미지 key 연결 저장 — saveAll로 배치 INSERT
         List<GradeResultImage> images = new ArrayList<>();
@@ -187,6 +248,35 @@ public class AiGradeService {
         // ── presigned URL 생성 후 응답 ───────────────────────────────────────
         Map<String, String> imageUrls = toPresignedUrls(imageKeys);
         return GradeResponse.from(gradeResult, resolveCard(gradeResult), imageUrls, remainingPoints);
+    }
+
+    // 업로드 순서가 항상 FRONT/BACK/CORNER_TL/TR/BL/BR로 고정이라 바이트를 이 순서대로 이어붙여 해시를
+    // 낸다(uploadImages()가 같은 순서를 전제하는 것과 동일). Vision 호출·S3 업로드보다 먼저, 한 번만 읽는다.
+    private String computeImageHash(List<MultipartFile> files) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (MultipartFile file : files) {
+                digest.update(file.getBytes());
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (IOException e) {
+            throw new UncheckedIOException("이미지를 읽을 수 없습니다", e);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256을 사용할 수 없습니다", e);
+        }
+    }
+
+    // 캐시 히트 응답 - getGradeResult()와 동일하게 이미지 presigned URL을 다시 뽑아 반환하되,
+    // 이번 요청은 포인트를 차감하지 않았으므로 remainingPoints는 null(변화 없음)로 두고, cached=true로
+    // 표시해서 FE가 isFree/pointUsed(원본 진단 당시 값)를 "이번에 과금됨"으로 오해하지 않게 한다.
+    private GradeResponse buildCachedResponse(GradeResult cached) {
+        List<GradeResultImage> images = gradeResultImageRepository.findByGradeResultId(cached.getId());
+        Map<String, String> imageUrls = images.stream()
+                .collect(Collectors.toMap(
+                        img -> img.getPhotoType().name(),
+                        img -> s3FileStorage.generatePresignedUrl(img.getImageUrl()),
+                        (existing, replacement) -> existing));
+        return GradeResponse.from(cached, resolveCard(cached), imageUrls, null, true);
     }
 
     private void recordResultMetric(VisionResult visionResult, boolean isFree) {
@@ -317,11 +407,24 @@ public class AiGradeService {
                                     mimeTypeOf(file),
                                     toResource(file)));
                         })
-                        .options(OpenAiChatOptions.builder().model(gradeModel))
+                        // temperature 0 — 등급 산출은 창의성이 필요 없고, 기본값(1.0)으로 두면 같은 카드를
+                        // 다시 진단했을 때 S/A처럼 등급이 달라져 사용자 신뢰가 깨질 수 있다. 0으로도 모델
+                        // 내부 비결정성(활성화 순서 등)까지 완전히 없애진 못하지만 변동 폭을 크게 줄인다 -
+                        // 완전한 재현성은 이미지 해시 캐싱(computeImageHash)이 보장한다.
+                        // responseFormat(JSON_SCHEMA, strict) — 응답이 VISION_RESPONSE_SCHEMA를 벗어나지
+                        // 못하게 API가 강제한다. 그래서 응답은 항상 순수 JSON이고 앞뒤에 설명 텍스트가
+                        // 섞이지 않으므로, 예전처럼 문자열에서 '{'...'}'를 잘라내는 처리(extractJson)가
+                        // 필요 없다 - 바로 역직렬화한다.
+                        .options(OpenAiChatOptions.builder()
+                                .model(gradeModel)
+                                .temperature(0.0)
+                                .responseFormat(OpenAiChatModel.ResponseFormat.builder()
+                                        .jsonSchema(VISION_RESPONSE_SCHEMA)
+                                        .build()))
                         .call()
                         .content();
 
-                return OBJECT_MAPPER.readValue(extractJson(response), VisionResult.class);
+                return OBJECT_MAPPER.readValue(response, VisionResult.class);
             });
 
         } catch (AiServiceUnavailableException e) {
@@ -359,6 +462,10 @@ public class AiGradeService {
                 - A (PSA 7-8 상당): 엑셀런트~니어민트. 경미한 결함 허용. 약간의 모서리/엣지 마모.
                 - B (PSA 5-6 상당): 굿~엑셀런트. 보통 수준 마모. 눈에 띄는 결함 있으나 감상 가능.
 
+                grade는 느낌으로 정하지 말고, centering_score/edge_score/surface_score/corner_score
+                4개 중 가장 낮은 점수를 기준으로 판단하세요: 4개 모두 9.0 이상이면 S, 4개 모두 7.0
+                이상이면 A, 4개 모두 5.0 이상이면 B. 그 미만이면 등급 없이 quality_issue를 검토하세요.
+
                 사진 품질이 너무 낮아 평가 불가능한 경우(흐림, 어둠, 잘못된 각도 등)는 quality_issue를 true로 설정하세요.
 
                 반드시 아래 JSON 형식으로만 응답하세요 (다른 텍스트 없이):
@@ -377,17 +484,8 @@ public class AiGradeService {
                 """;
     }
 
-    private String extractJson(String raw) {
-        int start = raw.indexOf('{');
-        int end = raw.lastIndexOf('}');
-        if (start == -1 || end == -1) {
-            throw new RuntimeException("Vision 응답에서 JSON을 추출할 수 없습니다: " + raw);
-        }
-        return raw.substring(start, end + 1);
-    }
-
     private GradeResult buildGradeResult(Long userId, VisionResult vision,
-                                         boolean isFree, Long retryOfId) {
+                                         boolean isFree, Long retryOfId, String imageHash) {
         if (vision.qualityIssue()) {
             return GradeResult.builder()
                     .userId(userId)
@@ -397,6 +495,7 @@ public class AiGradeService {
                     // 재업로드의 재업로드는 허용하지 않음 — 무한 무료 체인 방지
                     .retryAllowed(retryOfId == null)
                     .retryOfId(retryOfId)
+                    .imageHash(imageHash)
                     .build();
         }
 
@@ -415,6 +514,7 @@ public class AiGradeService {
                 .pointUsed(isFree ? 0 : GRADE_COST)
                 .retryAllowed(false)
                 .retryOfId(retryOfId)
+                .imageHash(imageHash)
                 .build();
     }
 

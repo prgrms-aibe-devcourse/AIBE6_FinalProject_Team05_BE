@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@Tag(name = "시세 챗봇", description = "RAG 기반 시세 질의응답 챗봇 API")
+@Tag(name = "시세 챗봇", description = "Tool Calling 기반 시세 질의응답 챗봇 API")
 @RestController
 @RequestMapping("/api/chat")
 @RequiredArgsConstructor
@@ -39,7 +39,7 @@ public class ChatController {
 
     @Operation(
             summary = "시세 질의응답",
-            description = "자연어 시세 질문(또는 FAQ 버튼의 프리셋 질문)을 보내면 RAG 기반 답변을 반환합니다. " +
+            description = "자연어 시세 질문(또는 FAQ 버튼의 프리셋 질문)을 보내면 Tool Calling 기반 답변을 반환합니다. " +
                     "비로그인 사용자는 FAQ 프리셋 질문만 보낼 수 있으며, 그 외 자유 입력은 401을 반환합니다(로그인 필요)."
     )
     @PostMapping("/query")
