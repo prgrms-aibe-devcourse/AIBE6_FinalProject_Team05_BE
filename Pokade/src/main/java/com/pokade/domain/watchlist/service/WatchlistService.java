@@ -174,7 +174,7 @@ public class WatchlistService {
         boolean resend = Boolean.TRUE.equals(request.resendNotification());
         // 재알림만 요청할 때는 가격을 안 보낼 수 있음 - 필수 검증에서 예외로 취급
         if (!resend) {
-            validateAtLeastOneTargetPrice(request.targetBuyPrice(), request.targetSellPrice());
+            validateHasSomethingToApply(request);
         }
 
         Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
@@ -183,7 +183,8 @@ public class WatchlistService {
         // 역전 검증은 updateTargetPrices() 안에서 "값이 실제로 바뀔 때"만 수행된다 - 부분 수정이라
         // 요청 값만 봐서는 역전을 못 잡고(구매가만 올려 보내도 기존 판매가와 엮여 역전될 수 있다),
         // 최종 조합과 변경 여부를 아는 곳이 엔티티뿐이라 판정을 그쪽으로 합쳤다.
-        watchlist.updateTargetPrices(request.targetBuyPrice(), request.targetSellPrice());
+        watchlist.updateTargetPrices(request.targetBuyPrice(), request.targetSellPrice(),
+                request.clearBuyPriceRequested(), request.clearSellPriceRequested());
         if (resend) {
             watchlist.requestNotificationAgain();
         }
@@ -203,8 +204,17 @@ public class WatchlistService {
         return WatchlistResponse.of(watchlist, targetReached);
     }
 
-    private void validateAtLeastOneTargetPrice(Integer targetBuyPrice, Integer targetSellPrice) {
-        if (targetBuyPrice == null && targetSellPrice == null) {
+    // #397: 예전에는 "가격이 둘 다 null이면 거절"이었는데, 그러면 clear 플래그만 담은 요청
+    // (= 목표가를 지워 미설정으로 되돌리기)까지 함께 막혔다. 지우겠다는 의사 표시도 "적용할 것"으로
+    // 인정하고, 아무 필드도 없는 진짜 빈 요청만 계속 거절한다 - 이 검증의 원래 목적(의미 없는 no-op 차단)은 그대로다.
+    //
+    // "둘 다 지우기"를 허용하는 이유: 등록(POST)은 이미 목표가 없이 가능한데(#308) 수정으로는 그 상태를
+    // 만들 수 없으면 비대칭이고, 지금까지의 우회로(삭제 후 재등록)는 createdAt을 갱신해 도달 판정
+    // 스코프(resolveWatchScopeStart)까지 리셋시켰다.
+    private void validateHasSomethingToApply(WatchlistUpdateRequest request) {
+        boolean hasPrice = request.targetBuyPrice() != null || request.targetSellPrice() != null;
+        boolean hasClear = request.clearBuyPriceRequested() || request.clearSellPriceRequested();
+        if (!hasPrice && !hasClear) {
             throw new BusinessException(ErrorCode.TARGET_PRICE_REQUIRED);
         }
     }
