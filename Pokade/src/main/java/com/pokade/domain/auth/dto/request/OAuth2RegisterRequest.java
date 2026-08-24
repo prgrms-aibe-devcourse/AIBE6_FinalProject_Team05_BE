@@ -2,6 +2,7 @@ package com.pokade.domain.auth.dto.request;
 
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record OAuth2RegisterRequest(
@@ -10,6 +11,7 @@ public record OAuth2RegisterRequest(
 
         @NotBlank(message = "닉네임은 필수입니다.")
         @Size(min = 2, max = 20, message = "닉네임은 2자 이상 20자 이하로 입력해주세요.")
+        @Pattern(regexp = "^\\S+$", message = "닉네임은 공백을 포함할 수 없습니다.")
         String nickname,
 
         @AssertTrue(message = "이용약관에 동의해야 가입할 수 있습니다.")
