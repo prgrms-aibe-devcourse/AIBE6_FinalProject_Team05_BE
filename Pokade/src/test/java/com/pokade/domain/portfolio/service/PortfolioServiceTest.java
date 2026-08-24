@@ -335,6 +335,46 @@ class PortfolioServiceTest {
                 new BigDecimal("20000"), new BigDecimal("4000"), new BigDecimal("25.00"), "KRW"));
     }
 
+    @Test
+    @DisplayName("총 평가액: USD/JPY 시세는 고정 환율(1400원/9원)로 환산해 합산한다")
+    void getSummary_convertsUsdAndJpyToKrw() {
+        PortfolioItem usdItem = PortfolioItem.builder()
+                .userId(1L).cardId(10L).variantId(5L).quantity(1).build();
+        ReflectionTestUtils.setField(usdItem, "id", 100L);
+        PortfolioItem jpyItem = PortfolioItem.builder()
+                .userId(1L).cardId(20L).variantId(6L).quantity(1).build();
+        ReflectionTestUtils.setField(jpyItem, "id", 200L);
+
+        given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(usdItem, jpyItem));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of(
+                        variantMarketPriceView(5L, new BigDecimal("10"), "USD", null),
+                        variantMarketPriceView(6L, new BigDecimal("100"), "JPY", null)));
+
+        PortfolioSummaryResponse result = portfolioService.getSummary(1L);
+
+        // USD: 10*1400=14000, JPY: 100*9=900 → 총 14900
+        assertThat(result.totalValue()).isEqualTo(new BigDecimal("14900"));
+        assertThat(result.currency()).isEqualTo("KRW");
+    }
+
+    @Test
+    @DisplayName("총 평가액: 지원하지 않는 통화는 시세 없음과 동일하게 계산에서 제외된다")
+    void getSummary_excludesUnsupportedCurrency() {
+        PortfolioItem item = PortfolioItem.builder()
+                .userId(1L).cardId(10L).variantId(5L).quantity(1).build();
+        ReflectionTestUtils.setField(item, "id", 100L);
+
+        given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(item));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of(variantMarketPriceView(5L, new BigDecimal("10000"), "EUR", null)));
+
+        PortfolioSummaryResponse result = portfolioService.getSummary(1L);
+
+        assertThat(result).isEqualTo(new PortfolioSummaryResponse(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null));
+    }
+
     // ===== getPnl =====
 
     @Test
@@ -435,6 +475,37 @@ class PortfolioServiceTest {
         assertThat(result).isEqualTo(new PortfolioItemPnlResponse(
                 null, 10L, 1, 10000, new BigDecimal("7500"), "KRW",
                 new BigDecimal("-2500"), new BigDecimal("-25.00")));
+    }
+
+    @Test
+    @DisplayName("손익: 지원하지 않는 통화면 PORTFOLIO_PRICE_NOT_FOUND")
+    void getPnl_unsupportedCurrency_priceNotFound() {
+        PortfolioItem item = stubItem(1L, 10L, 5L);
+        given(portfolioItemRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(item));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of(variantMarketPriceView(5L, new BigDecimal("10000"), "EUR", null)));
+
+        assertThatThrownBy(() -> portfolioService.getPnl(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PORTFOLIO_PRICE_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("손익: USD 시세는 고정 환율(1400원)로 환산해 손익을 계산하고 응답도 KRW로 내려간다")
+    void getPnl_convertsUsdToKrw() {
+        PortfolioItem item = PortfolioItem.builder()
+                .userId(1L).cardId(10L).variantId(5L).quantity(1).acquiredPrice(10000)
+                .acquiredAt(LocalDateTime.now()).build();
+        given(portfolioItemRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(item));
+        given(cardPriceRepository.findMarketPricesByVariantIds(anyList(), anyString(), anyString(), anyString()))
+                .willReturn(List.of(variantMarketPriceView(5L, new BigDecimal("10"), "USD", null)));
+
+        PortfolioItemPnlResponse result = portfolioService.getPnl(1L, 1L);
+
+        // 현재 시세: 10*1400=14000원 → pnlAmount=14000-10000=4000, pnlRate=40.00
+        assertThat(result).isEqualTo(new PortfolioItemPnlResponse(
+                null, 10L, 1, 10000, new BigDecimal("14000"), "KRW",
+                new BigDecimal("4000"), new BigDecimal("40.00")));
     }
 
     // ===== getAnalytics =====
