@@ -40,14 +40,8 @@ public interface PriceTradeStatsRepository extends Repository<Trade, Long> {
                                            @Param("status") TradeStatus status,
                                            @Param("from") LocalDateTime from);
 
-    /**
-     * 카드별 가장 최근 체결가 1건(grade 지정 시 해당 등급만). confirmedAt이 동률인 체결이 2건 이상이면
-     * "t.confirmedAt = MAX(...)" 방식은 둘 다 반환해 호출부의 Collectors.toMap()이 "Duplicate key"
-     * 예외를 던진다(실제로 더미 시드 데이터의 초 단위 미만 timestamp 충돌로 재현됨) - DISTINCT ON으로
-     * 동률이어도 항상 정확히 1건(그중 id가 가장 큰, 즉 가장 나중에 생성된 체결)만 반환하도록 네이티브
-     * 쿼리로 재작성했다. enum을 네이티브 쿼리에 그대로 바인딩하면 ordinal로 전송되는 문제
-     * (findPriceRangesByCardIdsSincePerCard 주석 참고)와 동일하게 문자열로 변환해서 넘긴다.
-     */
+    // 카드별 최근 체결가 1건: confirmedAt 동률 시 MAX()만으로는 2건이 반환돼 Collectors.toMap()이
+    // 깨지므로 DISTINCT ON으로 확정한다. 네이티브 쿼리라 enum은 문자열로 변환해서 넘긴다.
     default List<CardPriceView> findRecentCompletedTradePricesByCardIds(List<Long> cardIds, ListingGrade grade,
                                                                           TradeStatus status) {
         return findRecentCompletedTradePricesByCardIdsNative(cardIds, grade == null ? null : grade.name(),
