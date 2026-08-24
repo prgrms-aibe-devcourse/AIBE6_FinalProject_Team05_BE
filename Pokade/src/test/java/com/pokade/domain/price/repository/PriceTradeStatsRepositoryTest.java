@@ -267,4 +267,29 @@ class PriceTradeStatsRepositoryTest extends AbstractIntegrationTest {
         assertThat(ranges.get(0).getMinPrice()).isEqualTo(3000000);
         assertThat(ranges.get(0).getMaxPrice()).isEqualTo(3000000);
     }
+
+    @Test
+    @DisplayName("t10 findDailyMarketStats()는 카드/등급 구분 없이 일 단위로 거래량과 거래가 중간값을 계산한다")
+    void t10() {
+        Listing a = persistListing(1000000, ListingGrade.S);
+        Listing b = persistListing(2000000, ListingGrade.PSA10);
+        Listing c = persistListing(3000000, ListingGrade.A);
+        Listing outsideWindow = persistListing(9000000, ListingGrade.S);
+
+        java.time.LocalDate today = java.time.LocalDate.now();
+        // 같은 날(오늘)에 3건 체결 - 중간값은 정렬 시 가운데 값인 2000000이어야 한다.
+        persistCompletedTrade(a, today.atTime(9, 0));
+        persistCompletedTrade(b, today.atTime(15, 0));
+        persistCompletedTrade(c, today.atTime(21, 0));
+        // 조회 범위(from) 밖의 체결은 집계에서 제외돼야 한다.
+        persistCompletedTrade(outsideWindow, today.minusDays(40).atTime(12, 0));
+
+        List<PriceTradeStatsRepository.DailyMarketStatView> stats = priceTradeStatsRepository
+                .findDailyMarketStats(TradeStatus.COMPLETED, today.minusDays(29).atStartOfDay());
+
+        assertThat(stats).hasSize(1);
+        assertThat(stats.get(0).getTradeDate()).isEqualTo(today);
+        assertThat(stats.get(0).getVolume()).isEqualTo(3L);
+        assertThat(stats.get(0).getMedianPrice()).isEqualTo(2000000.0);
+    }
 }
