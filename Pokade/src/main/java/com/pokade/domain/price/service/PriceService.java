@@ -702,6 +702,7 @@ public class PriceService {
         return new MarketOverviewResponse(
                 todayStat.volume(),
                 computeVolumeChangeRate(yesterdayStat.volume(), todayStat.volume()),
+                todayStat.volume() - yesterdayStat.volume(),
                 todayStat.medianPrice(),
                 computeMedianChangeRate(yesterdayStat.medianPrice(), todayStat.medianPrice()),
                 computeMedianChangeAmount(yesterdayStat.medianPrice(), todayStat.medianPrice()),

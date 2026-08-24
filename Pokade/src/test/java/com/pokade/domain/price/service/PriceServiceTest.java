@@ -1167,6 +1167,7 @@ class PriceServiceTest {
 
         assertThat(result.todayVolume()).isEqualTo(12L);
         assertThat(result.volumeChangeRate()).isEqualByComparingTo("20.00");
+        assertThat(result.volumeChangeAmount()).isEqualTo(2L);
         assertThat(result.todayMedianPrice()).isEqualTo(3100000L);
         // (3100000-3000000)/3000000*100 = 3.3333... -> 3.33
         assertThat(result.medianChangeRate1d()).isEqualByComparingTo("3.33");

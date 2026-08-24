@@ -426,6 +426,7 @@ class PriceControllerTest {
         MarketOverviewResponse overview = new MarketOverviewResponse(
                 12L,
                 new BigDecimal("20.00"),
+                2L,
                 3100000L,
                 new BigDecimal("3.33"),
                 100000L,
@@ -440,6 +441,7 @@ class PriceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.todayVolume").value(12))
                 .andExpect(jsonPath("$.data.volumeChangeRate").value(20.00))
+                .andExpect(jsonPath("$.data.volumeChangeAmount").value(2))
                 .andExpect(jsonPath("$.data.todayMedianPrice").value(3100000))
                 .andExpect(jsonPath("$.data.medianChangeRate1d").value(3.33))
                 .andExpect(jsonPath("$.data.medianChangeAmount1d").value(100000))
