@@ -476,4 +476,21 @@ class AuthServiceTest {
         then(userRepository).should(never()).findByEmail(any());   // BCrypt 전에 차단
         then(passwordEncoder).should(never()).matches(any(), any());
     }
+
+    @Test
+    @DisplayName("세션 키가 없으면 INVALID_REFRESH_TOKEN을 던지고 invalid로 집계한다")
+    void reissue_invalidCounted() {
+        String presented = "refresh-token";
+        given(jwtTokenProvider.isValid(presented)).willReturn(true);
+        given(jwtTokenProvider.getUserId(presented)).willReturn(1L);
+        given(jwtTokenProvider.getSessionId(presented)).willReturn("A");
+        given(refreshTokenStore.exists(1L, "A")).willReturn(false);
+
+        assertThatThrownBy(() -> authService.reissue(presented))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_REFRESH_TOKEN);
+
+        assertThat(meterRegistry.find("auth.token.reissue")
+                .tag("result", "invalid").counter().count()).isEqualTo(1);
+    }
 }

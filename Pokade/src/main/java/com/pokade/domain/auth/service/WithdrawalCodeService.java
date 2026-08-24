@@ -16,8 +16,6 @@ public class WithdrawalCodeService {
     private final VerificationCodeGenerator codeGenerator;
     private final VerificationMailSender verificationMailSender;
 
-    private static final int MAX_VERIFY_ATTEMPTS = 5;
-
     // 본인 이메일로 탈퇴 인증코드를 발송한다(쿨다운 중이면 거부)
     public void send(String email) {
         String code = codeGenerator.generate();
