@@ -25,6 +25,7 @@ import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.DailyMarketStatResponse;
 import com.pokade.domain.price.dto.MarketOverviewResponse;
+import com.pokade.domain.price.dto.MyBuyOfferResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
@@ -50,7 +51,9 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -378,6 +381,19 @@ public class PriceService {
                 buyOffer.getTossPaymentKey(),
                 buyOffer.getPointsUsed()
         );
+    }
+
+    // 마이페이지 "입찰" 섹션용 - ListingService.getMyListings()와 동일한 패턴(카드 정보 배치 조회 후 매핑).
+    public Page<MyBuyOfferResponse> getMyBuyOffers(Long buyerId, String status, Pageable pageable) {
+        Page<BuyOffer> buyOffersPage = status != null
+                ? buyOfferRepository.findByBuyerIdAndStatus(buyerId, status, pageable)
+                : buyOfferRepository.findByBuyerId(buyerId, pageable);
+
+        List<Long> cardIds = buyOffersPage.getContent().stream().map(BuyOffer::getCardId).distinct().toList();
+        Map<Long, Card> cardsById = cardRepository.findAllById(cardIds).stream()
+                .collect(Collectors.toMap(Card::getId, Function.identity()));
+
+        return buyOffersPage.map(buyOffer -> MyBuyOfferResponse.of(buyOffer, cardsById.get(buyOffer.getCardId())));
     }
 
     public List<TradeSummaryResponse> getRecentTrades(Long cardId) {

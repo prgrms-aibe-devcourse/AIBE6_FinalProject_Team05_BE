@@ -6,6 +6,7 @@ import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyResponse;
 import com.pokade.domain.price.dto.BuyOfferResponse;
+import com.pokade.domain.price.dto.MyBuyOfferResponse;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.exception.BusinessException;
@@ -22,6 +23,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -35,8 +39,11 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -195,5 +202,31 @@ class BuyOfferControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("BUY_OFFER_ORDER_ALREADY_PROCESSED"));
+    }
+
+    @Test
+    void 내_구매입찰_목록을_조회하면_200과_페이지_결과를_반환한다() throws Exception {
+        Pageable pageable = PageRequest.of(0, 10);
+        MyBuyOfferResponse response = new MyBuyOfferResponse(
+                5L, 1L, "리자몽", "img-1", 10L, 250000, ListingGrade.S, "ACTIVE", LocalDateTime.now());
+        given(priceService.getMyBuyOffers(eq(100L), isNull(), any()))
+                .willReturn(new PageImpl<>(List.of(response), pageable, 1));
+
+        mockMvc.perform(get("/api/buy-offers/me").with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].buyOfferId").value(5L))
+                .andExpect(jsonPath("$.data.content[0].cardName").value("리자몽"));
+    }
+
+    @Test
+    void 내_구매입찰_목록_조회시_status_파라미터를_그대로_서비스에_전달한다() throws Exception {
+        Pageable pageable = PageRequest.of(0, 10);
+        given(priceService.getMyBuyOffers(eq(100L), eq("ACTIVE"), any()))
+                .willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        mockMvc.perform(get("/api/buy-offers/me").param("status", "ACTIVE").with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(0));
     }
 }
