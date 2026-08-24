@@ -5,7 +5,9 @@ import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyResponse;
+import com.pokade.domain.price.dto.BuyOfferRecipientUpdateRequest;
 import com.pokade.domain.price.dto.BuyOfferResponse;
+import com.pokade.domain.price.dto.MyBuyOfferResponse;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.config.SecurityConfig;
 import com.pokade.global.exception.BusinessException;
@@ -22,6 +24,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -35,8 +40,12 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -195,5 +204,100 @@ class BuyOfferControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("BUY_OFFER_ORDER_ALREADY_PROCESSED"));
+    }
+
+    @Test
+    void 내_구매입찰_목록을_조회하면_200과_페이지_결과를_반환한다() throws Exception {
+        Pageable pageable = PageRequest.of(0, 10);
+        MyBuyOfferResponse response = new MyBuyOfferResponse(
+                5L, 1L, "리자몽", null, "img-1", 10L, 250000, ListingGrade.S, "ACTIVE", 3000, 0,
+                "김철수", "010-1234-5678", "서울시 강남구", LocalDateTime.now());
+        given(priceService.getMyBuyOffers(eq(100L), isNull(), any()))
+                .willReturn(new PageImpl<>(List.of(response), pageable, 1));
+
+        mockMvc.perform(get("/api/buy-offers/me").with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].buyOfferId").value(5L))
+                .andExpect(jsonPath("$.data.content[0].cardName").value("리자몽"));
+    }
+
+    @Test
+    void 내_구매입찰_목록_조회시_status_파라미터를_그대로_서비스에_전달한다() throws Exception {
+        Pageable pageable = PageRequest.of(0, 10);
+        given(priceService.getMyBuyOffers(eq(100L), eq("ACTIVE"), any()))
+                .willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        mockMvc.perform(get("/api/buy-offers/me").param("status", "ACTIVE").with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(0));
+    }
+
+    @Test
+    void 구매입찰_주문서_상세를_조회하면_200과_받는사람_정보를_반환한다() throws Exception {
+        MyBuyOfferResponse response = new MyBuyOfferResponse(
+                5L, 1L, "리자몽", null, "img-1", 10L, 250000, ListingGrade.S, "ACTIVE", 3000, 0,
+                "김철수", "010-1234-5678", "서울시 강남구", LocalDateTime.now());
+        given(priceService.getMyBuyOffer(5L, 100L)).willReturn(response);
+
+        mockMvc.perform(get("/api/buy-offers/5").with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.buyOfferId").value(5L))
+                .andExpect(jsonPath("$.data.recipientName").value("김철수"));
+    }
+
+    @Test
+    void 본인_것이_아닌_구매입찰_상세_조회시_403을_반환한다() throws Exception {
+        given(priceService.getMyBuyOffer(5L, 100L))
+                .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
+
+        mockMvc.perform(get("/api/buy-offers/5").with(userId(100L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 받는사람_정보를_수정하면_200과_수정된_정보를_반환한다() throws Exception {
+        BuyOfferRecipientUpdateRequest request =
+                new BuyOfferRecipientUpdateRequest("홍길동", "010-9999-8888", "서울시 서초구");
+        MyBuyOfferResponse response = new MyBuyOfferResponse(
+                5L, 1L, "리자몽", null, "img-1", 10L, 250000, ListingGrade.S, "ACTIVE", 3000, 0,
+                "홍길동", "010-9999-8888", "서울시 서초구", LocalDateTime.now());
+        given(priceService.updateBuyOfferRecipient(eq(5L), eq(100L), any(BuyOfferRecipientUpdateRequest.class)))
+                .willReturn(response);
+
+        mockMvc.perform(patch("/api/buy-offers/5")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.recipientName").value("홍길동"));
+    }
+
+    @Test
+    void 받는사람_정보_수정시_필수값이_없으면_400을_반환한다() throws Exception {
+        BuyOfferRecipientUpdateRequest invalidRequest = new BuyOfferRecipientUpdateRequest(null, null, null);
+
+        mockMvc.perform(patch("/api/buy-offers/5")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(invalidRequest)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 이미_체결된_구매입찰의_받는사람_정보를_수정하면_409를_반환한다() throws Exception {
+        BuyOfferRecipientUpdateRequest request =
+                new BuyOfferRecipientUpdateRequest("홍길동", "010-9999-8888", "서울시 서초구");
+        given(priceService.updateBuyOfferRecipient(eq(5L), eq(100L), any(BuyOfferRecipientUpdateRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.BUY_OFFER_ALREADY_MATCHED));
+
+        mockMvc.perform(patch("/api/buy-offers/5")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("BUY_OFFER_ALREADY_MATCHED"));
     }
 }

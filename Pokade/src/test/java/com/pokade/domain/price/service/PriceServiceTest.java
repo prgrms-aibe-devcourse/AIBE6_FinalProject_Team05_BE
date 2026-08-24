@@ -17,10 +17,12 @@ import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyResponse;
+import com.pokade.domain.price.dto.BuyOfferRecipientUpdateRequest;
 import com.pokade.domain.price.dto.BuyOfferResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.MarketOverviewResponse;
+import com.pokade.domain.price.dto.MyBuyOfferResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
@@ -51,6 +53,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -1167,6 +1173,7 @@ class PriceServiceTest {
 
         assertThat(result.todayVolume()).isEqualTo(12L);
         assertThat(result.volumeChangeRate()).isEqualByComparingTo("20.00");
+        assertThat(result.volumeChangeAmount()).isEqualTo(2L);
         assertThat(result.todayMedianPrice()).isEqualTo(3100000L);
         // (3100000-3000000)/3000000*100 = 3.3333... -> 3.33
         assertThat(result.medianChangeRate1d()).isEqualByComparingTo("3.33");
@@ -1241,5 +1248,107 @@ class PriceServiceTest {
 
         assertThat(result.medianChangeRate7d()).isNull();
         assertThat(result.medianChangeRate30d()).isNull();
+    }
+
+    @Test
+    @DisplayName("t62 상태 필터 없이 조회하면 buyerId 기준 전체 목록을 카드 정보와 함께 반환한다")
+    void t62() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        Pageable pageable = PageRequest.of(0, 10);
+        given(buyOfferRepository.findByBuyerId(1L, pageable))
+                .willReturn(new PageImpl<>(List.of(buyOffer), pageable, 1));
+        given(cardRepository.findAllById(List.of(1L)))
+                .willReturn(List.of(Card.builder().id(1L).name("리자몽").imageSmall("img-1").build()));
+
+        Page<MyBuyOfferResponse> result = priceService.getMyBuyOffers(1L, null, pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).buyOfferId()).isEqualTo(7L);
+        assertThat(result.getContent().get(0).cardName()).isEqualTo("리자몽");
+        assertThat(result.getContent().get(0).cardImageUrl()).isEqualTo("img-1");
+        verify(buyOfferRepository, never()).findByBuyerIdAndStatus(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("t63 상태 필터가 있으면 findByBuyerIdAndStatus로 조회한다")
+    void t63() {
+        Pageable pageable = PageRequest.of(0, 10);
+        given(buyOfferRepository.findByBuyerIdAndStatus(1L, "ACTIVE", pageable))
+                .willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        Page<MyBuyOfferResponse> result = priceService.getMyBuyOffers(1L, "ACTIVE", pageable);
+
+        assertThat(result.getContent()).isEmpty();
+        verify(buyOfferRepository, never()).findByBuyerId(any(), any());
+    }
+
+    @Test
+    @DisplayName("t64 결과가 없으면 카드 조회를 하지 않는다")
+    void t64() {
+        Pageable pageable = PageRequest.of(0, 10);
+        given(buyOfferRepository.findByBuyerId(1L, pageable))
+                .willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        priceService.getMyBuyOffers(1L, null, pageable);
+
+        verify(cardRepository).findAllById(List.of());
+    }
+
+    @Test
+    @DisplayName("t65 본인 구매입찰 주문서를 조회하면 카드 정보와 함께 반환한다")
+    void t65() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+        given(cardRepository.findById(1L)).willReturn(java.util.Optional.of(Card.builder().id(1L).name("리자몽").build()));
+
+        MyBuyOfferResponse response = priceService.getMyBuyOffer(7L, 1L);
+
+        assertThat(response.buyOfferId()).isEqualTo(7L);
+        assertThat(response.cardName()).isEqualTo("리자몽");
+        assertThat(response.recipientName()).isEqualTo("김철수");
+    }
+
+    @Test
+    @DisplayName("t66 본인 것이 아닌 구매입찰을 조회하면 ACCESS_DENIED 예외가 발생한다")
+    void t66() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 2L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+
+        assertThatThrownBy(() -> priceService.getMyBuyOffer(7L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("t67 ACTIVE 상태면 받는사람 정보를 수정할 수 있다")
+    void t67() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+        given(cardRepository.findById(1L)).willReturn(java.util.Optional.of(Card.builder().id(1L).name("리자몽").build()));
+        BuyOfferRecipientUpdateRequest request =
+                new BuyOfferRecipientUpdateRequest("홍길동", "010-9999-8888", "서울시 서초구");
+
+        MyBuyOfferResponse response = priceService.updateBuyOfferRecipient(7L, 1L, request);
+
+        assertThat(response.recipientName()).isEqualTo("홍길동");
+        assertThat(buyOffer.getRecipientName()).isEqualTo("홍길동");
+        assertThat(buyOffer.getRecipientPhone()).isEqualTo("010-9999-8888");
+        assertThat(buyOffer.getRecipientAddress()).isEqualTo("서울시 서초구");
+    }
+
+    @Test
+    @DisplayName("t68 이미 체결된 구매입찰의 받는사람 정보를 수정하면 BUY_OFFER_ALREADY_MATCHED 예외가 발생한다")
+    void t68() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        buyOffer.markMatched();
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+        BuyOfferRecipientUpdateRequest request =
+                new BuyOfferRecipientUpdateRequest("홍길동", "010-9999-8888", "서울시 서초구");
+
+        assertThatThrownBy(() -> priceService.updateBuyOfferRecipient(7L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
     }
 }

@@ -19,12 +19,14 @@ import com.pokade.domain.price.dto.BuyOfferFulfillRequest;
 import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyRequest;
+import com.pokade.domain.price.dto.BuyOfferRecipientUpdateRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyResponse;
 import com.pokade.domain.price.dto.BuyOfferResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
 import com.pokade.domain.price.dto.DailyMarketStatResponse;
 import com.pokade.domain.price.dto.MarketOverviewResponse;
+import com.pokade.domain.price.dto.MyBuyOfferResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
@@ -50,7 +52,9 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -380,6 +384,51 @@ public class PriceService {
         );
     }
 
+    // 마이페이지 "입찰" 섹션용 - ListingService.getMyListings()와 동일한 패턴(카드 정보 배치 조회 후 매핑).
+    public Page<MyBuyOfferResponse> getMyBuyOffers(Long buyerId, String status, Pageable pageable) {
+        Page<BuyOffer> buyOffersPage = status != null
+                ? buyOfferRepository.findByBuyerIdAndStatus(buyerId, status, pageable)
+                : buyOfferRepository.findByBuyerId(buyerId, pageable);
+
+        List<Long> cardIds = buyOffersPage.getContent().stream().map(BuyOffer::getCardId).distinct().toList();
+        Map<Long, Card> cardsById = cardRepository.findAllById(cardIds).stream()
+                .collect(Collectors.toMap(Card::getId, Function.identity()));
+
+        return buyOffersPage.map(buyOffer -> {
+            Card card = cardsById.get(buyOffer.getCardId());
+            String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+            return MyBuyOfferResponse.of(buyOffer, card, cardNameKo);
+        });
+    }
+
+    // 마이페이지 "입찰" 목록에서 개별 항목을 클릭했을 때의 주문서 상세 - ListingService.getOwnedListing()과
+    // 동일한 패턴(404 후 소유자 확인)으로 본인 것이 아니면 403을 던진다.
+    public MyBuyOfferResponse getMyBuyOffer(Long buyOfferId, Long buyerId) {
+        BuyOffer buyOffer = getOwnedBuyOffer(buyOfferId, buyerId);
+        Card card = cardRepository.findById(buyOffer.getCardId()).orElse(null);
+        String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+        return MyBuyOfferResponse.of(buyOffer, card, cardNameKo);
+    }
+
+    @Transactional
+    public MyBuyOfferResponse updateBuyOfferRecipient(Long buyOfferId, Long buyerId,
+                                                        BuyOfferRecipientUpdateRequest request) {
+        BuyOffer buyOffer = getOwnedBuyOffer(buyOfferId, buyerId);
+        buyOffer.updateRecipient(request.recipientName(), request.recipientPhone(), request.recipientAddress());
+        Card card = cardRepository.findById(buyOffer.getCardId()).orElse(null);
+        String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+        return MyBuyOfferResponse.of(buyOffer, card, cardNameKo);
+    }
+
+    private BuyOffer getOwnedBuyOffer(Long buyOfferId, Long buyerId) {
+        BuyOffer buyOffer = buyOfferRepository.findById(buyOfferId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BUY_OFFER_NOT_FOUND));
+        if (!buyOffer.getBuyerId().equals(buyerId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        return buyOffer;
+    }
+
     public List<TradeSummaryResponse> getRecentTrades(Long cardId) {
         if (!cardRepository.existsById(cardId)) {
             throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
@@ -702,6 +751,7 @@ public class PriceService {
         return new MarketOverviewResponse(
                 todayStat.volume(),
                 computeVolumeChangeRate(yesterdayStat.volume(), todayStat.volume()),
+                todayStat.volume() - yesterdayStat.volume(),
                 todayStat.medianPrice(),
                 computeMedianChangeRate(yesterdayStat.medianPrice(), todayStat.medianPrice()),
                 computeMedianChangeAmount(yesterdayStat.medianPrice(), todayStat.medianPrice()),

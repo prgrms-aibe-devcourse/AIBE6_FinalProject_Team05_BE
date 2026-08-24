@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
+import com.pokade.domain.listing.dto.MyListingResponse;
 import com.pokade.domain.listing.dto.OrderbookEntryResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
 import com.pokade.domain.listing.entity.ListingGrade;
@@ -142,7 +143,8 @@ class ListingControllerTest {
     @Test
     void 활성_매물이_있으면_200과_가격순_목록을_반환한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now(), null);
+                1L, 100L, 1L, "테스트카드", null, "img-1", 10000, ListingGrade.A, ListingStatus.ACTIVE,
+                LocalDateTime.now(), null);
 
         given(listingService.getActiveListings(1L)).willReturn(List.of(summary));
 
@@ -222,7 +224,8 @@ class ListingControllerTest {
     @Test
     void 내_매물이_있으면_200과_목록을_반환한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                1L, 100L, 1L, "테스트카드", 10000, ListingGrade.A, ListingStatus.ACTIVE, LocalDateTime.now(), null);
+                1L, 100L, 1L, "테스트카드", null, "img-1", 10000, ListingGrade.A, ListingStatus.ACTIVE,
+                LocalDateTime.now(), null);
 
         given(listingService.getMyListings(eq(100L), isNull(), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(summary)));
@@ -246,7 +249,8 @@ class ListingControllerTest {
     @Test
     void status_파라미터로_필터링해서_조회한다() throws Exception {
         ListingSummaryResponse summary = new ListingSummaryResponse(
-                2L, 100L, 2L, "테스트카드2", 5000, ListingGrade.B, ListingStatus.SOLD, LocalDateTime.now(), null);
+                2L, 100L, 2L, "테스트카드2", null, "img-2", 5000, ListingGrade.B, ListingStatus.SOLD,
+                LocalDateTime.now(), null);
 
         given(listingService.getMyListings(eq(100L), eq(ListingStatus.SOLD), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(summary)));
@@ -256,6 +260,40 @@ class ListingControllerTest {
                         .param("status", "SOLD"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].status").value("SOLD"));
+    }
+
+    @Test
+    void 매물_주문서_상세를_조회하면_200과_카드_정보를_반환한다() throws Exception {
+        MyListingResponse response = new MyListingResponse(
+                1L, 1L, "Charizard", "리자몽", "img-1", null, 10000, ListingGrade.A, ListingStatus.ACTIVE,
+                "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구", LocalDateTime.now());
+
+        given(listingService.getMyListing(100L, 1L)).willReturn(response);
+
+        mockMvc.perform(get("/api/listings/1").with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.cardNameKo").value("리자몽"));
+    }
+
+    @Test
+    void 본인_것이_아닌_매물_상세_조회시_403을_반환한다() throws Exception {
+        given(listingService.getMyListing(999L, 1L))
+                .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
+
+        mockMvc.perform(get("/api/listings/1").with(userId(999L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 존재하지_않는_매물_상세_조회시_404를_반환한다() throws Exception {
+        given(listingService.getMyListing(100L, 999L))
+                .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
+
+        mockMvc.perform(get("/api/listings/999").with(userId(100L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("LISTING_NOT_FOUND"));
     }
 
     @Test

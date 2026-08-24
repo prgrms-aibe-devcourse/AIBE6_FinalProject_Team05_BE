@@ -4,11 +4,18 @@ import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.price.entity.BuyOffer;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface BuyOfferRepository extends JpaRepository<BuyOffer, Long> {
+
+    // 마이페이지 "입찰" 섹션용 - 내가 buyer로 등록한 구매입찰 목록.
+    Page<BuyOffer> findByBuyerId(Long buyerId, Pageable pageable);
+
+    Page<BuyOffer> findByBuyerIdAndStatus(Long buyerId, String status, Pageable pageable);
 
     @Query("SELECT MAX(b.price) FROM BuyOffer b "
             + "WHERE b.cardId = :cardId AND b.variantId = :variantId AND b.status = 'ACTIVE'")
