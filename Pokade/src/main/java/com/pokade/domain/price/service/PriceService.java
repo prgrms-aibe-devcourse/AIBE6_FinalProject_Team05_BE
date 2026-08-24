@@ -45,6 +45,7 @@ import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.service.TradeService;
 import com.pokade.domain.user.entity.User;
 import com.pokade.domain.user.repository.UserRepository;
+import com.pokade.global.event.BuyOfferCreatedEvent;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
@@ -53,6 +54,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -119,6 +121,8 @@ public class PriceService {
     private final TradeService tradeService;
     // 임시 계측 - Grafana 테스트용, 팀 논의 전 커밋 대상 아님
     private final MeterRegistry meterRegistry;
+    // 구매입찰 등록 사실만 알리고 알림 생성은 listing 도메인 리스너에 맡긴다(BuyOfferReceivedNoticeListener).
+    private final ApplicationEventPublisher eventPublisher;
 
     public PriceSummaryResponse getSummary(Long cardId, Long variantId) {
         if (!cardRepository.existsById(cardId)) {
@@ -338,6 +342,17 @@ public class PriceService {
         BuyOffer saved = buyOfferRepository.save(buyOffer);
 
         order.markConfirmed();
+
+        // 이 카드에 매물을 올려둔 판매자에게 "이 값에 팔 수 있다"를 알린다. 알림 저장을 이 트랜잭션에
+        // 얹지 않는 이유는 여기가 토스 승인/포인트 차감이 이미 끝난 자리이기 때문이다 - 알림 쪽 DB
+        // 오류가 결제까지 롤백시키면 안 된다. 받는 쪽(BuyOfferReceivedNoticeListener)은 AFTER_COMMIT이라
+        // 결제와 입찰이 실제로 커밋된 뒤에만 돈다. 그 리스너 자체에는 트랜잭션이 없고, 실제 알림 저장은
+        // 리스너가 호출하는 NotificationService.createBuyOfferReceivedNotification이 REQUIRES_NEW로
+        // 자기 트랜잭션을 열어 처리한다. 리스너는 그 트랜잭션 경계 바깥에서 예외를 삼키므로 알림이
+        // 실패해도 이 경로로 새어나오지 않는다.
+        eventPublisher.publishEvent(new BuyOfferCreatedEvent(
+                saved.getId(), saved.getCardId(), saved.getVariantId(),
+                saved.getGrade(), buyerId, saved.getPrice()));
 
         return BuyOfferResponse.of(saved);
     }

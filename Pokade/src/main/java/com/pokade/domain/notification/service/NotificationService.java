@@ -285,6 +285,65 @@ public class NotificationService {
                 String.format("%s 카드 구매 입찰이 %,d원에 체결되었습니다.", cardName, matchedPrice));
     }
 
+    /**
+     * 구매 입찰이 새로 등록됐을 때 그 카드에 매물을 올려둔 판매자들에게 보내는 알림. 수신자가 여럿이라
+     * {@link #createInquiryReceivedNotification}과 같은 팬아웃 구조를 쓴다 - 저장은 saveAll 한 번,
+     * 푸시 이벤트만 인원수만큼 발행한다.
+     *
+     * <p>수신자 선별(중복 제거, 입찰자 본인 제외, 정지/탈퇴 판매자 제외)은 호출자인
+     * BuyOfferReceivedNoticeListener가 이미 끝낸 상태로 넘긴다 - 여기서는 목록을 그대로 믿는다.
+     *
+     * <p>문의 팬아웃과 다른 점 두 가지: inquiryId 대신 cardId를 채워 알림을 누르면 카드 상세로
+     * 가게 하고(notifications에는 buy_offer_id 컬럼이 없어 특정 입찰로 보낼 방법이 아직 없다),
+     * 호출자가 문구를 만들려고 이미 조회해 둔 {@link Card}를 받아 푸시 payload의 썸네일까지 채운다.
+     *
+     * @param sellerIds 알림을 받을 판매자 ID - 비어 있으면 아무것도 하지 않는다(매물이 전부 입찰자
+     *                  본인 것이었거나 애초에 없는 경우)
+     * @param offeredPrice 입찰가(상품가) - 배송비/포인트를 뺀 값이라 판매자가 받는 정산 기준가와 같다
+     */
+    // 이 메서드만 REQUIRES_NEW인 이유: 유일한 호출 맥락이 AFTER_COMMIT 리스너
+    // (BuyOfferReceivedNoticeListener)이기 때문이다. AFTER_COMMIT 콜백은 커밋이 끝난 뒤이긴 해도 아직
+    // 트랜잭션 정리(cleanupAfterCompletion) 전이라 EntityManagerHolder가 스레드에 그대로 바인딩돼 있고
+    // transactionActive도 true다. 그 상태에서 REQUIRED로 들어오면 새 트랜잭션이 열리는 게 아니라 이미
+    // 커밋된 그 트랜잭션에 "참여"만 하게 되는데, 참여 트랜잭션은 isNewTransaction()이 false라
+    // AbstractPlatformTransactionManager가 doCommit을 건너뛴다 - 즉 아래 saveAll()이 영영 커밋되지 않고
+    // 커넥션 반납 시점에 사라진다. REQUIRES_NEW로 기존 리소스를 잠시 밀어내고 진짜 새 트랜잭션을 열어야
+    // 저장이 실제로 남는다. (Spring javadoc의 "Use PROPAGATION_REQUIRES_NEW for any transactional
+    // operation that is called from here"가 가리키는 상황이 정확히 이것이다.)
+    //
+    // 나머지 10개 create*Notification이 REQUIRED인 것과 갈리는 지점이기도 하다 - 그쪽은 거래/문의 같은
+    // 업무 트랜잭션 <b>안에서</b> 불리므로 업무가 롤백되면 알림도 함께 사라지는 게 맞다. 이 메서드는
+    // 업무(결제·입찰)가 이미 커밋을 마친 뒤에 불리므로 같이 묶을 대상 자체가 없다.
+    //
+    // 주의: 그래서 이 메서드를 업무 트랜잭션 안에서 호출하면 의도와 다르게 동작한다 - 알림만 독립적으로
+    // 먼저 커밋돼, 이후 그 업무가 롤백돼도 알림은 남는다. 새 호출부를 만들 때는 그 맥락이 AFTER_COMMIT인지
+    // 먼저 확인할 것.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void createBuyOfferReceivedNotification(
+            List<Long> sellerIds, Long cardId, String cardName, Integer offeredPrice, Card card) {
+        if (sellerIds == null || sellerIds.isEmpty()) {
+            return;
+        }
+
+        String message = String.format(
+                "%s 카드에 %,d원 구매 입찰이 등록되었습니다. 즉시판매로 바로 팔 수 있어요.", cardName, offeredPrice);
+        List<Notification> notifications = sellerIds.stream()
+                .map(sellerId -> Notification.builder()
+                        .userId(sellerId)
+                        .type(NotificationType.BUY_OFFER_RECEIVED)
+                        .message(message)
+                        .cardId(cardId)
+                        .build())
+                .toList();
+
+        // createInquiryReceivedNotification과 같은 이유로 saveAll()이 돌려주는 인스턴스를 쓴다 -
+        // id가 채워진 건 이쪽이라, 인자로 넘긴 목록으로 응답 DTO를 만들면 id가 null인 알림이 SSE로 나간다.
+        for (Notification saved : notificationRepository.saveAll(notifications)) {
+            eventPublisher.publishEvent(
+                    new NotificationPushEvent(saved.getUserId(), NotificationResponse.of(saved, card)));
+        }
+    }
+
     // #392: "저장 → 커밋 후 푸시용 이벤트 발행"이라는 똑같은 절차를 공용화했다. 알림 레코드에 카드를
     // 붙이지 않는(=푸시 시점에 썸네일이 없는) 타입들이 쓴다 - 목록 조회 시 getNotifications()의 배치
     // 조회가 이미지를 채워준다.
