@@ -692,7 +692,7 @@ class TradeServiceTest {
         assertThat(response.status()).isEqualTo(TradeStatus.DELIVERED);
     }
 
-    // ===== #398: 거래 단계별 알림 =====
+    // ===== #392: 거래 단계별 알림 =====
     // 픽스처의 tradeOf(sellerId=100, buyerId=200) 규약을 그대로 따른다.
     // 공통 원칙: "방금 행동한 사람"에게는 보내지 않는다. 단 발송 요청만은 예외로, 즉시판매처럼
     // 판매자가 직접 행동한 경우에도 보낸다(며칠 뒤 알림함에서 다시 보는 것이 목적이라서).

@@ -304,7 +304,7 @@ class WatchlistServiceTest {
         assertThat(target.getTargetBuyPrice()).isEqualTo(5000);
     }
 
-    // ===== #397: 목표가 지우기(clear 플래그) =====
+    // ===== #392: 목표가 지우기(clear 플래그) =====
     // null은 여전히 "변경 없음"이고, 지움은 clear 플래그로만 표현된다.
 
     @Test

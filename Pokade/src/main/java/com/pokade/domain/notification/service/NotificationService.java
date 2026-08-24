@@ -248,7 +248,7 @@ public class NotificationService {
         }
     }
 
-    // #398: 결제가 끝나 판매자가 상품을 발송해야 하는 시점. 즉시구매(confirmPurchase)와 즉시판매
+    // #392: 결제가 끝나 판매자가 상품을 발송해야 하는 시점. 즉시구매(confirmPurchase)와 즉시판매
     // (createMatchedTrade) 양쪽에서 같은 문구로 나간다 - 판매자 입장에서는 어느 경로로 팔렸든
     // "발송해야 한다"는 할 일이 동일하기 때문이다.
     @Transactional
@@ -257,7 +257,7 @@ public class NotificationService {
                 String.format("%s 카드가 판매되었습니다. 상품을 플랫폼으로 발송해 주세요.", cardName));
     }
 
-    // #398: 검수를 마친 상품이 구매자에게 배송 완료된 시점. 구매자가 구매확정을 눌러야 판매자 정산이
+    // #392: 검수를 마친 상품이 구매자에게 배송 완료된 시점. 구매자가 구매확정을 눌러야 판매자 정산이
     // 이뤄지므로(TradeService.confirmTrade), 확정을 잊으면 거래가 그 상태로 멈춘다.
     @Transactional
     public void createTradeDeliveredNotification(Long buyerId, Long cardId, String cardName) {
@@ -266,7 +266,7 @@ public class NotificationService {
     }
 
     /**
-     * #398: 거래 취소 알림 - 취소를 누른 당사자가 아니라 <b>상대방</b>에게만 보낸다(누른 사람은 방금
+     * #392: 거래 취소 알림 - 취소를 누른 당사자가 아니라 <b>상대방</b>에게만 보낸다(누른 사람은 방금
      * 자기가 한 일이라 알림이 소음이다).
      *
      * <p>같은 사건이라도 받는 사람의 역할에 따라 알아야 할 내용이 다르다: 구매자는 돈이 돌아온다는 것을,
@@ -286,7 +286,7 @@ public class NotificationService {
         saveAndPublish(recipientId, NotificationType.TRADE_CANCELLED, cardId, message);
     }
 
-    // #398: 등록해 둔 구매 입찰이 판매자의 즉시판매로 체결된 시점. 입찰자는 아무 행동도 하지 않았는데
+    // #392: 등록해 둔 구매 입찰이 판매자의 즉시판매로 체결된 시점. 입찰자는 아무 행동도 하지 않았는데
     // 거래가 시작되므로, 같은 트리거(createMatchedTrade)에서 판매자에게 가는 발송 요청 알림과 짝을 이룬다.
     @Transactional
     public void createBuyOfferMatchedNotification(Long bidderId, Long cardId, String cardName, Integer matchedPrice) {
@@ -294,7 +294,7 @@ public class NotificationService {
                 String.format("%s 카드 구매 입찰이 %,d원에 체결되었습니다.", cardName, matchedPrice));
     }
 
-    // #398: 위 4종이 "저장 → 커밋 후 푸시용 이벤트 발행"이라는 똑같은 절차만 반복해서 공용화했다.
+    // #392: 위 4종이 "저장 → 커밋 후 푸시용 이벤트 발행"이라는 똑같은 절차만 반복해서 공용화했다.
     // 기존 생성 메서드들(PRICE_TARGET/LISTING_AVAILABLE/INQUIRY_HANDLED 등)은 각자 사연이 달라
     // (card 인자를 그대로 재사용하거나, 커밋 전 푸시를 하거나) 이쪽으로 합치지 않았다.
     private void saveAndPublish(Long userId, NotificationType type, Long cardId, String message) {

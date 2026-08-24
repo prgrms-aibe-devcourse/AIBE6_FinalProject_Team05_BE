@@ -204,7 +204,7 @@ public class WatchlistService {
         return WatchlistResponse.of(watchlist, targetReached);
     }
 
-    // #397: 예전에는 "가격이 둘 다 null이면 거절"이었는데, 그러면 clear 플래그만 담은 요청
+    // #392: 예전에는 "가격이 둘 다 null이면 거절"이었는데, 그러면 clear 플래그만 담은 요청
     // (= 목표가를 지워 미설정으로 되돌리기)까지 함께 막혔다. 지우겠다는 의사 표시도 "적용할 것"으로
     // 인정하고, 아무 필드도 없는 진짜 빈 요청만 계속 거절한다 - 이 검증의 원래 목적(의미 없는 no-op 차단)은 그대로다.
     //

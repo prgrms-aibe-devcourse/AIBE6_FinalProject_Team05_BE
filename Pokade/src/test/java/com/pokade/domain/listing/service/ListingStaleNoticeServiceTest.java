@@ -170,7 +170,7 @@ class ListingStaleNoticeServiceTest {
         verify(notificationService, never()).createListingStaleNotification(any(), any(), any());
     }
 
-    // #398 회귀 방지: #392에서 인앱 알림 호출을 메일 try '밖'에 두는 바람에, 알림 생성이 실패하면
+    // #392 회귀 방지: 앞선 커밋에서 인앱 알림 호출을 메일 try '밖'에 두는 바람에, 알림 생성이 실패하면
     // 예외가 for 루프를 뚫고 @Transactional인 sendStaleNotices() 밖으로 전파돼 배치 전체가 롤백됐다.
     // 아래 두 테스트가 "한 건이 실패해도 나머지는 계속 처리된다"는 원래 성질을 채널별로 고정한다.
     @Test

@@ -97,7 +97,7 @@ public class Watchlist {
     }
 
     // 안 보낸 필드(null)는 "기존 값 유지"로 해석한다 - null은 언제나 "변경 없음"이지 "삭제"가 아니다.
-    // 지우기가 필요하면 아래 4-인자 오버로드에 clear 플래그를 넘긴다(#397) - 한쪽만 지우는 것도,
+    // 지우기가 필요하면 아래 4-인자 오버로드에 clear 플래그를 넘긴다(#392) - 한쪽만 지우는 것도,
     // 두 필드를 한꺼번에 지워 미설정으로 되돌리는 것도 가능하다(등록이 목표가 없이 되는 것과 대칭).
     public void updateTargetPrices(Integer targetBuyPrice, Integer targetSellPrice) {
         updateTargetPrices(targetBuyPrice, targetSellPrice, false, false);

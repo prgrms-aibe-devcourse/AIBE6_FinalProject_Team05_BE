@@ -543,7 +543,7 @@ class NotificationServiceTest {
         return counter == null ? 0.0 : counter.count();
     }
 
-    // ===== #398: 거래 단계 알림 4종 =====
+    // ===== #392: 거래 단계 알림 4종 =====
     // 넷 다 "저장 + 커밋 이후 푸시용 이벤트 발행"이고, 커밋 전에 Emitter로 직접 쏘지 않아야 한다.
 
     private Notification captureSaved() {
