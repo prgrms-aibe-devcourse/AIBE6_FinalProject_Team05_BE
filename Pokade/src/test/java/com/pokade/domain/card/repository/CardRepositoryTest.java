@@ -374,7 +374,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("t22 sort=popular이면 조회수 내림차순으로 정렬한다")
+    @DisplayName("t22 sort=popular이면 일간 조회수 내림차순으로 정렬한다")
     void t22() {
         Expansion popExpansion = persistExpansion("popTest", "Popularity Test");
         persistCardWithViewCount("Mewtwo", popExpansion, 50);
@@ -389,11 +389,11 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("t23 필터와 sort=popular를 함께 적용해도 필터링된 결과 안에서 조회수순으로 정렬한다")
+    @DisplayName("t23 필터와 sort=popular를 함께 적용해도 필터링된 결과 안에서 일간 조회수순으로 정렬한다")
     void t23() {
-        cardRepository.incrementViewCount(charizard.getId());
-        cardRepository.incrementViewCount(charizard.getId());
-        cardRepository.incrementViewCount(charizardEx.getId());
+        cardRepository.incrementViewCounts(charizard.getId());
+        cardRepository.incrementViewCounts(charizard.getId());
+        cardRepository.incrementViewCounts(charizardEx.getId());
         entityManager.flush();
         entityManager.clear();
 
@@ -405,14 +405,16 @@ class CardRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("t24 상세 조회 시 view_count를 원자적 UPDATE로 1 증가시킨다")
+    @DisplayName("t24 상세 조회 시 view_count와 daily_view_count를 원자적 UPDATE로 함께 1 증가시킨다")
     void t24() {
-        cardRepository.incrementViewCount(charizard.getId());
+        cardRepository.incrementViewCounts(charizard.getId());
         entityManager.flush();
         entityManager.clear();
 
         Card reloaded = cardRepository.findById(charizard.getId()).orElseThrow();
         assertThat(reloaded.getViewCount()).isEqualTo(1);
+        // #377: 두 카운터를 한 문장으로 올리므로 누적/일간이 어긋나지 않는지 함께 확인한다.
+        assertThat(reloaded.getDailyViewCount()).isEqualTo(1);
     }
 
     @Test
@@ -437,7 +439,7 @@ class CardRepositoryTest extends AbstractIntegrationTest {
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);
             List<Future<?>> futures = new ArrayList<>();
             for (int i = 0; i < threadCount; i++) {
-                futures.add(executor.submit(() -> cardRepository.incrementViewCount(cardId)));
+                futures.add(executor.submit(() -> cardRepository.incrementViewCounts(cardId)));
             }
             executor.shutdown();
             boolean terminated = executor.awaitTermination(10, TimeUnit.SECONDS);
@@ -450,19 +452,24 @@ class CardRepositoryTest extends AbstractIntegrationTest {
                 assertThatCode(future::get).doesNotThrowAnyException();
             }
 
-            Integer finalViewCount = requiresNew.execute(status ->
-                    cardRepository.findById(cardId).orElseThrow().getViewCount());
-            assertThat(finalViewCount).isEqualTo(threadCount);
+            Card finalCard = requiresNew.execute(status ->
+                    cardRepository.findById(cardId).orElseThrow());
+            assertThat(finalCard.getViewCount()).isEqualTo(threadCount);
+            // #377: 한 문장에서 두 컬럼을 함께 올리므로 동시 요청에서도 일간 카운터가 같은 값으로 누적돼야 한다.
+            assertThat(finalCard.getDailyViewCount()).isEqualTo(threadCount);
         } finally {
             requiresNew.executeWithoutResult(status -> cardRepository.deleteById(cardId));
         }
     }
 
+    // #377: 인기순 정렬 기준이 daily_view_count로 바뀌었으므로 누적/일간 두 값을 같은 값으로 심는다.
+    // 한쪽만 심으면 정렬 기준 컬럼이 전부 0이 되어 c.id DESC 타이브레이커만 남아 테스트가 무의미해진다.
     private Card persistCardWithViewCount(String name, Expansion expansion, int viewCount) {
         Card card = Card.builder()
                 .name(name)
                 .expansion(expansion)
                 .viewCount(viewCount)
+                .dailyViewCount(viewCount)
                 .build();
         entityManager.persist(card);
         return card;
@@ -793,5 +800,26 @@ class CardRepositoryTest extends AbstractIntegrationTest {
         assertThat(result.getContent())
                 .extracting(Card::getName)
                 .containsExactlyInAnyOrder("Mega Lucario ex", "クヌギダマ");
+    }
+
+    @Test
+    @DisplayName("t61 resetDailyViewCounts()는 daily_view_count만 0으로 되돌리고 누적 view_count는 유지한다(#377)")
+    void t61() {
+        Expansion resetExpansion = persistExpansion("resetTest", "Daily Reset Test");
+        persistCardWithViewCount("Pikachu", resetExpansion, 70);
+        persistCardWithViewCount("Raichu", resetExpansion, 0);
+        entityManager.flush();
+
+        int resetCount = cardRepository.resetDailyViewCounts();
+        entityManager.clear();
+
+        // daily_view_count가 0인 행은 WHERE 절에서 제외되므로 갱신 대상은 값이 남아 있던 1건뿐이다
+        // (setUp()이 만드는 카드들도 일간 조회수가 전부 0이라 대상에 들어오지 않는다).
+        assertThat(resetCount).isEqualTo(1);
+        assertThat(cardRepository.search(null, null, "resetTest", null, null, "popular", PageRequest.of(0, 10)).getContent())
+                .extracting(Card::getName, Card::getViewCount, Card::getDailyViewCount)
+                .containsExactlyInAnyOrder(
+                        tuple("Pikachu", 70, 0),
+                        tuple("Raichu", 0, 0));
     }
 }

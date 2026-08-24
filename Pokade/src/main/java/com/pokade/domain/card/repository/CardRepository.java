@@ -75,7 +75,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                   @Param("expansionId") String expansionId,
                                   Pageable pageable);
 
-    @Query(value = CardSearchSql.CARD_SEARCH_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+    @Query(value = CardSearchSql.CARD_SEARCH_BASE + "ORDER BY c.daily_view_count DESC, c.id DESC",
             countQuery = CardSearchSql.CARD_SEARCH_COUNT,
             nativeQuery = true)
     Page<Card> searchOrderByPopular(@Param("hasTypes") boolean hasTypes,
@@ -90,10 +90,28 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                      @Param("expansionId") String expansionId,
                                      Pageable pageable);
 
+    /**
+     * 누적 조회수와 일간 조회수를 한 문장으로 함께 증가시킨다(#377). 두 UPDATE로 나누면 같은 행에
+     * 왕복·행 락이 두 번 걸리고, 한쪽만 성공하는 경로가 생기면 두 카운터가 어긋날 수 있다.
+     */
     @Transactional
     @Modifying
-    @Query(value = "UPDATE cards SET view_count = view_count + 1 WHERE id = :id", nativeQuery = true)
-    void incrementViewCount(@Param("id") Long id);
+    @Query(value = "UPDATE cards SET view_count = view_count + 1, daily_view_count = daily_view_count + 1 WHERE id = :id",
+            nativeQuery = true)
+    void incrementViewCounts(@Param("id") Long id);
+
+    /**
+     * 인기순 정렬 기준을 하루 단위로 고정하기 위해 매일 자정 일간 조회수를 0으로 되돌린다(#377).
+     * 누적 view_count는 건드리지 않는다. {@code WHERE daily_view_count <> 0}이 붙은 이유는 Postgres가
+     * UPDATE마다 새 튜플을 쓰기 때문이다 - 조건 없이 매일 전체 행을 갱신하면 테이블·인덱스 블로트가
+     * 매일 누적된다. 실제로 값이 남아 있는 소수 행만 되돌리면 결과는 동일하다.
+     *
+     * @return 0으로 되돌린 행 수
+     */
+    @Transactional
+    @Modifying
+    @Query(value = "UPDATE cards SET daily_view_count = 0 WHERE daily_view_count <> 0", nativeQuery = true)
+    int resetDailyViewCounts();
 
     /**
      * 카드별 ACTIVE 매물에 존재하는 등급(S/A/B) 집합을 배치로 조회한다.
@@ -216,7 +234,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                         @Param("expansionId") String expansionId,
                                         Pageable pageable);
 
-    @Query(value = CardSearchSql.NAME_EXACT_FILTER_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+    @Query(value = CardSearchSql.NAME_EXACT_FILTER_BASE + "ORDER BY c.daily_view_count DESC, c.id DESC",
             countQuery = CardSearchSql.NAME_EXACT_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByNameOrderByPopular(@Param("keyword") String keyword,
@@ -286,7 +304,7 @@ public interface CardRepository extends JpaRepository<Card, Long> {
                                                   @Param("expansionId") String expansionId,
                                                   Pageable pageable);
 
-    @Query(value = CardSearchSql.POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.view_count DESC, c.id DESC",
+    @Query(value = CardSearchSql.POKEDEX_SEARCH_FILTER_BASE + "ORDER BY c.daily_view_count DESC, c.id DESC",
             countQuery = CardSearchSql.POKEDEX_SEARCH_FILTER_COUNT,
             nativeQuery = true)
     Page<Card> searchByPokedexNumbersOrderByPopular(@Param("pokedexNumbers") List<Integer> pokedexNumbers,

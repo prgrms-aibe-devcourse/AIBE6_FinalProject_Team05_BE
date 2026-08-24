@@ -99,12 +99,20 @@ public class Card {
     @Column(name = "view_count", nullable = false)
     private Integer viewCount = 0;
 
+    /**
+     * 인기순 정렬(sort=popular) 전용 일간 조회수 - 매일 자정 DailyViewCountResetScheduler가 0으로 되돌린다(#377).
+     * 카드 상세의 "N회 조회"에 쓰는 누적값은 viewCount 쪽이고, 이 값은 응답에 노출하지 않는다.
+     */
+    @Builder.Default
+    @Column(name = "daily_view_count", nullable = false)
+    private Integer dailyViewCount = 0;
+
     @Column(name = "synced_at")
     private LocalDateTime syncedAt;
 
     /**
      * Scrydex 동기화 배치에서 이미 존재하는 카드(external_id 매칭)를 갱신할 때 사용한다.
-     * id·externalId·viewCount는 애플리케이션이 별도로 관리하는 값이라 여기서 건드리지 않는다.
+     * id·externalId·viewCount·dailyViewCount는 애플리케이션이 별도로 관리하는 값이라 여기서 건드리지 않는다.
      */
     public void applySync(CardSyncFields fields) {
         this.name = fields.name();
