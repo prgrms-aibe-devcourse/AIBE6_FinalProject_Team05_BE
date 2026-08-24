@@ -69,7 +69,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "refresh 재발급 결과 (auth.token.reissue)",
-      "description": "stolen은 폐기된 refresh가 다시 제출된 것으로 토큰 탈취 정황이다. 0이 아니면 확인이 필요하다. grace는 동시 요청·네트워크 재시도로 정상 발생하므로 0이 아닌 것이 맞고, rotated 대비 비율로 본다. grace 비율이 계속 높으면 클라이언트가 재발급을 중복 호출하고 있다는 신호다.",
+      "description": "rotated는 정상 회전이다. invalid는 만료·로그아웃 후 재시도처럼 세션이 이미 없는 상태의 재발급 시도로, 평상시에도 꾸준히 발생하는 것이 정상이다. rotated 대비 비율이 급증하면 클라이언트가 만료된 토큰으로 반복 호출하고 있다는 신호다. stolen은 폐기된 refresh가 다시 제출된 것으로 토큰 탈취 정황이다. 0이 아니면 확인이 필요하다. grace는 동시 요청·네트워크 재시도로 정상 발생하므로 0이 아닌 것이 맞고, rotated 대비 비율로 본다. grace 비율이 계속 높으면 클라이언트가 재발급을 중복 호출하고 있다는 신호다.",
       "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
