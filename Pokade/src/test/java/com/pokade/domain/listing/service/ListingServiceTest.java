@@ -105,7 +105,8 @@ class ListingServiceTest {
 
     @Test
     void 가격_수정시_판매자_계정이_비활성이면_ACCOUNT_NOT_ACTIVE_예외가_발생한다() {
-        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+        ListingUpdateRequest request = new ListingUpdateRequest(
+                20000, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
         willThrow(new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE))
                 .given(userAccessChecker).assertWritable(100L);
 
@@ -125,9 +126,55 @@ class ListingServiceTest {
                 .build();
         given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
 
-        ListingResponse response = listingService.updatePrice(100L, 1L, new ListingUpdateRequest(20000));
+        ListingUpdateRequest request = new ListingUpdateRequest(
+                20000, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
+        ListingResponse response = listingService.updatePrice(100L, 1L, request);
 
         assertThat(response.price()).isEqualTo(20000);
+        assertThat(response.settlementBankName()).isEqualTo("국민은행");
+        assertThat(response.returnAddress()).isEqualTo("서울시 강남구 테헤란로 1");
+    }
+
+    @Test
+    void 정산계좌_정보없이_가격만_수정하면_기존_정산계좌_정보가_유지된다() {
+        // "내 매물 관리"(/listings/me)의 빠른 가격 수정처럼 정산계좌/반송주소를 아예 안 보내는 요청도
+        // 기존 값을 지우지 않고 그대로 둬야 한다.
+        Listing listing = Listing.builder()
+                .cardId(1L)
+                .sellerId(100L)
+                .price(10000)
+                .settlementBankName("국민은행")
+                .settlementAccountNumber("110-1234-5678")
+                .settlementAccountHolder("김철수")
+                .returnRecipientName("김철수")
+                .returnRecipientPhone("010-1234-5678")
+                .returnAddress("서울시 강남구 테헤란로 1")
+                .build();
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+
+        ListingUpdateRequest request = new ListingUpdateRequest(20000, null, null, null, null, null, null);
+        ListingResponse response = listingService.updatePrice(100L, 1L, request);
+
+        assertThat(response.price()).isEqualTo(20000);
+        assertThat(response.settlementBankName()).isEqualTo("국민은행");
+        assertThat(response.returnAddress()).isEqualTo("서울시 강남구 테헤란로 1");
+    }
+
+    @Test
+    void ACTIVE_상태가_아니면_정산계좌_수정시_INVALID_LISTING_STATUS_예외가_발생한다() {
+        Listing listing = Listing.builder()
+                .cardId(1L)
+                .sellerId(100L)
+                .price(10000)
+                .build();
+        listing.cancel();
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        ListingUpdateRequest request = new ListingUpdateRequest(
+                20000, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
+
+        assertThatThrownBy(() -> listingService.updatePrice(100L, 1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_LISTING_STATUS);
     }
 
     @Test
