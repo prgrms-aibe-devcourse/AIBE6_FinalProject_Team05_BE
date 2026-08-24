@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: pokade-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # blue-green 슬롯(a/b) 컨테이너 둘 다 타겟으로 등록한다. 도커 네트워크
+      # (pokade_pokade-net) 안에서는 컨테이너명으로 직접 resolve되고, management
+      # 포트(8081)는 호스트에 publish하지 않아도 같은 네트워크의 다른 컨테이너에서는
+      # 접근 가능하다 - 단 애플리케이션이 MANAGEMENT_ADDRESS=0.0.0.0으로 떠 있어야 한다
+      # (기본값 127.0.0.1이면 컨테이너 루프백이라 다른 컨테이너에서 접근 불가).
+      # 비활성 슬롯은 컨테이너가 내려가 있어 target down으로 보이는 게 정상이다.
+      - targets:
+          - "pokade-app-a:8081"
+          - "pokade-app-b:8081"
