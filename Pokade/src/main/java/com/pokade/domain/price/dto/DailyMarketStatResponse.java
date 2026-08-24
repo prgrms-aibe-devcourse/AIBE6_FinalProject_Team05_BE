@@ -5,6 +5,6 @@ import java.time.LocalDate;
 public record DailyMarketStatResponse(
         LocalDate date,
         long volume,
-        Long medianPrice
+        Long avgPrice
 ) {
 }

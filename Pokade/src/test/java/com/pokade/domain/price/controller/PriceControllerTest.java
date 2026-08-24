@@ -422,7 +422,7 @@ class PriceControllerTest {
     }
 
     @Test
-    void 거래_현황_개요를_조회하면_200과_오늘_거래량_중간값_전일_일주일_30일_변화율을_반환한다() throws Exception {
+    void 거래_현황_개요를_조회하면_200과_오늘_거래량_평균_전일_일주일_30일_변화율을_반환한다() throws Exception {
         MarketOverviewResponse overview = new MarketOverviewResponse(
                 12L,
                 new BigDecimal("20.00"),
@@ -442,11 +442,11 @@ class PriceControllerTest {
                 .andExpect(jsonPath("$.data.todayVolume").value(12))
                 .andExpect(jsonPath("$.data.volumeChangeRate").value(20.00))
                 .andExpect(jsonPath("$.data.volumeChangeAmount").value(2))
-                .andExpect(jsonPath("$.data.todayMedianPrice").value(3100000))
-                .andExpect(jsonPath("$.data.medianChangeRate1d").value(3.33))
-                .andExpect(jsonPath("$.data.medianChangeAmount1d").value(100000))
-                .andExpect(jsonPath("$.data.medianChangeRate7d").value(10.71))
-                .andExpect(jsonPath("$.data.medianChangeRate30d").value(55.00))
+                .andExpect(jsonPath("$.data.todayAvgPrice").value(3100000))
+                .andExpect(jsonPath("$.data.avgChangeRate1d").value(3.33))
+                .andExpect(jsonPath("$.data.avgChangeAmount1d").value(100000))
+                .andExpect(jsonPath("$.data.avgChangeRate7d").value(10.71))
+                .andExpect(jsonPath("$.data.avgChangeRate30d").value(55.00))
                 .andExpect(jsonPath("$.data.totalVolume").value(250))
                 .andExpect(jsonPath("$.data.dailyStats.length()").value(1));
     }
