@@ -28,6 +28,7 @@ import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.port.UserAccessChecker;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -72,6 +74,33 @@ public class TradeService {
                 card != null ? card.getName() : null,
                 card != null ? card.getImageSmall() : null,
                 pointsUsed);
+    }
+
+    // #398: 알림 문구에 쓸 카드명. 카드가 없어도 알림 자체는 나가야 하므로 폴백 문자열을 쓴다.
+    // 같은 트랜잭션 안에서 toResponse()가 같은 id를 다시 조회하므로 둘 중 하나는 1차 캐시에서
+    // 해결된다 - DB 왕복은 늘지 않는다.
+    private String cardNameOf(Long cardId) {
+        return cardRepository.findById(cardId).map(Card::getName).orElse("카드");
+    }
+
+    /**
+     * #398: 알림 생성 실패가 거래를 되돌리지 않도록 여기서 삼킨다. 이미 토스 승인이나 환불이 끝난 결제를
+     * "알림 INSERT가 실패했다"는 이유로 롤백하는 건 사용자에게 훨씬 나쁜 결과다 - 알림은 부가 기능이라
+     * 유실되더라도 거래 자체는 진행돼야 한다. 삼킨 실패는 추적할 수 있도록 log.error로 남긴다.
+     *
+     * <p><b>한계</b>: 알림 저장이 DB 예외로 실패하면 참여 중인 트랜잭션이 이미 rollback-only로 표시되므로,
+     * 이 try/catch로 잡아도 커밋 시점에 UnexpectedRollbackException으로 전체가 롤백된다
+     * (WatchlistTargetPriceNoticeProcessor 클래스 주석이 설명하는 그 문제와 같다). 여기서 실제로 막아주는
+     * 것은 트랜잭션을 더럽히지 않는 실패(문구 포맷팅, 이벤트 발행 경로 등)다. DB 실패까지 격리하려면 알림
+     * 생성을 REQUIRES_NEW인 별도 빈으로 빼야 하는데, 그러면 거래가 롤백돼도 알림만 남고 커밋 전에 SSE가
+     * 나가는 반대 문제가 생겨 이번 범위에서는 택하지 않았다.
+     */
+    private void notifyQuietly(String notificationType, Long tradeId, Runnable notification) {
+        try {
+            notification.run();
+        } catch (Exception e) {
+            log.error("거래 알림 생성에 실패해 건너뜁니다: type={}, tradeId={}", notificationType, tradeId, e);
+        }
     }
 
     // 결제창을 띄우기 전에 주문을 먼저 PENDING으로 기록한다 - 매물은 아직 잠그지 않는다(TRADING으로
@@ -201,6 +230,12 @@ public class TradeService {
 
         order.markConfirmed();
 
+        // #398: 판매자에게 발송 요청. 구매자는 방금 자기가 결제한 참이라 알림을 보내지 않는다.
+        // 판매자는 아무 행동도 하지 않았는데 발송 의무가 생기는 쪽이고, 발송하지 않으면 거래가 멈춘다.
+        notifyQuietly("TRADE_SHIPPING_REQUIRED", trade.getId(), () ->
+                notificationService.createTradeShippingRequiredNotification(
+                        listing.getSellerId(), listing.getCardId(), cardNameOf(listing.getCardId())));
+
         return toResponse(trade);
     }
 
@@ -244,6 +279,18 @@ public class TradeService {
                         .tossPaymentKey(tossPaymentKey)
                         .build()
         );
+
+        // #398: 즉시판매는 한 사건에서 서로 다른 두 사람이 각자 알아야 할 게 다르다.
+        //  - 판매자(listing.sellerId, 방금 즉시판매를 누른 사람): 이제 발송해야 한다.
+        //  - 입찰자(buyerId, 예전에 구매 입찰만 걸어둔 사람): 아무 행동도 안 했는데 체결됐다.
+        // 그래서 트리거를 구분하는 게 아니라 수신자별로 다른 타입의 알림을 각각 발행한다.
+        String cardName = cardNameOf(listing.getCardId());
+        notifyQuietly("TRADE_SHIPPING_REQUIRED", trade.getId(), () ->
+                notificationService.createTradeShippingRequiredNotification(
+                        listing.getSellerId(), listing.getCardId(), cardName));
+        notifyQuietly("BUY_OFFER_MATCHED", trade.getId(), () ->
+                notificationService.createBuyOfferMatchedNotification(
+                        buyerId, listing.getCardId(), cardName, price));
 
         return toResponse(trade);
     }
@@ -316,11 +363,13 @@ public class TradeService {
         // 잔액이 늘어나는 지점이라, 앱 안에 알림이 없으면 정산 사실을 알 방법이 없었다.
         // 카드명 조회가 추가 쿼리로 보이지만, 바로 아래 toResponse()가 같은 트랜잭션에서 같은 id를 다시
         // 조회하므로 둘 중 하나는 영속성 컨텍스트 1차 캐시에서 해결된다 - DB 왕복 횟수는 그대로다.
-        notificationService.createTradeConfirmedNotification(
-                listing.getSellerId(),
-                listing.getCardId(),
-                cardRepository.findById(listing.getCardId()).map(Card::getName).orElse("카드"),
-                trade.getPrice());
+        // #398: 나머지 거래 알림들과 같은 이유로 실패를 격리한다(notifyQuietly 주석 참고).
+        notifyQuietly("TRADE_CONFIRMED", trade.getId(), () ->
+                notificationService.createTradeConfirmedNotification(
+                        listing.getSellerId(),
+                        listing.getCardId(),
+                        cardNameOf(listing.getCardId()),
+                        trade.getPrice()));
 
         return toResponse(trade);
     }
@@ -370,6 +419,13 @@ public class TradeService {
 
         trade.markDelivered();
 
+        // #398: 구매자에게 구매확정 요청. 확정을 눌러야 에스크로가 풀려 판매자 정산이 이뤄지므로
+        // (confirmTrade), 구매자가 잊으면 거래가 이 상태로 멈춘다. 배송 처리를 한 관리자는 알림 대상이 아니다.
+        Listing deliveredListing = trade.getListing();
+        notifyQuietly("TRADE_DELIVERED", trade.getId(), () ->
+                notificationService.createTradeDeliveredNotification(
+                        trade.getBuyerId(), deliveredListing.getCardId(), cardNameOf(deliveredListing.getCardId())));
+
         return toResponse(trade);
     }
 
@@ -404,6 +460,18 @@ public class TradeService {
             pointService.refund(trade.getBuyerId(), payment.getPointsUsed(), trade.getId());
         }
         payment.refund();
+
+        // #398: 취소를 누른 당사자가 아니라 그 사실을 모르는 상대방에게만 보낸다. 같은 사건이라도
+        // 알아야 할 내용이 역할에 따라 달라서(구매자는 환불, 판매자는 매물이 다시 판매 중이 된 것)
+        // 수신자가 구매자인지로 문구를 가른다.
+        // 환불 호출(토스/포인트)이 전부 끝난 뒤에 보내, "환불된다"는 문구와 실제 처리 순서가 어긋나지 않게 한다.
+        Listing cancelledListing = trade.getListing();
+        boolean cancelledByBuyer = trade.getBuyerId().equals(userId);
+        Long recipientId = cancelledByBuyer ? cancelledListing.getSellerId() : trade.getBuyerId();
+        notifyQuietly("TRADE_CANCELLED", trade.getId(), () ->
+                notificationService.createTradeCancelledNotification(
+                        recipientId, cancelledListing.getCardId(), cardNameOf(cancelledListing.getCardId()),
+                        !cancelledByBuyer));
 
         return toResponse(trade);
     }

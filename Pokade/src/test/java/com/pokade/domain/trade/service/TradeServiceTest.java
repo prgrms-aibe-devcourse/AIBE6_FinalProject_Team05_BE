@@ -36,6 +36,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -689,5 +690,119 @@ class TradeServiceTest {
         TradeResponse response = tradeService.markDelivered(1L);
 
         assertThat(response.status()).isEqualTo(TradeStatus.DELIVERED);
+    }
+
+    // ===== #398: 거래 단계별 알림 =====
+    // 픽스처의 tradeOf(sellerId=100, buyerId=200) 규약을 그대로 따른다.
+    // 공통 원칙: "방금 행동한 사람"에게는 보내지 않는다. 단 발송 요청만은 예외로, 즉시판매처럼
+    // 판매자가 직접 행동한 경우에도 보낸다(며칠 뒤 알림함에서 다시 보는 것이 목적이라서).
+
+    @Test
+    void 즉시구매_결제가_승인되면_판매자에게만_발송요청_알림이_간다() {
+        Listing listing = tradeOf(100L, 200L).getListing();
+        TradeOrder order = pendingOrderOf(200L, 1L, 10000);
+        given(tradeOrderRepository.findByOrderId("order-1")).willReturn(Optional.of(order));
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        given(listingRepository.markAsTrading(any())).willReturn(1);
+        given(tradeRepository.save(any(Trade.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        tradeService.confirmPurchase(200L, "pay_123", "order-1", 10000);
+
+        verify(notificationService).createTradeShippingRequiredNotification(eq(100L), eq(1L), any());
+        // 구매자(200L)는 방금 자기가 결제한 참이라 알림 대상이 아니다.
+        verify(notificationService, never()).createBuyOfferMatchedNotification(any(), any(), any(), any());
+    }
+
+    @Test
+    void 즉시판매로_체결되면_판매자에게는_발송요청_입찰자에게는_체결_알림이_각각_간다() {
+        Listing listing = tradeOf(100L, 200L).getListing();
+        given(listingRepository.markAsTrading(1L)).willReturn(1);
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        given(tradeRepository.save(any(Trade.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        tradeService.createMatchedTrade(1L, 200L, 10000, 13000,
+                "김철수", "010-1234-5678", "서울시 강남구", "pay_123", 0);
+
+        // 한 사건에서 수신자가 다른 알림 2건이 나간다 - 트리거로 구분하는 게 아니라 수신자별로 타입이 다르다.
+        verify(notificationService).createTradeShippingRequiredNotification(eq(100L), eq(1L), any());
+        verify(notificationService).createBuyOfferMatchedNotification(eq(200L), eq(1L), any(), eq(10000));
+    }
+
+    @Test
+    void 관리자가_배송처리하면_구매자에게만_구매확정_요청_알림이_간다() {
+        Trade trade = tradeOf(100L, 200L);
+        trade.shipToPlatform();
+        trade.markInspected();
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        tradeService.markDelivered(1L);
+
+        verify(notificationService).createTradeDeliveredNotification(eq(200L), eq(1L), any());
+    }
+
+    @Test
+    void 구매자가_취소하면_판매자에게_판매자용_문구로_알림이_간다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+        given(paymentRepository.findByTradeId(any())).willReturn(Optional.of(paymentOf(trade, 200L)));
+
+        tradeService.cancelTrade(200L, 1L);
+
+        // 마지막 인자 false = 수신자가 구매자가 아님(판매자) → "매물이 다시 판매 중" 문구.
+        verify(notificationService).createTradeCancelledNotification(eq(100L), eq(1L), any(), eq(false));
+    }
+
+    @Test
+    void 판매자가_취소하면_구매자에게_구매자용_문구로_알림이_간다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+        given(paymentRepository.findByTradeId(any())).willReturn(Optional.of(paymentOf(trade, 200L)));
+
+        tradeService.cancelTrade(100L, 1L);
+
+        // 마지막 인자 true = 수신자가 구매자 → "환불됩니다" 문구.
+        verify(notificationService).createTradeCancelledNotification(eq(200L), eq(1L), any(), eq(true));
+    }
+
+    @Test
+    void 참여자가_아닌_사람이_취소를_시도하면_알림이_가지_않는다() {
+        Trade trade = tradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.cancelTrade(999L, 1L))
+                .isInstanceOf(BusinessException.class);
+
+        verify(notificationService, never()).createTradeCancelledNotification(any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void 배송완료_이후에는_취소가_막히고_알림도_가지_않는다() {
+        Trade trade = deliveredTradeOf(100L, 200L);
+        given(tradeRepository.findById(1L)).willReturn(Optional.of(trade));
+
+        assertThatThrownBy(() -> tradeService.cancelTrade(200L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_TRADE_STATUS);
+
+        verify(notificationService, never()).createTradeCancelledNotification(any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void 알림_생성이_실패해도_거래_처리는_그대로_완료된다() {
+        // 알림은 부가 기능이라, 이미 토스 승인이 끝난 결제를 알림 실패로 되돌리면 안 된다.
+        Listing listing = tradeOf(100L, 200L).getListing();
+        TradeOrder order = pendingOrderOf(200L, 1L, 10000);
+        given(tradeOrderRepository.findByOrderId("order-1")).willReturn(Optional.of(order));
+        given(listingRepository.findById(1L)).willReturn(Optional.of(listing));
+        given(listingRepository.markAsTrading(any())).willReturn(1);
+        given(tradeRepository.save(any(Trade.class))).willAnswer(invocation -> invocation.getArgument(0));
+        willThrow(new RuntimeException("알림 저장 실패"))
+                .given(notificationService).createTradeShippingRequiredNotification(any(), any(), any());
+
+        TradeResponse response = tradeService.confirmPurchase(200L, "pay_123", "order-1", 10000);
+
+        assertThat(response.status()).isEqualTo(TradeStatus.PENDING);
+        assertThat(order.getStatus()).isEqualTo(TradeOrderStatus.CONFIRMED);
+        verify(paymentRepository).save(any(Payment.class));
     }
 }

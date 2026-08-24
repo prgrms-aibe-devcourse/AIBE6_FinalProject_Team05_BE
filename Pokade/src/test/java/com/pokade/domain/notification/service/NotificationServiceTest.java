@@ -542,4 +542,87 @@ class NotificationServiceTest {
         Counter counter = meterRegistry.find(metricName).counter();
         return counter == null ? 0.0 : counter.count();
     }
+
+    // ===== #398: 거래 단계 알림 4종 =====
+    // 넷 다 "저장 + 커밋 이후 푸시용 이벤트 발행"이고, 커밋 전에 Emitter로 직접 쏘지 않아야 한다.
+
+    private Notification captureSaved() {
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        then(notificationRepository).should().save(captor.capture());
+        return captor.getValue();
+    }
+
+    private NotificationPushEvent captureEvent() {
+        ArgumentCaptor<NotificationPushEvent> captor = ArgumentCaptor.forClass(NotificationPushEvent.class);
+        then(eventPublisher).should().publishEvent(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    @DisplayName("발송 요청 알림: TRADE_SHIPPING_REQUIRED 타입으로 판매자에게 저장하고 cardId를 채운다")
+    void createTradeShippingRequiredNotification_savesAndPublishes() {
+        notificationService.createTradeShippingRequiredNotification(100L, 55L, "리자몽 ex");
+
+        Notification saved = captureSaved();
+        assertThat(saved.getUserId()).isEqualTo(100L);
+        assertThat(saved.getType()).isEqualTo(NotificationType.TRADE_SHIPPING_REQUIRED);
+        assertThat(saved.getCardId()).isEqualTo(55L);
+        assertThat(saved.getMessage()).contains("리자몽 ex").contains("발송");
+
+        assertThat(captureEvent().userId()).isEqualTo(100L);
+        then(sseEmitterStore).should(never()).findByUserId(any());
+    }
+
+    @Test
+    @DisplayName("배송 완료 알림: TRADE_DELIVERED 타입으로 구매자에게 저장한다")
+    void createTradeDeliveredNotification_savesAndPublishes() {
+        notificationService.createTradeDeliveredNotification(200L, 55L, "리자몽 ex");
+
+        Notification saved = captureSaved();
+        assertThat(saved.getUserId()).isEqualTo(200L);
+        assertThat(saved.getType()).isEqualTo(NotificationType.TRADE_DELIVERED);
+        assertThat(saved.getCardId()).isEqualTo(55L);
+        assertThat(saved.getMessage()).contains("구매확정");
+
+        assertThat(captureEvent().userId()).isEqualTo(200L);
+        then(sseEmitterStore).should(never()).findByUserId(any());
+    }
+
+    @Test
+    @DisplayName("취소 알림: 수신자가 구매자면 환불 문구를, 판매자면 매물 복귀 문구를 쓴다")
+    void createTradeCancelledNotification_messageDependsOnRecipientRole() {
+        notificationService.createTradeCancelledNotification(200L, 55L, "리자몽 ex", true);
+
+        Notification toBuyer = captureSaved();
+        assertThat(toBuyer.getType()).isEqualTo(NotificationType.TRADE_CANCELLED);
+        // "환불되었습니다"가 아니라 진행형 - 토스 취소는 실제 환급까지 시차가 있다.
+        assertThat(toBuyer.getMessage()).contains("환불됩니다");
+        assertThat(toBuyer.getMessage()).doesNotContain("판매 중");
+    }
+
+    @Test
+    @DisplayName("취소 알림: 판매자 수신 시에는 매물이 다시 판매 중이 됐다는 문구가 나간다")
+    void createTradeCancelledNotification_toSeller() {
+        notificationService.createTradeCancelledNotification(100L, 55L, "리자몽 ex", false);
+
+        Notification toSeller = captureSaved();
+        assertThat(toSeller.getUserId()).isEqualTo(100L);
+        assertThat(toSeller.getMessage()).contains("판매 중");
+        assertThat(toSeller.getMessage()).doesNotContain("환불");
+    }
+
+    @Test
+    @DisplayName("입찰 체결 알림: BUY_OFFER_MATCHED 타입으로 입찰자에게 저장하고 체결가를 문구에 넣는다")
+    void createBuyOfferMatchedNotification_savesAndPublishes() {
+        notificationService.createBuyOfferMatchedNotification(200L, 55L, "리자몽 ex", 150000);
+
+        Notification saved = captureSaved();
+        assertThat(saved.getUserId()).isEqualTo(200L);
+        assertThat(saved.getType()).isEqualTo(NotificationType.BUY_OFFER_MATCHED);
+        assertThat(saved.getCardId()).isEqualTo(55L);
+        assertThat(saved.getMessage()).contains("150,000");
+
+        assertThat(captureEvent().userId()).isEqualTo(200L);
+        then(sseEmitterStore).should(never()).findByUserId(any());
+    }
 }

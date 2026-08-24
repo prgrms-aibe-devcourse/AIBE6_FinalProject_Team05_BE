@@ -169,4 +169,45 @@ class ListingStaleNoticeServiceTest {
 
         verify(notificationService, never()).createListingStaleNotification(any(), any(), any());
     }
+
+    // #398 회귀 방지: #392에서 인앱 알림 호출을 메일 try '밖'에 두는 바람에, 알림 생성이 실패하면
+    // 예외가 for 루프를 뚫고 @Transactional인 sendStaleNotices() 밖으로 전파돼 배치 전체가 롤백됐다.
+    // 아래 두 테스트가 "한 건이 실패해도 나머지는 계속 처리된다"는 원래 성질을 채널별로 고정한다.
+    @Test
+    void 인앱_알림_생성이_실패해도_같은_매물의_메일은_발송된다() {
+        Listing listing = listingOf(1L);
+        User seller = User.createLocalUser("seller@test.com", "hashed", "seller");
+
+        given(listingRepository.findByStatusAndStaleNoticeSentFalseAndCreatedAtBefore(any(), any()))
+                .willReturn(List.of(listing));
+        given(userRepository.findById(1L)).willReturn(Optional.of(seller));
+        doThrow(new RuntimeException("알림 저장 실패"))
+                .when(notificationService).createListingStaleNotification(any(), any(), any());
+
+        listingStaleNoticeService.sendStaleNotices();
+
+        verify(mailSender).send(eq("seller@test.com"), anyString(), anyString());
+        assertThat(listing.isStaleNoticeSent()).isTrue();
+    }
+
+    @Test
+    void 인앱_알림_생성이_실패해도_나머지_매물은_계속_처리된다() {
+        Listing failing = listingOf(1L);
+        Listing succeeding = listingOf(2L);
+        User seller1 = User.createLocalUser("seller1@test.com", "hashed", "seller1");
+        User seller2 = User.createLocalUser("seller2@test.com", "hashed", "seller2");
+
+        given(listingRepository.findByStatusAndStaleNoticeSentFalseAndCreatedAtBefore(any(), any()))
+                .willReturn(List.of(failing, succeeding));
+        given(userRepository.findById(1L)).willReturn(Optional.of(seller1));
+        given(userRepository.findById(2L)).willReturn(Optional.of(seller2));
+        doThrow(new RuntimeException("알림 저장 실패"))
+                .when(notificationService).createListingStaleNotification(eq(1L), any(), any());
+
+        listingStaleNoticeService.sendStaleNotices();
+
+        // 예외가 배치 밖으로 전파됐다면 두 번째 매물은 아예 처리되지 않는다.
+        verify(mailSender).send(eq("seller2@test.com"), anyString(), anyString());
+        assertThat(succeeding.isStaleNoticeSent()).isTrue();
+    }
 }

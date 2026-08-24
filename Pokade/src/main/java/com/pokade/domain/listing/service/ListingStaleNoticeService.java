@@ -43,13 +43,19 @@ public class ListingStaleNoticeService {
     }
 
     private void notify(Listing listing, User seller) {
-        // #392: 인앱 알림은 메일 try 밖에서 먼저 만든다. 같은 try 안에 넣으면 메일 서버가 죽었을 때
-        // 인앱 알림까지 함께 유실돼, "메일이 안 가면 앱에도 안 뜬다"는 기존 문제가 그대로 남는다.
-        // markStaleNoticeSent() 플래그는 여전히 메일 성공에만 걸리므로(아래), 메일만 실패한 매물은
-        // 다음 배치에서 다시 대상이 되고 인앱 알림이 한 번 더 생길 수 있다 - 플래그가 채널별로
-        // 나뉘어 있지 않은 데서 오는 한계이고, 이번 범위에서는 감수한다.
-        notificationService.createListingStaleNotification(
-                listing.getSellerId(), listing.getCardId(), listing.getId());
+        // #392: 인앱 알림과 이메일은 서로 독립이라 각자의 try로 감싼다. 한 채널이 죽었다고 다른 채널까지
+        // 유실되면 "메일이 안 가면 앱에도 안 뜬다"는 원래 문제가 그대로 남는다.
+        //
+        // #398: 두 호출을 모두 try로 감싸는 이유(회귀 수정) - #392에서 인앱 알림을 try '밖'에 두는 바람에,
+        // 알림 생성이 실패하면 예외가 이 메서드와 for 루프를 뚫고 @Transactional인 sendStaleNotices() 밖으로
+        // 전파됐다. 그러면 앞서 처리된 매물들의 markStaleNoticeSent() 플래그와 이미 만든 알림까지 전부
+        // 롤백돼, 배치가 매물 단위로 격리돼 있던 성질(아래 catch가 원래 보장하던 것)이 깨진다.
+        try {
+            notificationService.createListingStaleNotification(
+                    listing.getSellerId(), listing.getCardId(), listing.getId());
+        } catch (Exception e) {
+            log.warn("미체결 매물 인앱 알림 생성 실패: listingId={}, sellerId={}", listing.getId(), seller.getId(), e);
+        }
         try {
             mailSender.send(
                     seller.getEmail(),
