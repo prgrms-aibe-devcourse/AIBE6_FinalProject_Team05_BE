@@ -18,7 +18,9 @@ import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import com.pokade.global.web.PageableValidator;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.data.domain.Page;
@@ -36,7 +38,6 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ChatService {
 
     private static final int MAX_PAGE_SIZE = 100;
@@ -145,6 +146,47 @@ public class ChatService {
     private final ChatRateLimitStore chatRateLimitStore;
     private final PlatformTransactionManager transactionManager;
 
+    // RED(Rate/Error/Duration) 계측. sessionId/message 같은 무한 카디널리티 값은 태그로 넣지 않는다 -
+    // status(성공/실패)처럼 값의 종류가 유한한 것만 태그로 쓴다.
+    private final Counter chatCallSuccessCounter;
+    private final Counter chatCallErrorCounter;
+    private final Timer chatLlmDurationTimer;
+    // 시세 질문에 tool 호출 없이 답변한 횟수 - 성능/에러가 아니라 환각(hallucination) 위험도를 보여주는
+    // 품질 지표. 값이 높아지면 프롬프트/tool 설계를 점검해야 한다는 신호.
+    private final Counter chatGroundingFailCounter;
+
+    public ChatService(ChatClient chatClient,
+                        PriceChatTools priceChatTools,
+                        PriceService priceService,
+                        ChatMessageRepository chatMessageRepository,
+                        ChatImportIdempotencyStore chatImportIdempotencyStore,
+                        ChatRateLimitStore chatRateLimitStore,
+                        PlatformTransactionManager transactionManager,
+                        MeterRegistry meterRegistry) {
+        this.chatClient = chatClient;
+        this.priceChatTools = priceChatTools;
+        this.priceService = priceService;
+        this.chatMessageRepository = chatMessageRepository;
+        this.chatImportIdempotencyStore = chatImportIdempotencyStore;
+        this.chatRateLimitStore = chatRateLimitStore;
+        this.transactionManager = transactionManager;
+
+        this.chatCallSuccessCounter = Counter.builder("chat.llm.calls")
+                .tag("status", "success")
+                .description("챗봇 LLM 호출 횟수(성공) - 호출당 과금이라 비용 추적도 겸한다")
+                .register(meterRegistry);
+        this.chatCallErrorCounter = Counter.builder("chat.llm.calls")
+                .tag("status", "error")
+                .description("챗봇 LLM 호출 횟수(실패)")
+                .register(meterRegistry);
+        this.chatLlmDurationTimer = Timer.builder("chat.llm.duration")
+                .description("챗봇 LLM 응답 시간")
+                .register(meterRegistry);
+        this.chatGroundingFailCounter = Counter.builder("chat.llm.grounding_fail")
+                .description("시세 질문에 tool 호출 없이 답변한 횟수 - 높으면 환각 위험 신호")
+                .register(meterRegistry);
+    }
+
     // 클래스/메서드 레벨 @Transactional을 걸지 않는다 - LLM 호출(수 초 이상 걸릴 수 있는 외부 I/O)이 이 메서드
     // 안에 있는데, 트랜잭션으로 감싸면 그 시간 내내 DB 커넥션을 점유해 동시 요청이 몰릴 때 커넥션 풀이
     // 고갈될 수 있다. saveMessage()의 저장은 각각 JpaRepository.save() 호출 자체가 트랜잭션이라 별도
@@ -196,19 +238,22 @@ public class ChatService {
         String answer;
         PriceChatTools.resetInvocationTracking();
         try {
-            answer = chatClient.prompt()
+            answer = chatLlmDurationTimer.recordCallable(() -> chatClient.prompt()
                     .system(SYSTEM_PROMPT)
                     .user(message)
                     .tools(priceChatTools)
                     .call()
-                    .content();
+                    .content());
+            chatCallSuccessCounter.increment();
         } catch (Exception e) {
+            chatCallErrorCounter.increment();
             log.error("챗봇 LLM 호출 실패, 이력 미저장: sessionId={}", sessionId, e);
             throw new ChatServiceUnavailableException("챗봇 응답 생성 중 오류가 발생했습니다.");
         }
 
         // 시세 질문인데 tool을 한 번도 호출하지 않았다면 근거 없는(환각) 답변일 가능성이 높아 안전한 문구로 대체한다.
         if (looksLikePriceQuestion && !PriceChatTools.wasPriceToolInvoked()) {
+            chatGroundingFailCounter.increment();
             log.warn("챗봇 그라운딩 검증 실패 - 시세 질문에 tool 호출 없이 답변함: sessionId={}", sessionId);
             answer = UNGROUNDED_FALLBACK_MESSAGE;
         }

@@ -130,27 +130,32 @@ public class AuthService {
 
     public TokenPair reissue(String refreshToken) {
         if (!jwtTokenProvider.isValid(refreshToken)) {
+            countReissue("invalid");
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         Long userId = jwtTokenProvider.getUserId(refreshToken);
         String sid = jwtTokenProvider.getSessionId(refreshToken);
         if (sid == null) {
+            countReissue("invalid");
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         if (!refreshTokenStore.exists(userId, sid)) { // 그 세션 키 없음 -> 로그아웃/만료
+            countReissue("invalid");
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> {
                     refreshTokenStore.deleteAll(userId);
+                    countReissue("invalid");
                     return new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
                 });
 
         if (user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.WITHDRAWAL_PENDING) {
             refreshTokenStore.deleteAll(userId); // 정지·삭제 = 계정 전체 세션 차단
+            countReissue("invalid");
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
