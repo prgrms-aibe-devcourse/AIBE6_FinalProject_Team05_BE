@@ -36,17 +36,36 @@ public class SseEmitterStore {
                 m -> m.values().stream().mapToInt(List::size).sum());
     }
 
+    // #386: computeIfAbsent(...).add(emitter)가 아니라 compute()를 쓰는 이유 - 전자는 "리스트 획득"만
+    // 원자적이고 실제 add는 맵 잠금 밖에서 일어난다. 그 사이 remove()가 마지막 Emitter를 지워 맵 엔트리를
+    // 삭제하면(아래 참고) 새 Emitter는 맵에서 떨어진 리스트에 담겨 findByUserId/findAll에 영원히 안 잡힌다 -
+    // 알림도 하트비트도 못 받는 유령 연결이 된다(새로고침으로 기존 연결이 끊기며 새 연결이 열릴 때 발생).
+    // compute()의 remapping 함수는 해당 bin 잠금 안에서 실행되므로 "리스트 생성 → 추가 → 맵 반영"이 한
+    // 덩어리가 되고, remove()와 어느 순서로 겹쳐도 결과가 안전하다:
+    //   remove가 먼저 → 엔트리 삭제 → 여기서 list==null을 보고 새 리스트를 만들어 넣는다
+    //   save가 먼저   → 리스트 크기 1 → remove가 자기 것만 빼도 비지 않아 엔트리가 유지된다
+    // 반환값(항상 non-null)을 그대로 로깅에 쓴다 - 예전의 emitters.get(userId).size()는 같은 경합에서
+    // null.size() NPE로 subscribe 자체를 500으로 만들었다.
     public void save(Long userId, SseEmitter emitter) {
-        emitters.computeIfAbsent(userId, key -> new CopyOnWriteArrayList<>()).add(emitter);
-        log.info("[SSE] Emitter 등록 userId={}, 현재 연결 수={}", userId, emitters.get(userId).size());
+        List<SseEmitter> current = emitters.compute(userId, (key, list) -> {
+            List<SseEmitter> target = list != null ? list : new CopyOnWriteArrayList<>();
+            target.add(emitter);
+            return target;
+        });
+        log.info("[SSE] Emitter 등록 userId={}, 현재 연결 수={}", userId, current.size());
     }
 
+    // 리스트가 비면 null을 반환해 맵 엔트리까지 지운다 - 유저가 전부 접속을 끊었는데 빈 리스트만 남아
+    // 맵이 무한히 커지는 것을 막는다.
+    // computeIfPresent의 반환값을 그대로 쓴다(엔트리가 지워졌으면 null) - 예전엔 findByUserId()로 다시
+    // 조회해 크기를 찍었는데, 그 재조회 자체가 두 번째 경합 창이었다(그 사이 다른 탭이 등록하면 로그가
+    // 방금 제거한 결과와 다른 수를 찍는다).
     public void remove(Long userId, SseEmitter emitter) {
-        emitters.computeIfPresent(userId, (key, list) -> {
+        List<SseEmitter> remaining = emitters.computeIfPresent(userId, (key, list) -> {
             list.remove(emitter);
             return list.isEmpty() ? null : list;
         });
-        log.info("[SSE] Emitter 제거 userId={}, 남은 연결 수={}", userId, findByUserId(userId).size());
+        log.info("[SSE] Emitter 제거 userId={}, 남은 연결 수={}", userId, remaining == null ? 0 : remaining.size());
     }
 
     public List<SseEmitter> findByUserId(Long userId) {

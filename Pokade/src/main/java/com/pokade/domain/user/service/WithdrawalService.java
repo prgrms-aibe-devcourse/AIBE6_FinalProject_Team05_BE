@@ -47,10 +47,7 @@ public class WithdrawalService {
 
     private static final String CONFIRM_METRIC = "user.withdrawal.confirm";
     private static final String LAST_SUCCESS_METRIC = "user.withdrawal.confirm.last.success";
-    private static final String REAUTH_PURPOSE = "withdrawal_reauth";
-    private static final String CLAIM_PURPOSE = "purpose";
-    private static final String CLAIM_EMAIL = "email";
-    private static final String CLAIM_PROVIDER = "provider";
+
 
     private final AtomicLong lastSuccessEpochSecond = new AtomicLong(0);
 
