@@ -219,7 +219,7 @@ public class PortfolioService {
 
         return new PortfolioItemPnlResponse(
                 item.getId(), item.getCardId(), item.getQuantity(), item.getAcquiredPrice(),
-                price.getMarket(), price.getCurrency(), pnlAmount, pnlRate);
+                marketInKrw, KRW, pnlAmount, pnlRate);
     }
 
     // FR-PORT-06: 세트별·레어도별 구성 비율을 계산한다. 시세 유무와 무관하게 항상 계산 가능하도록
