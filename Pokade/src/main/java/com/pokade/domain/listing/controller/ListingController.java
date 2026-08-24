@@ -3,6 +3,7 @@ package com.pokade.domain.listing.controller;
 import com.pokade.domain.listing.dto.ListingCreateRequest;
 import com.pokade.domain.listing.dto.ListingResponse;
 import com.pokade.domain.listing.dto.ListingSummaryResponse;
+import com.pokade.domain.listing.dto.MyListingResponse;
 import com.pokade.domain.listing.dto.OrderbookEntryResponse;
 import com.pokade.global.response.ApiResponse;
 import com.pokade.domain.listing.dto.ListingUpdateRequest;
@@ -78,6 +79,18 @@ public class ListingController {
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         return ApiResponse.ok(listingService.getMyListings(sellerId, status, pageable));
+    }
+
+    @Operation(
+            summary = "내 매물 주문서 상세 조회",
+            description = "마이페이지 '입찰' 목록(판매 등록 탭)에서 항목을 클릭했을 때 보여주는 주문서 상세입니다. 본인 것이 아니면 403을 반환합니다."
+    )
+    @GetMapping("/{id}")
+    public ApiResponse<MyListingResponse> getMyListing(
+            @AuthenticationPrincipal Long sellerId,
+            @Parameter(description = "매물 ID") @PathVariable Long id
+    ) {
+        return ApiResponse.ok(listingService.getMyListing(sellerId, id));
     }
 
     @Operation(summary = "매물 가격 수정", description = "판매자 본인의 매물 가격을 수정합니다. 판매 중(ACTIVE) 상태가 아니면 실패합니다.")

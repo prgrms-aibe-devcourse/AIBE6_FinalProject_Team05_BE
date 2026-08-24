@@ -130,4 +130,15 @@ public class BuyOffer {
         }
         this.status = "MATCHED";
     }
+
+    // 마이페이지 "입찰" 주문서에서 받는사람 정보를 고친다 - 체결(즉시판매) 시점에 이 값이 그대로
+    // Trade로 복사되므로, 이미 체결된 뒤에는 고쳐도 실제 배송에 반영되지 않아 막는다.
+    public void updateRecipient(String recipientName, String recipientPhone, String recipientAddress) {
+        if (!"ACTIVE".equals(this.status)) {
+            throw new BusinessException(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
+        }
+        this.recipientName = recipientName;
+        this.recipientPhone = recipientPhone;
+        this.recipientAddress = recipientAddress;
+    }
 }

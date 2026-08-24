@@ -5,17 +5,27 @@ import com.pokade.domain.price.dto.BuyOfferPaymentConfirmRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyRequest;
 import com.pokade.domain.price.dto.BuyOfferReadyResponse;
 import com.pokade.domain.price.dto.BuyOfferResponse;
+import com.pokade.domain.price.dto.MyBuyOfferResponse;
+import com.pokade.domain.price.dto.BuyOfferRecipientUpdateRequest;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 // 조회(GET /api/prices/{cardId}/buy-offers)는 카드 단위 리소스라 PriceController에 있지만,
@@ -68,5 +78,45 @@ public class BuyOfferController {
             @Valid @RequestBody BuyOfferFulfillRequest request
     ) {
         return ApiResponse.ok("즉시판매가 체결되었습니다.", priceService.fulfillBuyOffer(buyOfferId, sellerId, request));
+    }
+
+    @Operation(
+            summary = "내 구매입찰 목록 조회",
+            description = "로그인한 사용자가 buyer로 등록한 구매입찰 목록을 상태별로 페이징 조회합니다."
+    )
+    @GetMapping("/me")
+    public ApiResponse<Page<MyBuyOfferResponse>> getMyBuyOffers(
+            @AuthenticationPrincipal Long buyerId,
+            @Parameter(description = "구매입찰 상태 필터 (선택, ACTIVE/MATCHED/PARTIAL/EXPIRED/CANCELLED)")
+            @RequestParam(required = false) String status,
+            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return ApiResponse.ok(priceService.getMyBuyOffers(buyerId, status, pageable));
+    }
+
+    @Operation(
+            summary = "내 구매입찰 주문서 상세 조회",
+            description = "마이페이지 '입찰' 목록에서 항목을 클릭했을 때 보여주는 주문서 상세입니다. 본인 것이 아니면 403을 반환합니다."
+    )
+    @GetMapping("/{buyOfferId}")
+    public ApiResponse<MyBuyOfferResponse> getMyBuyOffer(
+            @AuthenticationPrincipal Long buyerId,
+            @PathVariable Long buyOfferId
+    ) {
+        return ApiResponse.ok(priceService.getMyBuyOffer(buyOfferId, buyerId));
+    }
+
+    @Operation(
+            summary = "구매입찰 받는사람 정보 수정",
+            description = "결제 완료된 구매입찰의 받는사람 정보를 수정합니다. ACTIVE 상태가 아니면(이미 체결/만료) 실패합니다."
+    )
+    @PatchMapping("/{buyOfferId}")
+    public ApiResponse<MyBuyOfferResponse> updateRecipient(
+            @AuthenticationPrincipal Long buyerId,
+            @PathVariable Long buyOfferId,
+            @Valid @RequestBody BuyOfferRecipientUpdateRequest request
+    ) {
+        return ApiResponse.ok(
+                "받는사람 정보가 수정되었습니다.", priceService.updateBuyOfferRecipient(buyOfferId, buyerId, request));
     }
 }
