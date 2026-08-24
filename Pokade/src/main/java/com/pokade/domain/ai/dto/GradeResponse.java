@@ -13,6 +13,9 @@ import java.util.Map;
  * imageUrls: PhotoType.name() → presigned URL (10분 유효).
  *            이력 목록(GET /api/ai/grade/history)에서는 null — 목록에서 이미지 로딩은 과도한 S3 호출을 유발한다.
  * remainingPoints: 포인트 차감 후 잔여 포인트. 무료 요청이거나 이력 목록에서는 null.
+ * cached: 이번 요청이 동일 이미지 캐시로 재사용된 결과인지. true면 isFree/pointUsed는 "이번" 진단이
+ *         아니라 원본 진단 때 값이 그대로 노출되는 것뿐이고 이번엔 아무 과금도 없었다는 뜻이다 - FE는
+ *         이 플래그로 "이전과 동일한 진단 결과입니다" 같은 안내를 pointUsed와 구분해서 보여줘야 한다.
  */
 public record GradeResponse(
         Long gradeResultId,
@@ -40,13 +43,20 @@ public record GradeResponse(
         // 이력 목록에서는 null.
         Map<String, String> imageUrls,
         // 포인트 차감 후 잔여 포인트. 무료 요청이거나 이력 목록에서는 null.
-        Integer remainingPoints
+        Integer remainingPoints,
+        // 동일 이미지 캐시로 재사용된 결과인지 (위 클래스 주석 참고)
+        boolean cached
 ) {
     private static final String LEGAL_NOTICE =
             "본 결과는 AI 기반 참고용 예비진단이며, 정식 카드 감정을 대체하지 않습니다.";
 
     public static GradeResponse from(GradeResult result, Card card,
                                       Map<String, String> imageUrls, Integer remainingPoints) {
+        return from(result, card, imageUrls, remainingPoints, false);
+    }
+
+    public static GradeResponse from(GradeResult result, Card card, Map<String, String> imageUrls,
+                                      Integer remainingPoints, boolean cached) {
         return new GradeResponse(
                 result.getId(),
                 result.getStatus().name(),
@@ -66,7 +76,8 @@ public record GradeResponse(
                 card != null ? card.getImageSmall() : null,
                 result.getVisionConfidence(),
                 imageUrls,
-                remainingPoints
+                remainingPoints,
+                cached
         );
     }
 }

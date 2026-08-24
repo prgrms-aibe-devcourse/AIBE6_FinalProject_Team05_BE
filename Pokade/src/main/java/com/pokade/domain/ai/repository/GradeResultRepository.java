@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 public interface GradeResultRepository extends JpaRepository<GradeResult, Long> {
 
     // 진단 이력 조회: 본인 이력만 페이징 조회
@@ -17,6 +19,11 @@ public interface GradeResultRepository extends JpaRepository<GradeResult, Long> 
 
     // 무료 사용 횟수: 정상 산출(SUCCESS) 건만 카운트
     long countByUserIdAndStatus(Long userId, GradeStatus status);
+
+    // 같은 이미지(해시 일치)로 이미 성공한 진단이 있으면 재사용 — Vision 재호출 없이 동일 결과를 반환해
+    // 등급 비일관성(같은 카드인데 S/A 왔다갔다)을 막고 비용도 아낀다.
+    Optional<GradeResult> findFirstByUserIdAndImageHashAndStatusOrderByCreatedAtDesc(
+            Long userId, String imageHash, GradeStatus status);
 
     // 재업로드 권한을 원자적으로 획득: 조건 확인 + retryUsed=true 마킹을 단일 UPDATE로 처리.
     // 반환값이 1이면 클레임 성공(무료 재시도 허용), 0이면 이미 사용됐거나 조건 불일치.
