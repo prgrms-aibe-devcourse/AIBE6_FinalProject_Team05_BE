@@ -30,7 +30,7 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
 
 ## 현재 지표 인벤토리
 
-SLO 버킷이 붙는 타이머는 `MetricsConfig`가 이름으로 지정한 6개뿐이다. 나머지는 Counter/Gauge이거나
+SLO 버킷이 붙는 타이머는 `MetricsConfig`가 이름으로 지정한 7개뿐이다. 나머지는 Counter/Gauge이거나
 버킷 대상이 아니다.
 
 | 지표 | 종류 | SLO 버킷 | 소비처 |

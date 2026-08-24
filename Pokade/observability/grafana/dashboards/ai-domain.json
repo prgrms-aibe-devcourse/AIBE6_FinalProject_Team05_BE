@@ -92,7 +92,7 @@
       "id": 5,
       "type": "timeseries",
       "title": "동일 이미지 캐시 히트 (ai.grade.cache.hits)",
-      "description": "#358 - 같은 사진(해시+모델 일치)으로 재요청해 Vision 호출을 생략하고 캐시된 결과를 무료로 반환한 횟수. 값이 클수록 중복 재제출로 인한 비용/비일관성을 그만큼 막아준 것.",
+      "description": "#358 - 같은 사진(이미지 해시 일치)으로 재요청해 Vision 호출을 생략하고 캐시된 결과를 무료로 반환한 횟수. 값이 클수록 중복 재제출로 인한 비용/비일관성을 그만큼 막아준 것.",
       "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },

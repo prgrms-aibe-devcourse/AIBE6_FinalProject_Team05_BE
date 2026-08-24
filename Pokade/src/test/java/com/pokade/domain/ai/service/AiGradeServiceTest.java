@@ -26,6 +26,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import com.pokade.domain.ai.dto.GradeRequest;
 import com.pokade.domain.ai.dto.GradeResponse;
@@ -58,6 +59,9 @@ class AiGradeServiceTest {
 
     @Mock
     private CardRepository cardRepository;
+
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     // @Mock MeterRegistry는 counter()/timer() 등이 null을 돌려줘 생성자에서 NPE가 난다 - 반드시 @Spy +
     // 실제 SimpleMeterRegistry를 써야 한다(docs/monitoring.md 참고).
