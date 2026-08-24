@@ -186,4 +186,54 @@ class AuthControllerTest {
 
         then(authService).should().signup(any());
     }
+
+    private static String signupBodyWithNickname(String nickname) {
+        return """
+                {"email":"user@pokade.com","password":"pokade1234","nickname":"%s",
+                 "termsOfService":true,"privacyPolicy":true,"thirdPartySharing":true,"marketing":false}
+                """.formatted(nickname);
+    }
+
+    @Test
+    @DisplayName("닉네임에 공백이 섞이면 400을 반환하고 가입 서비스를 호출하지 않는다")
+    void signup_nicknameWithWhitespace() {
+        // 닉네임 중복 검사는 입력을 원문 그대로 비교하므로, 공백이 통과하면
+        // "홍길동"과 "홍 길동"이 서로 다른 계정으로 공존해 UNIQUE 제약이 무의미해진다.
+        String[] nicknames = {
+                "홍 길동",   // 중간 공백
+                " 홍길동",   // 앞 공백
+                "홍길동 ",   // 뒤 공백
+                "홍\\t길동", // 탭
+                "  ",       // 전부 공백
+        };
+
+        for (String nickname : nicknames) {
+            mockMvcTester.post()
+                    .uri("/api/auth/signup")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(signupBodyWithNickname(nickname))
+                    .assertThat()
+                    .hasStatus(HttpStatus.BAD_REQUEST);
+        }
+
+        then(authService).should(never()).signup(any());
+    }
+
+    @Test
+    @DisplayName("소셜 회원가입도 닉네임 공백을 거부한다")
+    void oauth2Register_nicknameWithWhitespace() {
+        String body = """
+                {"ticket":"signup-ticket","nickname":"홍 길동",
+                 "termsOfService":true,"privacyPolicy":true,"thirdPartySharing":true,"marketing":false}
+                """;
+
+        mockMvcTester.post()
+                .uri("/api/auth/oauth2/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)
+                .assertThat()
+                .hasStatus(HttpStatus.BAD_REQUEST);
+
+        then(oauth2LoginService).should(never()).register(any());
+    }
 }
