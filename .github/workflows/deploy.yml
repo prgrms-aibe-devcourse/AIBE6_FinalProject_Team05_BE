@@ -30,8 +30,8 @@ jobs:
   cleanup-old-images:
     needs: build-and-push
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
+    # GHCR_PAT(개인 액세스 토큰)로만 인증하고 GITHUB_TOKEN은 쓰지 않으므로 권한 불필요.
+    permissions: {}
     steps:
       # :latest 태그 하나만 쓰다 보니 push할 때마다 새 다이제스트가 쌓이고 이전 것은
       # 태그 없이(untagged) 남아 GHCR 저장 용량을 계속 먹는다. 최신 4개만 남기고 정리.
@@ -45,6 +45,8 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    # SSH 시크릿(SSH_HOST/SSH_USER/SSH_KEY)만 쓰고 GITHUB_TOKEN은 쓰지 않으므로 권한 불필요.
+    permissions: {}
     steps:
       # blue-green 배포. 두 슬롯(a/b)을 번갈아 쓰고, 새 슬롯이 헬스체크를 통과한 뒤에만
       # nginx 업스트림을 전환하고 이전 슬롯을 내린다 — 컨테이너 교체 사이의 다운타임(약
@@ -80,6 +82,7 @@ jobs:
               -e TZ=Asia/Seoul \
               -e OPENAI_API_KEY="$OPENAI_API_KEY" \
               -e REDIS_HOST=pokade-redis \
+              -e MANAGEMENT_ADDRESS=0.0.0.0 \
               "$IMAGE"
 
             HEALTHY=false

@@ -1,0 +1,59 @@
+# EC2 프로덕션용 Prometheus/Grafana 오버레이.
+# docker-compose.observability.yml(로컬 실험용)과 달리, 백엔드가 이미 host.docker.internal이 아니라
+# 같은 도커 네트워크(pokade_pokade-net) 위 컨테이너(pokade-app-a/b)로 떠 있다는 걸 전제로 한다.
+# 그 네트워크는 docker-compose.yml(redis 서비스) 또는 배포 스크립트가 이미 만들어 두므로 여기서는
+# external로 참조만 한다.
+#
+# EC2에서 실행:
+#   docker compose -f docker-compose.observability.prod.yml up -d
+#
+# 필요한 준비물:
+#   - ~/AIBE6_FinalProject_Team05_BE/Pokade/.env 에 GRAFANA_ADMIN_PASSWORD=<값> 한 줄 추가
+#     (docker compose가 같은 디렉터리의 .env를 자동으로 읽어 변수 치환에 쓴다)
+#   - .github/workflows/deploy.yml의 docker run에 -e MANAGEMENT_ADDRESS=0.0.0.0 이 추가돼 있어야
+#     Prometheus 컨테이너가 백엔드 컨테이너의 8081(actuator)에 도달할 수 있다.
+#   - 보안그룹 인바운드: 9090은 열지 않음(팀원이 볼 필요 없음). 3001(Grafana)도 인터넷 전체(0.0.0.0/0)로
+#     열지 말고, Tailscale 등으로 팀원 접근을 제한한다 - Tailscale을 EC2에 설치해두면 SG에 3001을 아예
+#     추가하지 않아도 tailnet 너머에서는 접근 가능하다.
+services:
+  prometheus:
+    # latest 대신 버전+digest로 고정 — 같은 파일을 다시 실행해도 항상 같은 이미지가 뜨도록 함
+    image: prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+    container_name: pokade-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./observability/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - pokade-net
+
+  grafana:
+    # latest 대신 버전+digest로 고정 — 같은 파일을 다시 실행해도 항상 같은 이미지가 뜨도록 함
+    image: grafana/grafana:13.2.0@sha256:3fd54ae1214669f8355f065ec9f6445d5279a3d77095ab048ca045685272429b
+    container_name: pokade-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      # 0.0.0.0 바인딩이지만 보안그룹에 3001 인바운드 규칙을 추가하지 않으면 퍼블릭 인터넷에서는
+      # 여전히 도달 불가 - Tailscale(또는 VPN) 경유 접근만 허용하는 전제.
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - pokade-net
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  pokade-net:
+    name: pokade_pokade-net
+    external: true
