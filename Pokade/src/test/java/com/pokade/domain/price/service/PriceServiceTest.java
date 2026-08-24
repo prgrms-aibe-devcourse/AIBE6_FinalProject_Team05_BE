@@ -19,6 +19,7 @@ import com.pokade.domain.price.dto.BuyOfferReadyResponse;
 import com.pokade.domain.price.dto.BuyOfferResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.MarketOverviewResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.TradeSummaryResponse;
@@ -51,6 +52,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -1070,7 +1072,7 @@ class PriceServiceTest {
         TradeResponse expected = new TradeResponse(
                 100L, null, 2L, 1L, 1L, "리자몽", 250000, TradeStatus.PENDING,
                 null, null, null, null, null,
-                "김철수", "010-1234-5678", "서울시 강남구", java.time.LocalDateTime.now());
+                "김철수", "010-1234-5678", "서울시 강남구", java.time.LocalDateTime.now(), null);
         given(tradeService.createMatchedTrade(
                 any(), eq(2L), eq(250000), eq(252000), eq("김철수"), eq("010-1234-5678"),
                 eq("서울시 강남구"), eq("pay_999"), eq(1000)))
@@ -1124,5 +1126,116 @@ class PriceServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
         verifyNoInteractions(listingRepository, tradeService);
+    }
+
+    private PriceTradeStatsRepository.DailyMarketStatView dailyMarketStatView(
+            LocalDate date, long volume, Double medianPrice) {
+        return new PriceTradeStatsRepository.DailyMarketStatView() {
+            @Override
+            public LocalDate getTradeDate() {
+                return date;
+            }
+
+            @Override
+            public Long getVolume() {
+                return volume;
+            }
+
+            @Override
+            public Double getMedianPrice() {
+                return medianPrice;
+            }
+        };
+    }
+
+    @Test
+    @DisplayName("t57 오늘/어제 모두 체결이 있으면 전일 대비 거래량/중간값 변화율을 계산하고 30일치 일별 통계를 반환한다")
+    void t57() {
+        LocalDate today = LocalDate.now();
+        LocalDate yesterday = today.minusDays(1);
+        given(priceTradeStatsRepository.findDailyMarketStats(eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of(
+                        dailyMarketStatView(yesterday, 10L, 3000000.0),
+                        dailyMarketStatView(today, 12L, 3100000.0)
+                ));
+
+        MarketOverviewResponse result = priceService.getMarketOverview();
+
+        assertThat(result.todayVolume()).isEqualTo(12L);
+        assertThat(result.volumeChangeRate()).isEqualByComparingTo("20.00");
+        assertThat(result.todayMedianPrice()).isEqualTo(3100000L);
+        // (3100000-3000000)/3000000*100 = 3.3333... -> 3.33
+        assertThat(result.medianChangeRate1d()).isEqualByComparingTo("3.33");
+        assertThat(result.medianChangeAmount1d()).isEqualTo(100000L);
+        assertThat(result.totalVolume()).isEqualTo(22L);
+        assertThat(result.dailyStats()).hasSize(30);
+        assertThat(result.dailyStats().get(29).date()).isEqualTo(today);
+        assertThat(result.dailyStats().get(28).date()).isEqualTo(yesterday);
+    }
+
+    @Test
+    @DisplayName("t58 어제 거래가 0건이면 거래량 증가율은 null이다")
+    void t58() {
+        LocalDate today = LocalDate.now();
+        given(priceTradeStatsRepository.findDailyMarketStats(eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of(dailyMarketStatView(today, 5L, 2000000.0)));
+
+        MarketOverviewResponse result = priceService.getMarketOverview();
+
+        assertThat(result.todayVolume()).isEqualTo(5L);
+        assertThat(result.volumeChangeRate()).isNull();
+        assertThat(result.medianChangeRate1d()).isNull();
+        assertThat(result.medianChangeAmount1d()).isNull();
+    }
+
+    @Test
+    @DisplayName("t59 오늘 체결이 전혀 없으면 오늘의 거래량/중간값이 0과 null이고 변화율도 null이다")
+    void t59() {
+        given(priceTradeStatsRepository.findDailyMarketStats(eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of());
+
+        MarketOverviewResponse result = priceService.getMarketOverview();
+
+        assertThat(result.todayVolume()).isZero();
+        assertThat(result.todayMedianPrice()).isNull();
+        assertThat(result.volumeChangeRate()).isNull();
+        assertThat(result.medianChangeRate1d()).isNull();
+        assertThat(result.medianChangeAmount1d()).isNull();
+        assertThat(result.medianChangeRate7d()).isNull();
+        assertThat(result.medianChangeRate30d()).isNull();
+        assertThat(result.totalVolume()).isZero();
+        assertThat(result.dailyStats()).hasSize(30);
+    }
+
+    @Test
+    @DisplayName("t60 일주일 전/30일 전 체결이 있으면 오늘 중간값과 비교해 각 기준의 변화율을 계산한다")
+    void t60() {
+        LocalDate today = LocalDate.now();
+        given(priceTradeStatsRepository.findDailyMarketStats(eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of(
+                        dailyMarketStatView(today.minusDays(30), 3L, 2000000.0),
+                        dailyMarketStatView(today.minusDays(7), 4L, 2500000.0),
+                        dailyMarketStatView(today, 6L, 3000000.0)
+                ));
+
+        MarketOverviewResponse result = priceService.getMarketOverview();
+
+        // (3000000-2500000)/2500000*100 = 20.00
+        assertThat(result.medianChangeRate7d()).isEqualByComparingTo("20.00");
+        // (3000000-2000000)/2000000*100 = 50.00
+        assertThat(result.medianChangeRate30d()).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    @DisplayName("t61 일주일 전/30일 전에 체결이 없으면 해당 기준의 변화율은 null이다")
+    void t61() {
+        LocalDate today = LocalDate.now();
+        given(priceTradeStatsRepository.findDailyMarketStats(eq(TradeStatus.COMPLETED), any(LocalDateTime.class)))
+                .willReturn(List.of(dailyMarketStatView(today, 6L, 3000000.0)));
+
+        MarketOverviewResponse result = priceService.getMarketOverview();
+
+        assertThat(result.medianChangeRate7d()).isNull();
+        assertThat(result.medianChangeRate30d()).isNull();
     }
 }

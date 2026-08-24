@@ -4,6 +4,7 @@ import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.price.dto.BuyOfferOrderbookEntryResponse;
 import com.pokade.domain.price.dto.CardPricePointResponse;
 import com.pokade.domain.price.dto.CardPriceSummaryResponse;
+import com.pokade.domain.price.dto.MarketOverviewResponse;
 import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.dto.PriceStatsResponse;
 import com.pokade.domain.price.dto.PriceSummaryResponse;
@@ -87,5 +88,10 @@ public class PriceController {
     @GetMapping("/ranking")
     public ApiResponse<List<PriceRankingResponse>> getRanking(@RequestParam String type) {
         return ApiResponse.ok(priceService.getRanking(type));
+    }
+
+    @GetMapping("/market-overview")
+    public ApiResponse<MarketOverviewResponse> getMarketOverview() {
+        return ApiResponse.ok(priceService.getMarketOverview());
     }
 }
