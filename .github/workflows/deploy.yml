@@ -103,7 +103,7 @@ jobs:
 
             echo "upstream pokade_upstream { server 127.0.0.1:${APP_PORT}; }" | sudo tee /etc/nginx/conf.d/pokade_upstream.conf > /dev/null
             sudo nginx -t
-            sudo systemctl reload nginx
+            sudo nginx -s reload
 
             if [ -n "$CURRENT_SLOT" ]; then
               docker rm -f "pokade-app-$CURRENT_SLOT" 2>/dev/null || true
