@@ -82,6 +82,8 @@ class MetricsConfigTest {
                 .containsExactly(EXPECTED_QUERY_API_SLO_NANOS);
         assertThat(sloBoundariesOf("ai.grade.duration"))
                 .containsExactly(EXPECTED_AI_GRADE_SLO_NANOS);
+        assertThat(sloBoundariesOf("chat.llm.duration"))
+                .containsExactly(EXPECTED_AI_GRADE_SLO_NANOS);
     }
 
     @Test

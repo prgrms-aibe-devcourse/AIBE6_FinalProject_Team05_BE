@@ -11,11 +11,14 @@ import com.pokade.domain.price.dto.PriceRankingResponse;
 import com.pokade.domain.price.service.PriceService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -63,6 +66,11 @@ class ChatServiceTest {
 
     @Mock
     private PlatformTransactionManager transactionManager;
+
+    // @Mock MeterRegistry는 counter()/timer() 등이 null을 돌려줘 생성자에서 NPE가 난다 - 반드시 @Spy +
+    // 실제 SimpleMeterRegistry를 써야 한다(docs/monitoring.md 참고).
+    @Spy
+    private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks
     private ChatService chatService;

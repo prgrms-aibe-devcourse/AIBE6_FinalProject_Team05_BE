@@ -22,6 +22,7 @@ import java.util.Set;
  *   <li>watchlist - WatchlistService.addWatchlist() / updateWatchlist()</li>
  *   <li>ai - AiGradeService (등급 진단 전체 처리 시간)</li>
  *   <li>price - PriceService (랭킹 조회 시간)</li>
+ *   <li>chat - ChatService (LLM 호출 시간, #358)</li>
  * </ul>
  *
  * <p>원래 domain/card/config에 있었는데(#343), 전역 효력을 가진 빈이 한 도메인 아래 숨어 있으면
@@ -66,7 +67,11 @@ public class MetricsConfig {
             "watchlist.update.duration",
             "price.ranking.duration");
 
-    private static final String AI_GRADE_TIMER = "ai.grade.duration";
+    // 외부 LLM 호출이라 초 단위가 정상인 타이머들. chat.llm.duration은 ai.grade.duration과 특성이
+    // 같아(네트워크로 LLM 호출) 같은 버킷을 공유한다 - 별도 버킷이 필요해지면 그때 분리한다.
+    private static final Set<String> AI_GRADE_TIMERS = Set.of(
+            "ai.grade.duration",
+            "chat.llm.duration");
 
     @Bean
     public TimedAspect timedAspect(MeterRegistry meterRegistry) {
@@ -113,7 +118,7 @@ public class MetricsConfig {
         if (QUERY_API_TIMERS.contains(id.getName())) {
             return QUERY_API_SLO_NANOS;
         }
-        if (AI_GRADE_TIMER.equals(id.getName())) {
+        if (AI_GRADE_TIMERS.contains(id.getName())) {
             return AI_GRADE_SLO_NANOS;
         }
         return null;

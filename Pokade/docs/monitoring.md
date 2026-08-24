@@ -42,6 +42,7 @@ SLO 버킷이 붙는 타이머는 `MetricsConfig`가 이름으로 지정한 6개
 | `price.ranking.duration` | Timer | 조회성 | 없음 |
 | `ai.grade.duration` | Timer | AI 진단 | 없음 |
 | `ai.grade.vision.duration` | Timer | **없음** | 없음 |
+| `chat.llm.duration` | Timer | AI 진단(LLM 호출 특성 공유) | 없음 |
 | `card.ratelimit.allowed` / `.rejected` | Counter | - | card 대시보드 |
 | `card.view.increment.calls` / `card.grade.batch.calls` | Counter | - | card 대시보드 |
 | `watchlist.notify.immediate.calls` / `.already_claimed.calls` | Counter | - | watchlist 대시보드 |
@@ -50,6 +51,8 @@ SLO 버킷이 붙는 타이머는 `MetricsConfig`가 이름으로 지정한 6개
 | `site.visits` | Counter | - | **관리자 대시보드(제품 기능)** |
 | `price.chart.requests` / `price.ranking.requests` | Counter | - | 없음 |
 | `ai.grade.result` / `.local_fail` / `.vision.retries` | Counter | - | 없음 |
+| `chat.llm.calls`(status=success/error) | Counter | - | 없음 |
+| `chat.llm.grounding_fail` | Counter | - | 없음 |
 
 `site.visits`는 `domain/admin/metrics`가 `site_visits_total`로 조회하는 **실제 제품 기능**이므로
 지우면 관리자 대시보드가 깨진다. 나머지 계측은 Grafana 패널만 의존한다.
