@@ -15,6 +15,7 @@ public record ListingCreateRequest(
         @Positive(message = "price는 0보다 커야 합니다.")
         Integer price,
 
+        @NotNull(message = "grade는 필수입니다.")
         ListingGrade grade,
 
         @NotBlank(message = "정산 받을 은행명은 필수입니다.")
