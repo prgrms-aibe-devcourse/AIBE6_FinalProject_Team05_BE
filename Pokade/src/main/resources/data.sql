@@ -500,7 +500,7 @@ INSERT INTO trades (listing_id, buyer_id, price, status, confirmed_at, settled_a
 -- =========================================================
 -- 시세 랭킹 "거래 현황"(GET /api/prices/market-overview) 검증용 시드
 -- 카드/등급 구분 없이 플랫폼 전체 COMPLETED 체결을 일 단위로 집계하는 지표라, 위 FR-PRICE-02/03/04/06
--- 블록만으로는 "오늘"(0일 전)과 "30일 전" 시점에 체결이 전혀 없어 todayMedianPrice/medianChangeRate1d/
+-- 블록만으로는 "오늘"(0일 전)과 "30일 전" 시점에 체결이 전혀 없어 todayAvgPrice/avgChangeRate1d/
 -- 7d/30d가 계속 null로만 나왔다. 여러 카드/등급에 걸쳐 0~30일 전을 고르게 채워 차트와 전일/1주일 전/
 -- 30일 전 대비 변화율 배지가 모두 실제 값을 보여주도록 보강한다(자동화 테스트에는 사용되지 않음).
 -- =========================================================
