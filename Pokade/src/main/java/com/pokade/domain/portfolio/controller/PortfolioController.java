@@ -1,6 +1,7 @@
 package com.pokade.domain.portfolio.controller;
 
 import com.pokade.domain.portfolio.dto.PortfolioAnalyticsResponse;
+import com.pokade.domain.portfolio.dto.PortfolioFromGradeRequest;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
 import com.pokade.domain.portfolio.dto.PortfolioItemPnlResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemResponse;
@@ -19,7 +20,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -76,12 +79,27 @@ public class PortfolioController {
     }
 
     // FR-AI-04: AI 등급 진단 결과를 바탕으로 도감에 카드 즉시 등록.
+    // request 바디는 선택 — AI가 카드를 인식 못했거나 잘못 인식했을 때 사용자가 고른 카드로 덮어쓴다.
     @PostMapping("/from-grade/{resultId}")
     public ApiResponse<PortfolioItemResponse> addFromGradeResult(
             @AuthenticationPrincipal Long userId,
-            @PathVariable Long resultId
+            @PathVariable Long resultId,
+            @RequestBody(required = false) PortfolioFromGradeRequest request
     ) {
-        return ApiResponse.ok("도감에 등록되었습니다.", portfolioService.addFromGradeResult(userId, resultId));
+        Long overrideCardId = request != null ? request.cardId() : null;
+        Long overrideVariantId = request != null ? request.variantId() : null;
+        return ApiResponse.ok("도감에 등록되었습니다.",
+                portfolioService.addFromGradeResult(userId, resultId, overrideCardId, overrideVariantId));
+    }
+
+    // 도감 항목 표지 사진 교체 — AI 진단 등록 여부와 무관하게 항상 가능.
+    @PostMapping("/{id}/thumbnail")
+    public ApiResponse<PortfolioItemResponse> setThumbnail(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id,
+            @RequestPart MultipartFile image
+    ) {
+        return ApiResponse.ok("표지 사진이 변경되었습니다.", portfolioService.setThumbnail(userId, id, image));
     }
 
     @PutMapping("/{id}")

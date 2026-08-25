@@ -1,7 +1,10 @@
 package com.pokade.domain.portfolio.service;
 
 import com.pokade.domain.ai.entity.GradeResult;
+import com.pokade.domain.ai.entity.GradeResultImage;
 import com.pokade.domain.ai.entity.GradeStatus;
+import com.pokade.domain.ai.entity.PhotoType;
+import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.entity.CardVariant;
@@ -22,10 +25,12 @@ import com.pokade.domain.portfolio.entity.PortfolioItem;
 import com.pokade.domain.portfolio.repository.PortfolioItemRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.infra.storage.S3FileStorage;
 import com.pokade.global.port.UserAccessChecker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -51,6 +56,10 @@ public class PortfolioService {
     private static final String UNCLASSIFIED = "미분류";
     private static final String KRW = "KRW";
 
+    private static final long THUMBNAIL_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+    private static final Set<String> THUMBNAIL_ALLOWED_CONTENT_TYPES = Set.of("image/jpeg", "image/jpg", "image/png");
+    private static final String THUMBNAIL_FOLDER = "portfolio";
+
     // card_prices는 카드에 따라 USD/JPY로 저장돼 있어 KRW 금액과 그대로 합산할 수 없다.
     // 실시간 환율 API가 없어 프론트(lib/currency.ts)와 동일한 고정 근사치를 사용한다.
     private static final Map<String, BigDecimal> FX_TO_KRW = Map.of(
@@ -64,6 +73,8 @@ public class PortfolioService {
     private final CardPriceRepository cardPriceRepository;
     private final ExpansionRepository expansionRepository;
     private final GradeResultRepository gradeResultRepository;
+    private final GradeResultImageRepository gradeResultImageRepository;
+    private final S3FileStorage s3FileStorage;
     private final UserAccessChecker userAccessChecker;
 
     @Transactional
@@ -386,8 +397,10 @@ public class PortfolioService {
 
     // FR-AI-04: AI 등급 진단 결과를 바탕으로 도감에 카드를 등록한다.
     // 도감 등록은 유저 선택(자동 아님) — 컨트롤러가 이 메서드를 명시적 요청에서만 호출한다.
+    // override(cardId/variantId)는 AI가 카드를 인식하지 못했거나(cardId/visionCardId 둘 다 null)
+    // 잘못 인식한 경우, 사용자가 직접 고른 카드로 등록할 수 있게 한다 — null이면 기존 AI 인식 결과를 그대로 쓴다.
     @Transactional
-    public PortfolioItemResponse addFromGradeResult(Long userId, Long resultId) {
+    public PortfolioItemResponse addFromGradeResult(Long userId, Long resultId, Long overrideCardId, Long overrideVariantId) {
         userAccessChecker.assertWritable(userId);
 
         GradeResult gradeResult = gradeResultRepository.findById(resultId)
@@ -405,24 +418,41 @@ public class PortfolioService {
             throw new BusinessException(ErrorCode.GRADE_RESULT_ALREADY_REGISTERED);
         }
 
-        // cardId/variantId는 카드 자동식별 연동 전까지 채워지지 않을 수 있어(현재 Vision은
-        // vision_card_id(externalId)만 반환), 저장된 값이 없으면 그 자리에서 externalId로 해석한다.
-        Long cardId = gradeResult.getCardId();
+        Long cardId;
         Card card;
-        if (cardId != null) {
+        if (overrideCardId != null) {
+            cardId = overrideCardId;
             card = cardRepository.findById(cardId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
-        } else if (gradeResult.getVisionCardId() != null) {
-            card = cardRepository.findByExternalId(gradeResult.getVisionCardId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
-            cardId = card.getId();
         } else {
-            throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+            // cardId/variantId는 카드 자동식별 연동 전까지 채워지지 않을 수 있어(현재 Vision은
+            // vision_card_id(externalId)만 반환), 저장된 값이 없으면 그 자리에서 externalId로 해석한다.
+            cardId = gradeResult.getCardId();
+            if (cardId != null) {
+                card = cardRepository.findById(cardId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
+            } else if (gradeResult.getVisionCardId() != null) {
+                card = cardRepository.findByExternalId(gradeResult.getVisionCardId())
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
+                cardId = card.getId();
+            } else {
+                throw new BusinessException(ErrorCode.CARD_NOT_FOUND);
+            }
         }
 
-        Long variantId = gradeResult.getVariantId() != null
-                ? gradeResult.getVariantId()
-                : cardVariantRepository.findPrimaryVariantId(cardId).orElse(null);
+        Long variantId;
+        if (overrideVariantId != null) {
+            cardVariantRepository.findById(overrideVariantId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CARD_NOT_FOUND));
+            variantId = overrideVariantId;
+        } else if (overrideCardId != null) {
+            // 카드를 직접 지정한 경우 원래 진단의 variantId는 다른 카드 기준이라 재사용하지 않는다.
+            variantId = cardVariantRepository.findPrimaryVariantId(cardId).orElse(null);
+        } else {
+            variantId = gradeResult.getVariantId() != null
+                    ? gradeResult.getVariantId()
+                    : cardVariantRepository.findPrimaryVariantId(cardId).orElse(null);
+        }
 
         PortfolioItem item = PortfolioItem.builder()
                 .userId(userId)
@@ -431,10 +461,53 @@ public class PortfolioService {
                 .quantity(1)
                 .acquiredAt(LocalDateTime.now())
                 .gradeResultId(resultId)
+                // 카드 인식 성공/실패·정정 여부와 무관하게, 사용자가 실제로 찍은 그 카드 사진을 표지로 쓴다.
+                .thumbnailKey(resolveFrontImageKey(resultId))
                 .build();
 
         portfolioItemRepository.save(item);
         return enrichSingle(item, card);
+    }
+
+    // 도감 항목의 표지 사진을 사용자가 직접 업로드한 이미지로 교체한다 - AI 진단으로 등록됐는지와 무관하게 항상 가능.
+    // ponytail: 이전 커스텀 표지 S3 객체는 정리하지 않는다(고아 객체 누적) - 필요해지면
+    // ProfileImageService의 AFTER_COMMIT 정리 이벤트 패턴을 그대로 재사용해 업그레이드.
+    @Transactional
+    public PortfolioItemResponse setThumbnail(Long userId, Long itemId, MultipartFile file) {
+        userAccessChecker.assertWritable(userId);
+        validateThumbnail(file);
+
+        PortfolioItem item = portfolioItemRepository.findByIdAndUserId(itemId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PORTFOLIO_ITEM_NOT_FOUND));
+
+        item.changeThumbnail(s3FileStorage.upload(file, THUMBNAIL_FOLDER));
+
+        Card card = cardRepository.findById(item.getCardId()).orElse(null);
+        return enrichSingle(item, card);
+    }
+
+    private void validateThumbnail(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        if (file.getSize() > THUMBNAIL_MAX_SIZE_BYTES) {
+            throw new BusinessException(ErrorCode.FILE_TOO_LARGE);
+        }
+        if (!THUMBNAIL_ALLOWED_CONTENT_TYPES.contains(file.getContentType())) {
+            throw new BusinessException(ErrorCode.UNSUPPORTED_IMAGE_TYPE);
+        }
+    }
+
+    private String resolveFrontImageKey(Long gradeResultId) {
+        return gradeResultImageRepository.findByGradeResultId(gradeResultId).stream()
+                .filter(img -> img.getPhotoType() == PhotoType.FRONT)
+                .map(GradeResultImage::getImageUrl)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String resolveThumbnailUrl(PortfolioItem item) {
+        return item.getThumbnailKey() != null ? s3FileStorage.generatePresignedUrl(item.getThumbnailKey()) : null;
     }
 
     // ─── 내부 enrichment 헬퍼 ────────────────────────────────────────────────
@@ -498,7 +571,7 @@ public class PortfolioService {
                     ? priceMap.get(resolvedVariantId)
                     : null;
 
-            return PortfolioItemResponse.of(item, card, variant, price);
+            return PortfolioItemResponse.of(item, card, variant, price, resolveThumbnailUrl(item));
         }).toList();
     }
 
@@ -518,6 +591,6 @@ public class PortfolioService {
             price = prices.isEmpty() ? null : prices.get(0);
         }
 
-        return PortfolioItemResponse.of(item, card, variant, price);
+        return PortfolioItemResponse.of(item, card, variant, price, resolveThumbnailUrl(item));
     }
 }

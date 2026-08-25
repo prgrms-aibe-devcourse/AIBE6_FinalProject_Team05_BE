@@ -67,11 +67,12 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.FILE_TOO_LARGE, ErrorCode.FILE_TOO_LARGE.getMessage()));
     }
 
-    // 멀티파트 오류 - 사진 누락 등 (400)
+    // 멀티파트 오류 - 필수 파일 누락 등 (400). AI 진단/프로필 이미지/도감 표지/문의 첨부 등
+    // 여러 멀티파트 엔드포인트가 공유하는 핸들러라 특정 도메인 문구를 넣지 않는다.
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ErrorResponse> handleMultipart(MultipartException e) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT.getStatus())
-                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, "사진 6장(앞면, 뒷면, 모서리 4장)이 모두 필요합니다."));
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT, "필수 파일이 누락되었거나 요청 형식이 올바르지 않습니다."));
     }
 
     // AI 서비스 오류 (503)

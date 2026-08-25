@@ -28,13 +28,14 @@ public record PortfolioItemResponse(
             PortfolioItem item,
             Card card,
             CardVariant variant,
-            CardPriceRepository.VariantMarketPriceView priceView
+            CardPriceRepository.VariantMarketPriceView priceView,
+            String thumbnailUrl
     ) {
         return new PortfolioItemResponse(
                 item.getId(),
                 item.getCardId(),
                 card != null ? card.getName() : null,
-                card != null ? card.getImageSmall() : null,
+                thumbnailUrl != null ? thumbnailUrl : (card != null ? card.getImageSmall() : null),
                 item.getVariantId(),
                 variant != null ? variant.getVariantName() : null,
                 item.getQuantity(),
