@@ -1,10 +1,13 @@
 package com.pokade.domain.inquiry.service;
 
 import com.pokade.domain.inquiry.dto.request.InquiryCreateRequest;
+import com.pokade.domain.inquiry.dto.request.InquiryUpdateRequest;
 import com.pokade.domain.inquiry.dto.response.InquiryResponse;
 import com.pokade.domain.inquiry.entity.Inquiry;
 import com.pokade.domain.inquiry.entity.InquiryImage;
+import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
+import com.pokade.domain.inquiry.repository.InquiryNotificationCleanupRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
 import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.user.entity.User;
@@ -41,6 +44,7 @@ public class InquiryService {
 
     private final InquiryRepository inquiryRepository;
     private final InquiryImageRepository inquiryImageRepository;
+    private final InquiryNotificationCleanupRepository inquiryNotificationCleanupRepository;
     private final S3FileStorage s3FileStorage;
     // #392: 문의 등록 시 관리자 전원에게 알림을 보내기 위한 의존성 - createInquiry()에서만 쓴다.
     private final UserRepository userRepository;
@@ -96,6 +100,51 @@ public class InquiryService {
             }
             throw e;
         }
+    }
+
+    @Transactional
+    public InquiryResponse updateInquiry(Long userId, Long inquiryId, InquiryUpdateRequest request) {
+        Inquiry inquiry = getOwnedUnhandledInquiry(userId, inquiryId);
+        inquiry.update(request.category(), request.title(), request.content());
+
+        List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(inquiryId).stream()
+                .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
+                .toList();
+        return InquiryResponse.of(inquiry, imageUrls);
+    }
+
+    @Transactional
+    public void deleteInquiry(Long userId, Long inquiryId) {
+        Inquiry inquiry = getOwnedUnhandledInquiry(userId, inquiryId);
+
+        List<InquiryImage> images = inquiryImageRepository.findByInquiryIdOrderByIdAsc(inquiryId);
+        inquiryImageRepository.deleteAll(images);
+        for (InquiryImage image : images) {
+            try {
+                s3FileStorage.delete(image.getImageUrl());
+            } catch (RuntimeException e) {
+                log.error("문의 삭제 중 첨부 이미지 S3 객체 삭제 실패 - inquiryId={}, key={} (고아 객체 잔존)",
+                        inquiryId, image.getImageUrl(), e);
+            }
+        }
+        // 문의 등록 시 관리자에게 보낸 INQUIRY_RECEIVED 알림이 notifications.inquiry_id로 이 문의를
+        // 참조하고 있어, 먼저 정리하지 않으면 FK 제약 위반으로 문의 삭제 자체가 실패한다.
+        inquiryNotificationCleanupRepository.deleteByInquiryId(inquiryId);
+        inquiryRepository.delete(inquiry);
+    }
+
+    // 수정·삭제 공통 검증 - 본인 소유 + 아직 답변되지 않은(UNHANDLED) 문의만 허용한다.
+    // 답변 이후에는 관리자 쪽 처리 이력을 보존하기 위해 막는다.
+    private Inquiry getOwnedUnhandledInquiry(Long userId, Long inquiryId) {
+        Inquiry inquiry = inquiryRepository.findById(inquiryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+        if (!inquiry.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        if (inquiry.getStatus() != InquiryStatus.UNHANDLED) {
+            throw new BusinessException(ErrorCode.INQUIRY_ALREADY_HANDLED);
+        }
+        return inquiry;
     }
 
     public List<InquiryResponse> getMyInquiries(Long userId) {

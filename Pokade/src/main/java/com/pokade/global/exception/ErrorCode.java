@@ -34,6 +34,7 @@ public enum ErrorCode {
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
     INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
     INQUIRY_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "첨부 이미지는 최대 3장까지 가능합니다."),
+    INQUIRY_ALREADY_HANDLED(HttpStatus.CONFLICT, "이미 답변된 문의는 수정하거나 삭제할 수 없습니다."),
 
     DUPLICATE_LISTING(HttpStatus.CONFLICT, "이미 등록된 매물입니다."),
     TRADE_CONFLICT(HttpStatus.CONFLICT, "이미 처리 중인 거래입니다."),
