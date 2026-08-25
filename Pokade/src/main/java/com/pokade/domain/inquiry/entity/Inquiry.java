@@ -67,6 +67,14 @@ public class Inquiry {
         this.status = status;
     }
 
+    // UNHANDLED 상태에서만 호출 가능하도록 서비스 계층에서 먼저 검증한다(답변 이후에는 이력 보존을
+    // 위해 수정을 막는다 - 엔티티 자체는 그 정책을 모르고 값 변경만 담당).
+    public void update(InquiryCategory category, String title, String content) {
+        this.category = category;
+        this.title = title;
+        this.content = content;
+    }
+
     public void answer(String answerContent) {
         this.answerContent = answerContent;
         this.answeredAt = LocalDateTime.now();
