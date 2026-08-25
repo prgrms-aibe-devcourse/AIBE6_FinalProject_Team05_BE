@@ -9,6 +9,7 @@ import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.point.service.PointService;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
@@ -111,6 +112,7 @@ public class AiGradeService {
     private final GradeResultRepository gradeResultRepository;
     private final GradeResultImageRepository gradeResultImageRepository;
     private final CardRepository cardRepository;
+    private final CardNameKoResolver cardNameKoResolver;
     private final PointService pointService;
     private final PlatformTransactionManager transactionManager;
 
@@ -136,6 +138,7 @@ public class AiGradeService {
                           GradeResultRepository gradeResultRepository,
                           GradeResultImageRepository gradeResultImageRepository,
                           CardRepository cardRepository,
+                          CardNameKoResolver cardNameKoResolver,
                           PointService pointService,
                           PlatformTransactionManager transactionManager,
                           MeterRegistry meterRegistry) {
@@ -145,6 +148,7 @@ public class AiGradeService {
         this.gradeResultRepository = gradeResultRepository;
         this.gradeResultImageRepository = gradeResultImageRepository;
         this.cardRepository = cardRepository;
+        this.cardNameKoResolver = cardNameKoResolver;
         this.pointService = pointService;
         this.transactionManager = transactionManager;
 
@@ -270,7 +274,8 @@ public class AiGradeService {
 
         // ── presigned URL 생성 후 응답 ───────────────────────────────────────
         Map<String, String> imageUrls = toPresignedUrls(imageKeys);
-        return GradeResponse.from(gradeResult, resolveCard(gradeResult), imageUrls, remainingPoints);
+        Card recognizedCard = resolveCard(gradeResult);
+        return GradeResponse.from(gradeResult, recognizedCard, resolveCardNameKo(recognizedCard), imageUrls, remainingPoints);
     }
 
     // 업로드 순서가 항상 FRONT/BACK/CORNER_TL/TR/BL/BR로 고정이라 바이트를 이 순서대로 이어붙여 해시를
@@ -305,7 +310,8 @@ public class AiGradeService {
                         img -> img.getPhotoType().name(),
                         img -> s3FileStorage.generatePresignedUrl(img.getImageUrl()),
                         (existing, replacement) -> existing));
-        return GradeResponse.from(cached, resolveCard(cached), imageUrls, null, true);
+        Card recognizedCard = resolveCard(cached);
+        return GradeResponse.from(cached, recognizedCard, resolveCardNameKo(recognizedCard), imageUrls, null, true);
     }
 
     private void recordResultMetric(VisionResult visionResult, boolean isFree) {
@@ -333,7 +339,8 @@ public class AiGradeService {
                         img -> s3FileStorage.generatePresignedUrl(img.getImageUrl()),
                         (existing, replacement) -> existing));
 
-        return GradeResponse.from(gradeResult, resolveCard(gradeResult), imageUrls, null);
+        Card recognizedCard = resolveCard(gradeResult);
+        return GradeResponse.from(gradeResult, recognizedCard, resolveCardNameKo(recognizedCard), imageUrls, null);
     }
 
     // vision_card_id(externalId)가 자체 DB에 없거나(신규 세트 동기화 지연 등) 아예 인식 실패면 null —
@@ -342,6 +349,12 @@ public class AiGradeService {
         return gradeResult.getVisionCardId() != null
                 ? cardRepository.findByExternalId(gradeResult.getVisionCardId()).orElse(null)
                 : null;
+    }
+
+    // 카드가 인식되지 않았으면(null) 한글명도 없다 - resolve() 자체는 null 카드를 허용하지 않으므로
+    // 호출 전에 여기서 가드한다.
+    private String resolveCardNameKo(Card card) {
+        return card != null ? cardNameKoResolver.resolve(card) : null;
     }
 
     public Page<GradeResponse> getGradeHistory(Long userId, Pageable pageable) {
@@ -360,9 +373,10 @@ public class AiGradeService {
                         .collect(Collectors.toMap(Card::getExternalId, c -> c));
 
         // 이미지 URL·remainingPoints는 목록에서 제공하지 않음
-        return results.map(r -> GradeResponse.from(r,
-                r.getVisionCardId() != null ? cardByExternalId.get(r.getVisionCardId()) : null,
-                null, null));
+        return results.map(r -> {
+            Card recognizedCard = r.getVisionCardId() != null ? cardByExternalId.get(r.getVisionCardId()) : null;
+            return GradeResponse.from(r, recognizedCard, resolveCardNameKo(recognizedCard), null, null);
+        });
     }
 
     private void validateImageFormats(GradeRequest request) {

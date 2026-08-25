@@ -13,6 +13,7 @@ import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
 import com.pokade.domain.card.repository.ExpansionRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.portfolio.dto.PortfolioAnalyticsItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioAnalyticsResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
@@ -69,6 +70,7 @@ public class PortfolioService {
 
     private final PortfolioItemRepository portfolioItemRepository;
     private final CardRepository cardRepository;
+    private final CardNameKoResolver cardNameKoResolver;
     private final CardVariantRepository cardVariantRepository;
     private final CardPriceRepository cardPriceRepository;
     private final ExpansionRepository expansionRepository;
@@ -571,7 +573,8 @@ public class PortfolioService {
                     ? priceMap.get(resolvedVariantId)
                     : null;
 
-            return PortfolioItemResponse.of(item, card, variant, price, resolveThumbnailUrl(item));
+            String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+            return PortfolioItemResponse.of(item, card, variant, price, resolveThumbnailUrl(item), cardNameKo);
         }).toList();
     }
 
@@ -591,6 +594,7 @@ public class PortfolioService {
             price = prices.isEmpty() ? null : prices.get(0);
         }
 
-        return PortfolioItemResponse.of(item, card, variant, price, resolveThumbnailUrl(item));
+        String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+        return PortfolioItemResponse.of(item, card, variant, price, resolveThumbnailUrl(item), cardNameKo);
     }
 }

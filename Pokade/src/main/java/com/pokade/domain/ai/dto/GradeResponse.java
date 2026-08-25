@@ -36,6 +36,9 @@ public record GradeResponse(
         // FR-AI-04(도감 등록) 진입 가능 여부를 FE가 판단하는 기준이기도 하다.
         Long cardId,
         String cardName,
+        // 카드 이름에서 종 이름 부분만 한글로 치환한 값 - domain.card.support.CardNameKoResolver가
+        // 매핑을 못 찾으면(트레이너/에너지 카드 등) null. FE는 cardNameKo ?? cardName으로 표시한다.
+        String cardNameKo,
         String cardImageSmall,
         // 카드 인식 신뢰도(%) — 등급 산출 신뢰도(confidence)와는 별개 지표.
         BigDecimal cardConfidence,
@@ -50,12 +53,12 @@ public record GradeResponse(
     private static final String LEGAL_NOTICE =
             "본 결과는 AI 기반 참고용 예비진단이며, 정식 카드 감정을 대체하지 않습니다.";
 
-    public static GradeResponse from(GradeResult result, Card card,
+    public static GradeResponse from(GradeResult result, Card card, String cardNameKo,
                                       Map<String, String> imageUrls, Integer remainingPoints) {
-        return from(result, card, imageUrls, remainingPoints, false);
+        return from(result, card, cardNameKo, imageUrls, remainingPoints, false);
     }
 
-    public static GradeResponse from(GradeResult result, Card card, Map<String, String> imageUrls,
+    public static GradeResponse from(GradeResult result, Card card, String cardNameKo, Map<String, String> imageUrls,
                                       Integer remainingPoints, boolean cached) {
         return new GradeResponse(
                 result.getId(),
@@ -73,6 +76,7 @@ public record GradeResponse(
                 result.getCreatedAt(),
                 card != null ? card.getId() : null,
                 card != null ? card.getName() : null,
+                card != null ? cardNameKo : null,
                 card != null ? card.getImageSmall() : null,
                 result.getVisionConfidence(),
                 imageUrls,

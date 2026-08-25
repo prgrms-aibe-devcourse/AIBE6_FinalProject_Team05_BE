@@ -12,6 +12,9 @@ public record PortfolioItemResponse(
         Long id,
         Long cardId,
         String cardName,
+        // 카드 이름에서 종 이름 부분만 한글로 치환한 값 - domain.card.support.CardNameKoResolver가
+        // 매핑을 못 찾으면(트레이너/에너지 카드 등) null. FE는 cardNameKo ?? cardName으로 표시한다.
+        String cardNameKo,
         String cardImageSmall,
         Long variantId,
         String variantName,
@@ -29,12 +32,14 @@ public record PortfolioItemResponse(
             Card card,
             CardVariant variant,
             CardPriceRepository.VariantMarketPriceView priceView,
-            String thumbnailUrl
+            String thumbnailUrl,
+            String cardNameKo
     ) {
         return new PortfolioItemResponse(
                 item.getId(),
                 item.getCardId(),
                 card != null ? card.getName() : null,
+                card != null ? cardNameKo : null,
                 thumbnailUrl != null ? thumbnailUrl : (card != null ? card.getImageSmall() : null),
                 item.getVariantId(),
                 variant != null ? variant.getVariantName() : null,

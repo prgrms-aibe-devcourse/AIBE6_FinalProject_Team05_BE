@@ -35,6 +35,7 @@ import com.pokade.domain.ai.entity.GradeStatus;
 import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
 import org.springframework.ai.chat.client.ChatClient;
@@ -59,6 +60,9 @@ class AiGradeServiceTest {
 
     @Mock
     private CardRepository cardRepository;
+
+    @Mock
+    private CardNameKoResolver cardNameKoResolver;
 
     @Mock
     private PlatformTransactionManager transactionManager;
@@ -92,6 +96,36 @@ class AiGradeServiceTest {
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).grade()).isEqualTo("A");
+    }
+
+    @Test
+    @DisplayName("진단 이력에 인식된 카드가 있으면 CardNameKoResolver로 구한 한글명을 함께 내려준다")
+    void getGradeHistory_includesCardNameKo() {
+        Long userId = 1L;
+        Pageable pageable = PageRequest.of(0, 20);
+        GradeResult gradeResult = GradeResult.builder()
+                .userId(userId)
+                .status(GradeStatus.SUCCESS)
+                .grade("S")
+                .isFree(true)
+                .pointUsed(0)
+                .retryAllowed(false)
+                .visionCardId("base1-4")
+                .build();
+        Page<GradeResult> page = new PageImpl<>(List.of(gradeResult), pageable, 1);
+        com.pokade.domain.card.entity.Card card = com.pokade.domain.card.entity.Card.builder()
+                .externalId("base1-4")
+                .name("Charizard")
+                .build();
+
+        given(gradeResultRepository.findByUserId(userId, pageable)).willReturn(page);
+        given(cardRepository.findByExternalIdIn(List.of("base1-4"))).willReturn(List.of(card));
+        given(cardNameKoResolver.resolve(card)).willReturn("리자몽");
+
+        Page<GradeResponse> result = aiGradeService.getGradeHistory(userId, pageable);
+
+        assertThat(result.getContent().get(0).cardName()).isEqualTo("Charizard");
+        assertThat(result.getContent().get(0).cardNameKo()).isEqualTo("리자몽");
     }
 
     @Test
