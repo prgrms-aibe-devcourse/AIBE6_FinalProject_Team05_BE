@@ -12,6 +12,7 @@ import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 // (BuyOffer 조회/생성 로직을 같은 곳에 모아두는 편이 지금 규모에서 더 단순함).
 // 구매입찰은 등록 시점에 바로 토스 에스크로 결제를 진행하므로 TradeController의 ready/confirm-payment
 // 2단계 패턴을 그대로 미러링한다.
+@Tag(name = "구매입찰", description = "구매입찰 등록(결제 준비/승인)·즉시판매 체결·내 입찰 조회 및 수정 API")
 @RestController
 @RequestMapping("/api/buy-offers")
 @RequiredArgsConstructor
