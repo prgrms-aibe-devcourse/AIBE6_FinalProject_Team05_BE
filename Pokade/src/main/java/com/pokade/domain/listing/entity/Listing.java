@@ -142,6 +142,15 @@ public class Listing {
         this.status = ListingStatus.CANCELLED;
     }
 
+    // 구매확정(에스크로 해제) 시점에 호출된다 - 이 시점의 매물은 항상 TRADING이어야 하므로(그 외 상태로
+    // 거래가 여기까지 진행될 수 없다), 아니라면 어딘가 상태가 어긋난 것이라 조용히 넘기지 않고 던진다.
+    public void markSold() {
+        if (this.status != ListingStatus.TRADING) {
+            throw new BusinessException(ErrorCode.INVALID_LISTING_STATUS);
+        }
+        this.status = ListingStatus.SOLD;
+    }
+
     public void markStaleNoticeSent() {
         this.staleNoticeSent = true;
     }

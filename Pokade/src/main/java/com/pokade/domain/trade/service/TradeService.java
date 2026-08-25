@@ -356,6 +356,9 @@ public class TradeService {
         pointService.settle(trade.getListing().getSellerId(), trade.getPrice(), trade.getId());
 
         Listing listing = trade.getListing();
+        // 구매확정이 끝나면 이 매물은 더 이상 어떤 흐름으로도 재사용되지 않으므로 TRADING에 계속
+        // 남겨두면 "내 매물 관리"에서 영원히 거래중으로 보이고 "판매완료" 필터가 항상 비어 보인다.
+        listing.markSold();
         portfolioService.addFromCompletedTrade(
                 buyerId,
                 trade.getId(),

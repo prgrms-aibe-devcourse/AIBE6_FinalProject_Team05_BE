@@ -2,6 +2,7 @@ package com.pokade.domain.trade.service;
 
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.listing.entity.Listing;
+import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.point.client.TossPaymentClient;
 import com.pokade.domain.point.service.PointService;
@@ -29,6 +30,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -92,6 +94,10 @@ class TradeServiceTest {
                 .sellerId(sellerId)
                 .price(10000)
                 .build();
+        // 실제로 Trade가 존재한다는 것 자체가 markAsTrading()이 이미 성공했다는 뜻이라, 매물은 항상
+        // TRADING 상태다(빌더 기본값 ACTIVE는 여기서는 맞지 않는다) - markSold() 등 TRADING을 전제하는
+        // 로직을 테스트하려면 이 픽스처가 실제 불변조건을 반영해야 한다.
+        ReflectionTestUtils.setField(listing, "status", ListingStatus.TRADING);
 
         return Trade.builder()
                 .listing(listing)
@@ -474,6 +480,8 @@ class TradeServiceTest {
         TradeResponse response = tradeService.confirmTrade(200L, 1L);
 
         assertThat(response.status()).isEqualTo(TradeStatus.COMPLETED);
+        // 구매확정 이후 매물이 TRADING에 계속 남아있으면 "내 매물 관리"에서 영원히 거래중으로 보인다.
+        assertThat(trade.getListing().getStatus()).isEqualTo(com.pokade.domain.listing.entity.ListingStatus.SOLD);
         verify(pointService).settle(eq(100L), eq(10000), any());
         // #392: 정산과 같은 지점에서 판매자(100L)에게 알림이 나가야 한다 - 구매자가 아니라 판매자다.
         verify(notificationService).createTradeConfirmedNotification(eq(100L), any(), any(), eq(10000));
