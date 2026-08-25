@@ -50,13 +50,22 @@ public class BuyOfferReceivedNoticeListener {
     private final CardNameKoResolver cardNameKoResolver;
     private final NotificationService notificationService;
 
-    // 본문 전체를 try/catch로 감싸는 이유: 이 메서드가 실패하면 그 예외가 AFTER_COMMIT 동기화를 타고
-    // 바깥 commit() 호출부까지 전파된다. 그 지점은 이미 커밋이 끝난 confirmBuyOfferPurchase()라,
-    // 토스 승인·포인트 차감·BuyOffer 저장은 전부 반영된 채로 POST /api/buy-offers/confirm-payment만
-    // 500을 돌려주게 된다 - 구매자 눈에는 "결제 실패"로 보이지만 실제로는 과금과 입찰 등록이 모두
-    // 성공한 상태다. 알림 하나 때문에 그 오해를 만들 이유가 없어 여기서 삼키고 로그만 남긴다.
+    // 본문 전체를 try/catch로 감싸는 이유: 아래 두 가지다. "예외가 새어나가면 결제 API가 500이 된다"는
+    // 이유가 아니다 - 정상 경로에서는 애초에 새어나가지 않는다. Spring 7.0.8 기준 AFTER_COMMIT
+    // @TransactionalEventListener는 afterCommit()이 아니라 afterCompletion()에서 호출되고
+    // (TransactionalApplicationListenerSynchronization$PlatformSynchronization),
+    // AbstractPlatformTransactionManager는 afterCompletion 예외를 잡아 로그만 남기고 삼킨다.
+    // 즉 트랜잭션을 타고 온 이벤트라면 catch가 있든 없든 commit() 호출부까지 올라가지 않는다
+    // (catch를 재던지기로 바꿔도 알림_저장이_실패해도_결제_확정은_예외_없이_끝나고... 테스트가
+    // 그대로 통과하는 것으로 실측 확인).
     //
-    // 이 메서드에 @Transactional을 붙이지 않는 것이 그 격리의 전제다. 트랜잭션 안에서 잡으면 DB 오류를
+    // 1. fallbackExecution=true 경로에는 그 프레임워크 보호가 없다. 활성 트랜잭션이 없어 동기화를
+    //    아예 타지 않으면 리스너가 발행 지점에서 그냥 인라인 실행되므로, 예외는 publishEvent()를
+    //    호출한 쪽으로 곧장 올라간다. 그 경로에서는 이 catch가 유일한 방어다.
+    // 2. 프레임워크가 남기는 것은 맥락 없는 일반 경고뿐이다. 어느 입찰의 어느 카드에서 알림이
+    //    유실됐는지, 결제가 롤백된 것인지 알림만 잃은 것인지는 아래 log.error가 아니면 알 수 없다.
+    //
+    // 이 메서드에 @Transactional을 붙이지 않는 것이 1번 성립의 전제다. 트랜잭션 안에서 잡으면 DB 오류를
     // 삼켜도 트랜잭션이 이미 rollback-only로 표시돼 있어, 정상 반환한 뒤 프록시 커밋 시점에
     // UnexpectedRollbackException이 다시 밖으로 나간다 - catch가 트랜잭션 경계 바깥에 있어야
     // 격리가 실제로 성립한다.
@@ -68,10 +77,20 @@ public class BuyOfferReceivedNoticeListener {
     //   EntityManagerHolder가 아직 바인딩돼 있어 REQUIRED로는 거기 참여만 하고 커밋되지 않는데,
     //   그 함정을 리스너가 아니라 그쪽에서 막는다(자세한 근거는 해당 메서드 주석 참고).
     //   실패하면 그쪽 프록시가 롤백까지 마친 뒤 예외를 던지므로 아래 catch가 깨끗하게 받는다.
-    // - 조회 두 건(findOrderbook, findById)은 트랜잭션 없이도 동작한다(각각 auto-commit).
-    // - 트랜잭션 밖에서 Card를 만지지만 지연 로딩이 없어 LazyInitializationException 위험이 없다.
-    //   cardNameKoResolver가 읽는 Card.nationalPokedexNumbers는 연관관계가 아니라
-    //   @JdbcTypeCode(SqlTypes.ARRAY)로 매핑된 기본 컬럼이라 조회 시점에 이미 채워져 온다.
+    // - 조회 두 건(findOrderbook, findById)은 "트랜잭션 없이 auto-commit으로" 도는 게 아니다.
+    //   SimpleJpaRepository의 조회 메서드에는 @Transactional(readOnly = true)가 붙어 있고,
+    //   AFTER_COMMIT 시점에는 isActualTransactionActive()가 아직 true라(바로 위 항목이 설명하는 그
+    //   상태다) REQUIRED로 이미 커밋된 바깥 트랜잭션에 그대로 참여한다. 그래도 안전한 이유는
+    //   "트랜잭션이 없어서"가 아니라 이 두 건이 읽기뿐이어서다 - 커밋될 쓰기가 없으니 그 트랜잭션이
+    //   더는 커밋되지 않는다는 사실이 아무것도 잃게 하지 않는다. 여기에 쓰기를 추가하면 그 순간
+    //   위의 REQUIRES_NEW 근거가 그대로 적용되므로 반드시 자기 트랜잭션을 여는 쪽으로 빼야 한다.
+    // - 조회해 온 Card를 트랜잭션 경계 밖에서 다루지만 지연 로딩을 건드리는 경로가 없다.
+    //   Card에는 @ManyToOne(fetch = LAZY) expansion이 있어 프록시 초기화 위험 자체는 존재하는데,
+    //   이 리스너에서 Card를 읽는 두 곳 모두 그 필드를 지나가지 않는다.
+    //   cardNameKoResolver는 name과 nationalPokedexNumbers(연관관계가 아니라
+    //   @JdbcTypeCode(SqlTypes.ARRAY)로 매핑된 기본 컬럼)만 읽고, 이 Card를 그대로 넘겨받는
+    //   NotificationResponse.of는 썸네일용으로 imageMedium/imageSmall만 읽는다 - 셋 다 조회 시점에
+    //   이미 채워져 오는 기본 컬럼이다. Card를 쓰는 경로를 새로 늘릴 때 이 전제를 다시 확인할 것.
     //
     // 같은 AFTER_COMMIT 리스너인 WatchlistListingAvailableNoticeListener가 리스너 자체에 REQUIRES_NEW를
     // 두는 것과 갈리는 지점이 여기다 - 그쪽은 알림 생성 권한을 선점하는 조건부 UPDATE

@@ -1,6 +1,11 @@
 package com.pokade.domain.listing.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -17,6 +22,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -153,6 +159,13 @@ class BuyOfferReceivedNoticeIntegrationTest extends AbstractIntegrationTest {
     @MockitoBean
     private UserAccessChecker userAccessChecker;
 
+    // 예외 격리 테스트에서만 스텁한다(나머지 테스트는 실제 구현이 그대로 돈다) - 알림 저장이 실패하는
+    // 상황을 실제 DB 오류로 만들 방법이 마땅치 않아서다. notifications.user_id는 users를 FK로 참조하는데
+    // 수신자는 findOrderbook이 "ACTIVE인 유저"만 골라 온 판매자라 존재가 보장되고, 문구도 카드명
+    // 상한(cards.name VARCHAR(200))까지 채워도 message VARCHAR(255)를 넘지 않는다.
+    @MockitoSpyBean
+    private NotificationService notificationService;
+
     private TransactionTemplate transactionTemplate() {
         return new TransactionTemplate(transactionManager);
     }
@@ -230,6 +243,26 @@ class BuyOfferReceivedNoticeIntegrationTest extends AbstractIntegrationTest {
 
     private List<Notification> notificationsOf(Long userId) {
         return notificationRepository.findAllByUserIdForTestVerification(userId);
+    }
+
+    // 결제 승인 직전 상태(PENDING)의 주문을 만들어 커밋한다. pointsUsed=0이라 pointService(mock)를
+    // 타지 않고, 결제금액은 price+shippingFee = 153000으로 0보다 커서 토스 승인 분기까지 실제로 지난다.
+    private String persistPendingOrder(Long buyerId, Long cardId, Long variantId) {
+        String orderId = UUID.randomUUID().toString();
+        transactionTemplate().executeWithoutResult(status -> buyOfferOrderRepository.save(BuyOfferOrder.builder()
+                .orderId(orderId)
+                .buyerId(buyerId)
+                .cardId(cardId)
+                .variantId(variantId)
+                .grade(ListingGrade.S)
+                .price(150000)
+                .shippingFee(3000)
+                .pointsUsed(0)
+                .recipientName("받는사람")
+                .recipientPhone("010-0000-0000")
+                .recipientAddress("서울시 어딘가 1-1")
+                .build()));
+        return orderId;
     }
 
     @Test
@@ -314,20 +347,7 @@ class BuyOfferReceivedNoticeIntegrationTest extends AbstractIntegrationTest {
         Long variantId = persistVariant(cardId, "holo-4");
         persistActiveListing(cardId, sellerId, variantId, 160000);
 
-        String orderId = UUID.randomUUID().toString();
-        transactionTemplate().executeWithoutResult(status -> buyOfferOrderRepository.save(BuyOfferOrder.builder()
-                .orderId(orderId)
-                .buyerId(buyerId)
-                .cardId(cardId)
-                .variantId(variantId)
-                .grade(ListingGrade.S)
-                .price(150000)
-                .shippingFee(3000)
-                .pointsUsed(0)
-                .recipientName("받는사람")
-                .recipientPhone("010-0000-0000")
-                .recipientAddress("서울시 어딘가 1-1")
-                .build()));
+        String orderId = persistPendingOrder(buyerId, cardId, variantId);
 
         priceService.confirmBuyOfferPurchase(buyerId, "test-payment-key", orderId, 153000L);
 
@@ -351,5 +371,44 @@ class BuyOfferReceivedNoticeIntegrationTest extends AbstractIntegrationTest {
                 .extracting(BuyOfferOrder::getStatus)
                 .isEqualTo(BuyOfferOrderStatus.CONFIRMED);
         verify(tossPaymentClient, times(1)).confirmPayment("test-payment-key", orderId, 153000);
+    }
+
+    // onBuyOfferCreated의 try/catch가 실제로 근거 있는 주장인지 확인한다. 그 catch 위에는 "알림이
+    // 실패해도 POST /api/buy-offers/confirm-payment가 500이 되지 않는다"는 설명이 길게 붙어 있는데,
+    // 지금까지는 catch를 통째로 지워도 모든 테스트가 초록이었다 - 어느 테스트도 알림 실패를 만들지
+    // 않았기 때문이다.
+    //
+    // 격리가 성립하려면 두 가지가 동시에 맞아야 한다. (1) 리스너에 @Transactional이 없어 catch가
+    // 트랜잭션 경계 바깥에 있을 것, (2) 예외가 AFTER_COMMIT 동기화를 타고 바깥 commit() 호출부까지
+    // 올라가지 않을 것. 둘 중 하나만 깨져도 결제·입찰은 커밋된 채 API만 500을 돌려주게 된다.
+    @Test
+    void 알림_저장이_실패해도_결제_확정은_예외_없이_끝나고_결과가_그대로_남는다() {
+        Long buyerId = persistActiveUser("bo-notice-buyer5@test.com");
+        Long sellerId = persistActiveUser("bo-notice-seller5@test.com");
+        Long cardId = persistCard("bo-notice-card-5", "Snorlax");
+        Long variantId = persistVariant(cardId, "holo-5");
+        persistActiveListing(cardId, sellerId, variantId, 160000);
+        String orderId = persistPendingOrder(buyerId, cardId, variantId);
+
+        doThrow(new IllegalStateException("알림 저장 실패 재현"))
+                .when(notificationService)
+                .createBuyOfferReceivedNotification(anyList(), any(), anyString(), any(), any());
+
+        assertThatCode(() -> priceService.confirmBuyOfferPurchase(buyerId, "test-payment-key", orderId, 153000L))
+                .doesNotThrowAnyException();
+
+        // 스텁이 실제로 불렸는지부터 확인한다 - 이게 없으면 리스너가 수신자를 못 찾아 알림 단계까지
+        // 가지도 못한 경우(sellerIds가 비었거나 카드 조회 실패)에도 아래 단언이 전부 통과해 버린다.
+        verify(notificationService, times(1))
+                .createBuyOfferReceivedNotification(anyList(), any(), anyString(), any(), any());
+        // 알림만 유실되고 결제·입찰은 그대로 유효하다 - catch 위 주석이 로그로 주장하는 내용 그대로다.
+        assertThat(notificationsOf(sellerId)).isEmpty();
+        assertThat(buyOfferRepository.findAll().stream()
+                .filter(buyOffer -> buyerId.equals(buyOffer.getBuyerId()))
+                .toList()).hasSize(1);
+        assertThat(buyOfferOrderRepository.findByOrderId(orderId))
+                .get()
+                .extracting(BuyOfferOrder::getStatus)
+                .isEqualTo(BuyOfferOrderStatus.CONFIRMED);
     }
 }
