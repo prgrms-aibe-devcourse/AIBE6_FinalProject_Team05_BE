@@ -19,7 +19,7 @@ public class SwaggerConfig {
                 .info(new Info()
                     .title("Pokade API")
                     .description("Pokade API 문서")
-                    .version("v0.0.1"))
+                    .version("v1.0.0"))
                 .components(new Components()
                         .addSecuritySchemes(BEARER, new SecurityScheme()
                         .type(SecurityScheme.Type.HTTP)
