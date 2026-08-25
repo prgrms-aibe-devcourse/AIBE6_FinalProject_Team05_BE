@@ -70,7 +70,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/cards", "/api/cards/**").permitAll()
                         .requestMatchers(AUTH_WHITELIST).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/prices/*/summary", "/api/prices/summaries",
-                                "/api/prices/*/trades")
+                                "/api/prices/*/trades", "/api/prices/ranking", "/api/prices/market-overview")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/listings").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/watchlist/counts").permitAll()
