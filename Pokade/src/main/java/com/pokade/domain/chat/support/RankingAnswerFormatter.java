@@ -34,7 +34,8 @@ public final class RankingAnswerFormatter {
         String rateSign = r.changeRate().signum() >= 0 ? "+" : "";
         String rateStr = r.changeRate().stripTrailingZeros().toPlainString();
         String amountSign = r.changeAmount() >= 0 ? "+" : "";
+        String displayName = r.cardNameKo() != null ? r.cardNameKo() : r.cardName();
         return "%s / %,d원 / %s%s%% / %s%,d원".formatted(
-                r.cardName(), r.price(), rateSign, rateStr, amountSign, r.changeAmount());
+                displayName, r.price(), rateSign, rateStr, amountSign, r.changeAmount());
     }
 }
