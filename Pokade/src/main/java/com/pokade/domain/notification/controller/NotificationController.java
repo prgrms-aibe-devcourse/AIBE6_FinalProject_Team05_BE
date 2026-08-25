@@ -68,8 +68,11 @@ public class NotificationController {
 
     @Operation(
             summary = "실시간 알림 구독 (SSE)",
-            description = "Server-Sent Events로 실시간 알림을 구독합니다. 응답이 스트림이라 Swagger UI의 "
-                    + "Try it out으로는 정상 확인이 어렵고, 브라우저 EventSource로 확인해야 합니다."
+            description = "Server-Sent Events로 실시간 알림을 구독합니다. 인증이 필요하며 액세스 토큰을 "
+                    + "Authorization: Bearer 헤더로 보내야 합니다. 브라우저 기본 EventSource는 요청 헤더를 "
+                    + "지정할 수 없어 이 엔드포인트에 연결할 수 없고, 헤더를 붙일 수 있는 fetch 기반 SSE "
+                    + "클라이언트를 써야 합니다(프론트엔드는 @microsoft/fetch-event-source를 사용합니다). "
+                    + "응답이 스트림이라 Swagger UI의 Try it out으로는 정상 확인이 어렵습니다."
     )
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter subscribe(@AuthenticationPrincipal Long userId) {

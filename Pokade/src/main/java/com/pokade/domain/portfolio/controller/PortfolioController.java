@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -131,7 +132,7 @@ public class PortfolioController {
             description = "도감 항목의 표지 사진을 업로드해 교체합니다(multipart/form-data). AI 진단으로 등록한 "
                     + "항목인지와 무관하게 사용할 수 있으며, 본인 항목만 변경할 수 있습니다."
     )
-    @PostMapping("/{id}/thumbnail")
+    @PostMapping(value = "/{id}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<PortfolioItemResponse> setThumbnail(
             @AuthenticationPrincipal Long userId,
             @Parameter(description = "도감 항목 ID") @PathVariable Long id,

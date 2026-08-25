@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -132,7 +133,7 @@ public class UserController {
             description = "프로필 이미지를 업로드합니다(multipart/form-data). 기존 이미지가 있으면 교체됩니다. "
                     + "JPEG·PNG만 허용하며 5MB를 넘으면 실패합니다."
     )
-    @PostMapping("/me/profile/image")
+    @PostMapping(value = "/me/profile/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<Void> uploadProfileImage(@AuthenticationPrincipal Long userId,
                                                 @RequestPart MultipartFile image) {
         profileImageService.upload(userId, image);

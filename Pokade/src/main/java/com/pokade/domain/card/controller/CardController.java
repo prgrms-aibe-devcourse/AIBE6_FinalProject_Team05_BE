@@ -58,12 +58,13 @@ public class CardController {
      */
     @Operation(
             summary = "카드 키워드 검색",
-            description = "키워드만으로 카드를 검색하며 정렬은 이름순으로 고정됩니다. 시세 챗봇이 사용하는 "
-                    + "엔드포인트라 시그니처를 유지합니다. 필터가 필요하면 GET /api/cards 를 사용합니다."
+            description = "키워드만으로 카드를 검색하며 정렬은 이름순으로 고정됩니다. q는 필수이고 공백만 "
+                    + "보내면 실패합니다. 시세 챗봇이 사용하는 엔드포인트라 시그니처를 유지합니다. "
+                    + "필터가 필요하거나 키워드 없이 조회하려면 GET /api/cards 를 사용합니다."
     )
     @GetMapping("/search")
     public ApiResponse<Page<CardResponse>> searchByKeyword(
-            @Parameter(description = "검색 키워드") @RequestParam(required = false) String q,
+            @Parameter(required = true, description = "검색 키워드 (필수, 공백 불가)") @RequestParam(required = true) String q,
             @PageableDefault(size = CardService.DEFAULT_PAGE_SIZE) Pageable pageable) {
         return ApiResponse.ok(cardService.searchByKeyword(q, pageable));
     }
