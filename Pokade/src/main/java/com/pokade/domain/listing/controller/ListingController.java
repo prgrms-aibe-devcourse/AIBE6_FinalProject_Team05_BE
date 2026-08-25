@@ -93,14 +93,17 @@ public class ListingController {
         return ApiResponse.ok(listingService.getMyListing(sellerId, id));
     }
 
-    @Operation(summary = "매물 가격 수정", description = "판매자 본인의 매물 가격을 수정합니다. 판매 중(ACTIVE) 상태가 아니면 실패합니다.")
+    @Operation(
+            summary = "매물 가격/정산계좌/반송주소 수정",
+            description = "판매자 본인의 매물 가격, 정산계좌, 반송주소를 수정합니다. 판매 중(ACTIVE) 상태가 아니면 실패합니다."
+    )
     @PutMapping("/{id}")
     public ApiResponse<ListingResponse> updateListing(
             @AuthenticationPrincipal Long sellerId,
             @Parameter(description = "매물 ID") @PathVariable Long id,
             @Valid @RequestBody ListingUpdateRequest request
     ) {
-        return ApiResponse.ok("매물 가격이 수정되었습니다.", listingService.updatePrice(sellerId, id, request));
+        return ApiResponse.ok("매물 정보가 수정되었습니다.", listingService.updatePrice(sellerId, id, request));
     }
 
     @Operation(summary = "매물 삭제", description = "판매자 본인의 매물을 삭제(취소)합니다.")

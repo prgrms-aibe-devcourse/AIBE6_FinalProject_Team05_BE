@@ -132,6 +132,14 @@ public class ListingService {
         Listing listing = getOwnedListing(sellerId, listingId);
 
         listing.changePrice(request.price());
+        listing.updateSettlementAndReturnInfo(
+                request.settlementBankName(),
+                request.settlementAccountNumber(),
+                request.settlementAccountHolder(),
+                request.returnRecipientName(),
+                request.returnRecipientPhone(),
+                request.returnAddress()
+        );
 
         return ListingResponse.of(listing);
     }

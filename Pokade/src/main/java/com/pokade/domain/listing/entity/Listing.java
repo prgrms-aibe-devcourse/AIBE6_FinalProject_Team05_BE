@@ -115,6 +115,28 @@ public class Listing {
         this.price = newPrice;
     }
 
+    // 가격 수정과 동일하게 ACTIVE 상태에서만 허용 - 거래가 이미 시작된 뒤 정산계좌를 바꾸면
+    // 사기(엉뚱한 계좌로 정산금 가로채기) 위험이 있어 계속 막는다.
+    // 각 필드는 null이면 건드리지 않고 기존 값을 유지한다(부분 수정) - "내 매물 관리"의 가격만
+    // 바꾸는 빠른 수정이 이 필드들을 아예 안 보내는데, 그 요청이 기존 정산계좌/반송주소를
+    // null로 지워버리면 안 되기 때문이다.
+    public void updateSettlementAndReturnInfo(
+            String settlementBankName,
+            String settlementAccountNumber,
+            String settlementAccountHolder,
+            String returnRecipientName,
+            String returnRecipientPhone,
+            String returnAddress
+    ) {
+        requireActive();
+        if (settlementBankName != null) this.settlementBankName = settlementBankName;
+        if (settlementAccountNumber != null) this.settlementAccountNumber = settlementAccountNumber;
+        if (settlementAccountHolder != null) this.settlementAccountHolder = settlementAccountHolder;
+        if (returnRecipientName != null) this.returnRecipientName = returnRecipientName;
+        if (returnRecipientPhone != null) this.returnRecipientPhone = returnRecipientPhone;
+        if (returnAddress != null) this.returnAddress = returnAddress;
+    }
+
     public void cancel() {
         requireActive();
         this.status = ListingStatus.CANCELLED;

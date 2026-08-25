@@ -298,10 +298,10 @@ class ListingControllerTest {
 
     @Test
     void 매물_수정에_성공하면_200과_수정된_매물을_반환한다() throws Exception {
-        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+        ListingUpdateRequest request = new ListingUpdateRequest(20000, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
         ListingResponse response = new ListingResponse(
                 1L, 1L, 100L, null, 20000, ListingGrade.A, ListingStatus.ACTIVE,
-                null, null, null, null, null, null, LocalDateTime.now());
+                "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1", LocalDateTime.now());
 
         given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
                 .willReturn(response);
@@ -311,12 +311,14 @@ class ListingControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.price").value(20000));
+                .andExpect(jsonPath("$.data.price").value(20000))
+                .andExpect(jsonPath("$.data.settlementBankName").value("국민은행"))
+                .andExpect(jsonPath("$.data.returnAddress").value("서울시 강남구 테헤란로 1"));
     }
 
     @Test
     void 수정시_가격이_없으면_400을_반환한다() throws Exception {
-        ListingUpdateRequest invalidRequest = new ListingUpdateRequest(null);
+        ListingUpdateRequest invalidRequest = new ListingUpdateRequest(null, null, null, null, null, null, null);
 
         mockMvc.perform(put("/api/listings/1")
                         .with(userId(100L))
@@ -327,8 +329,29 @@ class ListingControllerTest {
     }
 
     @Test
+    void 정산계좌_정보없이_가격만_보내도_200을_반환한다() throws Exception {
+        // "내 매물 관리"(/listings/me)의 빠른 가격 수정처럼 정산계좌/반송주소를 아예 안 보내는 요청도
+        // 허용돼야 한다(부분 수정 - 서비스가 기존 값을 그대로 유지).
+        ListingUpdateRequest request = new ListingUpdateRequest(20000, null, null, null, null, null, null);
+        ListingResponse response = new ListingResponse(
+                1L, 1L, 100L, null, 20000, ListingGrade.A, ListingStatus.ACTIVE,
+                "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1", LocalDateTime.now());
+
+        given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
+                .willReturn(response);
+
+        mockMvc.perform(put("/api/listings/1")
+                        .with(userId(100L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.price").value(20000))
+                .andExpect(jsonPath("$.data.settlementBankName").value("국민은행"));
+    }
+
+    @Test
     void ACTIVE_상태가_아니면_수정시_400을_반환한다() throws Exception {
-        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+        ListingUpdateRequest request = new ListingUpdateRequest(20000, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
 
         given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.INVALID_LISTING_STATUS));
@@ -343,7 +366,7 @@ class ListingControllerTest {
 
     @Test
     void 본인_매물이_아니면_수정시_403을_반환한다() throws Exception {
-        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+        ListingUpdateRequest request = new ListingUpdateRequest(20000, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
 
         given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
@@ -358,7 +381,7 @@ class ListingControllerTest {
 
     @Test
     void 존재하지_않는_매물_수정시_404를_반환한다() throws Exception {
-        ListingUpdateRequest request = new ListingUpdateRequest(20000);
+        ListingUpdateRequest request = new ListingUpdateRequest(20000, "국민은행", "110-1234-5678", "김철수", "김철수", "010-1234-5678", "서울시 강남구 테헤란로 1");
 
         given(listingService.updatePrice(anyLong(), anyLong(), any(ListingUpdateRequest.class)))
                 .willThrow(new BusinessException(ErrorCode.LISTING_NOT_FOUND));
