@@ -10,6 +10,7 @@ import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardPriceRepository;
 import com.pokade.domain.card.repository.CardRepository;
 import com.pokade.domain.card.repository.CardVariantRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.portfolio.dto.PortfolioAnalyticsItemResponse;
 import com.pokade.domain.portfolio.dto.PortfolioAnalyticsResponse;
 import com.pokade.domain.portfolio.dto.PortfolioItemAddRequest;
@@ -52,6 +53,7 @@ class PortfolioServiceTest {
 
     @Mock PortfolioItemRepository portfolioItemRepository;
     @Mock CardRepository cardRepository;
+    @Mock CardNameKoResolver cardNameKoResolver;
     @Mock CardVariantRepository cardVariantRepository;
     @Mock CardPriceRepository cardPriceRepository;
     @Mock GradeResultRepository gradeResultRepository;
@@ -173,6 +175,22 @@ class PortfolioServiceTest {
         List<PortfolioItemResponse> result = portfolioService.getMyPortfolio(1L);
 
         assertThat(result).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("조회: CardNameKoResolver로 구한 한글명을 cardNameKo로 함께 내려준다")
+    void getMyPortfolio_includesCardNameKo() {
+        PortfolioItem item = stubItem(1L, 10L, null);
+        Card card = stubCard(10L);
+        given(portfolioItemRepository.findByUserIdOrderByIdDesc(1L)).willReturn(List.of(item));
+        given(cardRepository.findAllById(any())).willReturn(List.of(card));
+        given(cardVariantRepository.findPrimaryVariantIdsByCardIds(anyList())).willReturn(List.of());
+        given(cardNameKoResolver.resolve(card)).willReturn("리자몽 한글명");
+
+        List<PortfolioItemResponse> result = portfolioService.getMyPortfolio(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).cardNameKo()).isEqualTo("리자몽 한글명");
     }
 
     // ===== updateItem =====
