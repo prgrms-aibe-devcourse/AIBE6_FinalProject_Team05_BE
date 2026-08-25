@@ -1,7 +1,10 @@
 package com.pokade.domain.portfolio.service;
 
 import com.pokade.domain.ai.entity.GradeResult;
+import com.pokade.domain.ai.entity.GradeResultImage;
 import com.pokade.domain.ai.entity.GradeStatus;
+import com.pokade.domain.ai.entity.PhotoType;
+import com.pokade.domain.ai.repository.GradeResultImageRepository;
 import com.pokade.domain.ai.repository.GradeResultRepository;
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardPriceRepository;
@@ -18,6 +21,7 @@ import com.pokade.domain.portfolio.entity.PortfolioItem;
 import com.pokade.domain.portfolio.repository.PortfolioItemRepository;
 import com.pokade.global.exception.BusinessException;
 import com.pokade.global.exception.ErrorCode;
+import com.pokade.global.infra.storage.S3FileStorage;
 import com.pokade.global.port.UserAccessChecker;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,7 +29,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -49,6 +55,8 @@ class PortfolioServiceTest {
     @Mock CardVariantRepository cardVariantRepository;
     @Mock CardPriceRepository cardPriceRepository;
     @Mock GradeResultRepository gradeResultRepository;
+    @Mock GradeResultImageRepository gradeResultImageRepository;
+    @Mock S3FileStorage s3FileStorage;
     @Mock UserAccessChecker userAccessChecker;
 
     @InjectMocks PortfolioService portfolioService;
@@ -613,7 +621,7 @@ class PortfolioServiceTest {
     void addFromGradeResult_notFound() {
         given(gradeResultRepository.findById(1L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.GRADE_RESULT_NOT_FOUND);
     }
@@ -624,7 +632,7 @@ class PortfolioServiceTest {
         GradeResult gradeResult = stubGradeResult(99L, GradeStatus.SUCCESS, "S", "base1-4");
         given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
 
-        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.ACCESS_DENIED);
     }
@@ -635,7 +643,7 @@ class PortfolioServiceTest {
         GradeResult gradeResult = stubGradeResult(1L, GradeStatus.QUALITY_FAIL, null, null);
         given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
 
-        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.GRADE_RESULT_NOT_REGISTRABLE);
     }
@@ -647,7 +655,7 @@ class PortfolioServiceTest {
         given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
         given(portfolioItemRepository.existsByGradeResultId(1L)).willReturn(true);
 
-        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.GRADE_RESULT_ALREADY_REGISTERED);
         then(portfolioItemRepository).should(never()).save(any());
@@ -661,7 +669,7 @@ class PortfolioServiceTest {
         given(portfolioItemRepository.existsByGradeResultId(1L)).willReturn(false);
         given(cardRepository.findByExternalId("base1-4")).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L))
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.CARD_NOT_FOUND);
     }
@@ -677,10 +685,115 @@ class PortfolioServiceTest {
         given(cardVariantRepository.findPrimaryVariantId(10L)).willReturn(Optional.empty());
         given(portfolioItemRepository.save(any(PortfolioItem.class))).willAnswer(inv -> inv.getArgument(0));
 
-        PortfolioItemResponse response = portfolioService.addFromGradeResult(1L, 1L);
+        PortfolioItemResponse response = portfolioService.addFromGradeResult(1L, 1L, null, null);
 
         assertThat(response.cardId()).isEqualTo(10L);
         assertThat(response.quantity()).isEqualTo(1);
         then(portfolioItemRepository).should().save(any(PortfolioItem.class));
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): 카드를 인식하지 못했어도 cardId를 직접 지정하면 그 카드로 등록한다")
+    void addFromGradeResult_overrideCardId_whenUnrecognized() {
+        GradeResult gradeResult = stubGradeResult(1L, GradeStatus.SUCCESS, "A", null);
+        Card overrideCard = stubCard(20L);
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
+        given(portfolioItemRepository.existsByGradeResultId(1L)).willReturn(false);
+        given(cardRepository.findById(20L)).willReturn(Optional.of(overrideCard));
+        given(cardVariantRepository.findPrimaryVariantId(20L)).willReturn(Optional.empty());
+        given(portfolioItemRepository.save(any(PortfolioItem.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PortfolioItemResponse response = portfolioService.addFromGradeResult(1L, 1L, 20L, null);
+
+        assertThat(response.cardId()).isEqualTo(20L);
+        then(cardRepository).should(never()).findByExternalId(any());
+        then(portfolioItemRepository).should().save(any(PortfolioItem.class));
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): 지정한 cardId가 존재하지 않으면 CARD_NOT_FOUND")
+    void addFromGradeResult_overrideCardId_notFound() {
+        GradeResult gradeResult = stubGradeResult(1L, GradeStatus.SUCCESS, "A", null);
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
+        given(portfolioItemRepository.existsByGradeResultId(1L)).willReturn(false);
+        given(cardRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> portfolioService.addFromGradeResult(1L, 1L, 999L, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.CARD_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("도감 등록(AI 진단): 진단에 쓴 앞면 사진을 표지로 저장하고, 조회 시 presigned URL로 내려준다")
+    void addFromGradeResult_usesFrontImageAsThumbnail() {
+        GradeResult gradeResult = stubGradeResult(1L, GradeStatus.SUCCESS, "S", "base1-4");
+        Card card = stubCard(10L);
+        GradeResultImage front = GradeResultImage.builder()
+                .gradeResultId(1L).photoType(PhotoType.FRONT).imageUrl("ai-grade/front-key.png").build();
+        GradeResultImage back = GradeResultImage.builder()
+                .gradeResultId(1L).photoType(PhotoType.BACK).imageUrl("ai-grade/back-key.png").build();
+        given(gradeResultRepository.findById(1L)).willReturn(Optional.of(gradeResult));
+        given(portfolioItemRepository.existsByGradeResultId(1L)).willReturn(false);
+        given(cardRepository.findByExternalId("base1-4")).willReturn(Optional.of(card));
+        given(cardVariantRepository.findPrimaryVariantId(10L)).willReturn(Optional.empty());
+        given(gradeResultImageRepository.findByGradeResultId(1L)).willReturn(List.of(back, front));
+        given(s3FileStorage.generatePresignedUrl("ai-grade/front-key.png")).willReturn("https://s3.example/front-presigned");
+        given(portfolioItemRepository.save(any(PortfolioItem.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PortfolioItemResponse response = portfolioService.addFromGradeResult(1L, 1L, null, null);
+
+        assertThat(response.cardImageSmall()).isEqualTo("https://s3.example/front-presigned");
+    }
+
+    // ===== setThumbnail =====
+
+    @Test
+    @DisplayName("표지 사진 변경: 정상 업로드 시 S3 key를 저장하고 presigned URL을 반환한다")
+    void setThumbnail_success() {
+        PortfolioItem item = PortfolioItem.builder().userId(1L).cardId(10L).quantity(1).build();
+        Card card = stubCard(10L);
+        MultipartFile image = new MockMultipartFile("image", "a.png", "image/png", new byte[10]);
+        given(portfolioItemRepository.findByIdAndUserId(5L, 1L)).willReturn(Optional.of(item));
+        given(s3FileStorage.upload(image, "portfolio")).willReturn("portfolio/new-key.png");
+        given(s3FileStorage.generatePresignedUrl("portfolio/new-key.png")).willReturn("https://s3.example/new-presigned");
+        given(cardRepository.findById(10L)).willReturn(Optional.of(card));
+        given(cardVariantRepository.findPrimaryVariantId(10L)).willReturn(Optional.empty());
+
+        PortfolioItemResponse response = portfolioService.setThumbnail(1L, 5L, image);
+
+        assertThat(item.getThumbnailKey()).isEqualTo("portfolio/new-key.png");
+        assertThat(response.cardImageSmall()).isEqualTo("https://s3.example/new-presigned");
+    }
+
+    @Test
+    @DisplayName("표지 사진 변경: 본인 소유가 아니거나 없는 항목이면 PORTFOLIO_ITEM_NOT_FOUND")
+    void setThumbnail_notFound() {
+        MultipartFile image = new MockMultipartFile("image", "a.png", "image/png", new byte[10]);
+        given(portfolioItemRepository.findByIdAndUserId(5L, 1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> portfolioService.setThumbnail(1L, 5L, image))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PORTFOLIO_ITEM_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("표지 사진 변경: 이미지가 아닌 파일이면 UNSUPPORTED_IMAGE_TYPE")
+    void setThumbnail_unsupportedType() {
+        MultipartFile pdf = new MockMultipartFile("image", "a.pdf", "application/pdf", new byte[10]);
+
+        assertThatThrownBy(() -> portfolioService.setThumbnail(1L, 5L, pdf))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.UNSUPPORTED_IMAGE_TYPE);
+        then(portfolioItemRepository).should(never()).findByIdAndUserId(any(), any());
+    }
+
+    @Test
+    @DisplayName("표지 사진 변경: 5MB를 초과하면 FILE_TOO_LARGE")
+    void setThumbnail_tooLarge() {
+        MultipartFile large = new MockMultipartFile("image", "a.png", "image/png", new byte[(int) (5 * 1024 * 1024 + 1)]);
+
+        assertThatThrownBy(() -> portfolioService.setThumbnail(1L, 5L, large))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FILE_TOO_LARGE);
     }
 }
