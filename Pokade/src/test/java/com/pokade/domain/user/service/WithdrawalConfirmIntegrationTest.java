@@ -11,6 +11,7 @@ import com.pokade.domain.user.repository.UserRepository;
 import com.pokade.domain.user.support.AnonymizationTokenGenerator;
 import com.pokade.global.security.TokenBlacklistStore;
 import com.pokade.support.AbstractIntegrationTest;
+import com.pokade.support.TestMetricsConfig;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -36,7 +37,13 @@ import static org.mockito.Mockito.never;
  */
 @DataJpaTest
 @RecordApplicationEvents
-@Import({WithdrawalService.class, WithdrawalConfirmer.class, AnonymizationTokenGenerator.class})
+@Import({
+        WithdrawalService.class,
+        WithdrawalConfirmer.class,
+        AnonymizationTokenGenerator.class,
+        // WithdrawalService가 계측을 위해 MeterRegistry를 받는데 @DataJpaTest 슬라이스에는 그 빈이 없다.
+        TestMetricsConfig.class
+})
 class WithdrawalConfirmIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
