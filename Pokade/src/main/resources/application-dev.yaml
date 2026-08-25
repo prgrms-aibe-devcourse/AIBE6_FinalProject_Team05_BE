@@ -4,6 +4,7 @@ spring:
     username: ${DB_USER:pokade}
     password: ${DB_PASSWORD:pokade}
     driver-class-name: org.postgresql.Driver
+    # 커넥션 풀은 application.yaml 공통값을 그대로 쓴다(부하테스트를 dev에서 돌리므로 prod와 같아야 함)
 
   jpa:
     hibernate:

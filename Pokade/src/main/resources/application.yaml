@@ -34,6 +34,11 @@ spring:
             token-uri: https://kauth.kakao.com/oauth/token
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
+  datasource:
+    hikari:
+      connection-timeout: 10000   # 기본 30초는 풀 고갈을 느린 요청으로 감춰 톰캣 워커까지 묶는다
+      maximum-pool-size: 20       # AFTER_COMMIT 리스너 REQUIRES_NEW 이중 점유 대응, 기존 10
+
   jpa:
     open-in-view: false
     properties:

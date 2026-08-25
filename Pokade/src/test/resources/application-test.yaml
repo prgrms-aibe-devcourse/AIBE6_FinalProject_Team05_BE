@@ -1,4 +1,8 @@
 spring:
+  datasource:
+    hikari:
+      minimum-idle: 2   # 캐시된 테스트 컨텍스트마다 유휴 20개를 잡아 postgres max_connections 고갈(기본값=풀 크기)
+
   jpa:
     hibernate:
       ddl-auto: none
