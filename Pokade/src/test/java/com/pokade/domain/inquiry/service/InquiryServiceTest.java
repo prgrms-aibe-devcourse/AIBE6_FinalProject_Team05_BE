@@ -8,6 +8,7 @@ import com.pokade.domain.inquiry.entity.InquiryCategory;
 import com.pokade.domain.inquiry.entity.InquiryImage;
 import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
+import com.pokade.domain.inquiry.repository.InquiryNotificationCleanupRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
 import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.user.entity.User;
@@ -46,6 +47,8 @@ class InquiryServiceTest {
     private InquiryRepository inquiryRepository;
     @Mock
     private InquiryImageRepository inquiryImageRepository;
+    @Mock
+    private InquiryNotificationCleanupRepository inquiryNotificationCleanupRepository;
     @Mock
     private S3FileStorage s3FileStorage;
     @Mock
@@ -272,6 +275,9 @@ class InquiryServiceTest {
 
         then(inquiryImageRepository).should().deleteAll(List.of(image));
         then(s3FileStorage).should().delete("inquiries/a.png");
+        // 문의 등록 시 관리자에게 보낸 INQUIRY_RECEIVED 알림이 notifications.inquiry_id로 이 문의를
+        // 참조하고 있어, 먼저 지우지 않으면 FK 위반으로 삭제 자체가 실패한다(실제로 로컬에서 재현됨).
+        then(inquiryNotificationCleanupRepository).should().deleteByInquiryId(5L);
         then(inquiryRepository).should().delete(inquiry);
     }
 

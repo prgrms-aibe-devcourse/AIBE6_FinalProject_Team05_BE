@@ -7,6 +7,7 @@ import com.pokade.domain.inquiry.entity.Inquiry;
 import com.pokade.domain.inquiry.entity.InquiryImage;
 import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
+import com.pokade.domain.inquiry.repository.InquiryNotificationCleanupRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
 import com.pokade.domain.notification.service.NotificationService;
 import com.pokade.domain.user.entity.User;
@@ -43,6 +44,7 @@ public class InquiryService {
 
     private final InquiryRepository inquiryRepository;
     private final InquiryImageRepository inquiryImageRepository;
+    private final InquiryNotificationCleanupRepository inquiryNotificationCleanupRepository;
     private final S3FileStorage s3FileStorage;
     // #392: 문의 등록 시 관리자 전원에게 알림을 보내기 위한 의존성 - createInquiry()에서만 쓴다.
     private final UserRepository userRepository;
@@ -125,6 +127,9 @@ public class InquiryService {
                         inquiryId, image.getImageUrl(), e);
             }
         }
+        // 문의 등록 시 관리자에게 보낸 INQUIRY_RECEIVED 알림이 notifications.inquiry_id로 이 문의를
+        // 참조하고 있어, 먼저 정리하지 않으면 FK 제약 위반으로 문의 삭제 자체가 실패한다.
+        inquiryNotificationCleanupRepository.deleteByInquiryId(inquiryId);
         inquiryRepository.delete(inquiry);
     }
 
