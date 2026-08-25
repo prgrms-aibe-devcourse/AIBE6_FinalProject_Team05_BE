@@ -50,10 +50,14 @@ public class PortfolioItem {
     @Column(name = "grade_result_id", unique = true)
     private Long gradeResultId;
 
+    // 커스텀 표지 이미지의 S3 key. NULL이면 카드 기본 이미지를 그대로 쓴다.
+    @Column(name = "thumbnail_key")
+    private String thumbnailKey;
+
     @Builder
     public PortfolioItem(Long userId, Long cardId, Long variantId, Integer quantity,
                          Integer acquiredPrice, LocalDateTime acquiredAt, Long tradeId,
-                         Long gradeResultId) {
+                         Long gradeResultId, String thumbnailKey) {
         this.userId = userId;
         this.cardId = cardId;
         this.variantId = variantId;
@@ -62,6 +66,12 @@ public class PortfolioItem {
         this.acquiredAt = acquiredAt;
         this.tradeId = tradeId;
         this.gradeResultId = gradeResultId;
+        this.thumbnailKey = thumbnailKey;
+    }
+
+    // 도감에서 사용자가 표지 사진을 직접 바꿀 때 사용 — AI 진단 등록 여부와 무관하게 언제든 교체 가능.
+    public void changeThumbnail(String newKey) {
+        this.thumbnailKey = newKey;
     }
 
     public void update(Integer quantity, Integer acquiredPrice, LocalDateTime acquiredAt) {
