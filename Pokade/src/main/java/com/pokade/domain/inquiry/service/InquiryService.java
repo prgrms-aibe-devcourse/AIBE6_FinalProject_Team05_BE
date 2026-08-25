@@ -1,9 +1,11 @@
 package com.pokade.domain.inquiry.service;
 
 import com.pokade.domain.inquiry.dto.request.InquiryCreateRequest;
+import com.pokade.domain.inquiry.dto.request.InquiryUpdateRequest;
 import com.pokade.domain.inquiry.dto.response.InquiryResponse;
 import com.pokade.domain.inquiry.entity.Inquiry;
 import com.pokade.domain.inquiry.entity.InquiryImage;
+import com.pokade.domain.inquiry.entity.InquiryStatus;
 import com.pokade.domain.inquiry.repository.InquiryImageRepository;
 import com.pokade.domain.inquiry.repository.InquiryRepository;
 import com.pokade.domain.notification.service.NotificationService;
@@ -96,6 +98,48 @@ public class InquiryService {
             }
             throw e;
         }
+    }
+
+    @Transactional
+    public InquiryResponse updateInquiry(Long userId, Long inquiryId, InquiryUpdateRequest request) {
+        Inquiry inquiry = getOwnedUnhandledInquiry(userId, inquiryId);
+        inquiry.update(request.category(), request.title(), request.content());
+
+        List<String> imageUrls = inquiryImageRepository.findByInquiryIdOrderByIdAsc(inquiryId).stream()
+                .map(image -> s3FileStorage.generatePresignedUrl(image.getImageUrl()))
+                .toList();
+        return InquiryResponse.of(inquiry, imageUrls);
+    }
+
+    @Transactional
+    public void deleteInquiry(Long userId, Long inquiryId) {
+        Inquiry inquiry = getOwnedUnhandledInquiry(userId, inquiryId);
+
+        List<InquiryImage> images = inquiryImageRepository.findByInquiryIdOrderByIdAsc(inquiryId);
+        inquiryImageRepository.deleteAll(images);
+        for (InquiryImage image : images) {
+            try {
+                s3FileStorage.delete(image.getImageUrl());
+            } catch (RuntimeException e) {
+                log.error("문의 삭제 중 첨부 이미지 S3 객체 삭제 실패 - inquiryId={}, key={} (고아 객체 잔존)",
+                        inquiryId, image.getImageUrl(), e);
+            }
+        }
+        inquiryRepository.delete(inquiry);
+    }
+
+    // 수정·삭제 공통 검증 - 본인 소유 + 아직 답변되지 않은(UNHANDLED) 문의만 허용한다.
+    // 답변 이후에는 관리자 쪽 처리 이력을 보존하기 위해 막는다.
+    private Inquiry getOwnedUnhandledInquiry(Long userId, Long inquiryId) {
+        Inquiry inquiry = inquiryRepository.findById(inquiryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+        if (!inquiry.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        if (inquiry.getStatus() != InquiryStatus.UNHANDLED) {
+            throw new BusinessException(ErrorCode.INQUIRY_ALREADY_HANDLED);
+        }
+        return inquiry;
     }
 
     public List<InquiryResponse> getMyInquiries(Long userId) {

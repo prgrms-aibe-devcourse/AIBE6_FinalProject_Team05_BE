@@ -1,6 +1,7 @@
 package com.pokade.domain.inquiry.service;
 
 import com.pokade.domain.inquiry.dto.request.InquiryCreateRequest;
+import com.pokade.domain.inquiry.dto.request.InquiryUpdateRequest;
 import com.pokade.domain.inquiry.dto.response.InquiryResponse;
 import com.pokade.domain.inquiry.entity.Inquiry;
 import com.pokade.domain.inquiry.entity.InquiryCategory;
@@ -27,6 +28,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -204,6 +206,87 @@ class InquiryServiceTest {
 
         then(inquiryRepository).should(never()).save(any());
         then(notificationService).should(never()).createInquiryReceivedNotification(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("본인 소유 + UNHANDLED 문의는 수정할 수 있다")
+    void updateInquiry_ownerAndUnhandled_succeeds() {
+        Inquiry inquiry = Inquiry.builder().userId(1L).title("원래 제목").content("원래 내용").category(InquiryCategory.ETC).build();
+        given(inquiryRepository.findById(5L)).willReturn(Optional.of(inquiry));
+        given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(5L)).willReturn(List.of());
+        InquiryUpdateRequest request = new InquiryUpdateRequest(InquiryCategory.PAYMENT, "새 제목", "새 내용");
+
+        InquiryResponse response = inquiryService.updateInquiry(1L, 5L, request);
+
+        assertThat(inquiry.getTitle()).isEqualTo("새 제목");
+        assertThat(inquiry.getContent()).isEqualTo("새 내용");
+        assertThat(inquiry.getCategory()).isEqualTo(InquiryCategory.PAYMENT);
+        assertThat(response.title()).isEqualTo("새 제목");
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 문의를 수정하려 하면 INQUIRY_NOT_FOUND")
+    void updateInquiry_notFound() {
+        given(inquiryRepository.findById(5L)).willReturn(Optional.empty());
+        InquiryUpdateRequest request = new InquiryUpdateRequest(InquiryCategory.PAYMENT, "새 제목", "새 내용");
+
+        assertThatThrownBy(() -> inquiryService.updateInquiry(1L, 5L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INQUIRY_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("본인 소유가 아닌 문의를 수정하려 하면 ACCESS_DENIED")
+    void updateInquiry_notOwner_accessDenied() {
+        Inquiry inquiry = Inquiry.builder().userId(2L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        given(inquiryRepository.findById(5L)).willReturn(Optional.of(inquiry));
+        InquiryUpdateRequest request = new InquiryUpdateRequest(InquiryCategory.PAYMENT, "새 제목", "새 내용");
+
+        assertThatThrownBy(() -> inquiryService.updateInquiry(1L, 5L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("이미 답변된 문의를 수정하려 하면 INQUIRY_ALREADY_HANDLED")
+    void updateInquiry_alreadyHandled_rejected() {
+        Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        inquiry.answer("답변 내용");
+        given(inquiryRepository.findById(5L)).willReturn(Optional.of(inquiry));
+        InquiryUpdateRequest request = new InquiryUpdateRequest(InquiryCategory.PAYMENT, "새 제목", "새 내용");
+
+        assertThatThrownBy(() -> inquiryService.updateInquiry(1L, 5L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INQUIRY_ALREADY_HANDLED);
+    }
+
+    @Test
+    @DisplayName("본인 소유 + UNHANDLED 문의는 삭제할 수 있고, 첨부 이미지도 함께 정리된다")
+    void deleteInquiry_ownerAndUnhandled_succeeds() {
+        Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        InquiryImage image = InquiryImage.builder().inquiryId(5L).imageUrl("inquiries/a.png").build();
+        given(inquiryRepository.findById(5L)).willReturn(Optional.of(inquiry));
+        given(inquiryImageRepository.findByInquiryIdOrderByIdAsc(5L)).willReturn(List.of(image));
+
+        inquiryService.deleteInquiry(1L, 5L);
+
+        then(inquiryImageRepository).should().deleteAll(List.of(image));
+        then(s3FileStorage).should().delete("inquiries/a.png");
+        then(inquiryRepository).should().delete(inquiry);
+    }
+
+    @Test
+    @DisplayName("이미 답변된 문의를 삭제하려 하면 INQUIRY_ALREADY_HANDLED, 아무것도 지워지지 않는다")
+    void deleteInquiry_alreadyHandled_rejected() {
+        Inquiry inquiry = Inquiry.builder().userId(1L).title("제목").content("내용").category(InquiryCategory.ETC).build();
+        inquiry.answer("답변 내용");
+        given(inquiryRepository.findById(5L)).willReturn(Optional.of(inquiry));
+
+        assertThatThrownBy(() -> inquiryService.deleteInquiry(1L, 5L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INQUIRY_ALREADY_HANDLED);
+
+        then(inquiryRepository).should(never()).delete(any());
     }
 
     private User adminWithId(Long id) {

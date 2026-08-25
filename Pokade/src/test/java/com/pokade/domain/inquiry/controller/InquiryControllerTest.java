@@ -29,12 +29,19 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.pokade.global.exception.BusinessException;
+import com.pokade.global.exception.ErrorCode;
+import org.springframework.http.MediaType;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -105,5 +112,60 @@ class InquiryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].title").value("제목"));
+    }
+
+    @Test
+    void 본인_문의_수정에_성공하면_200과_수정된_내용을_반환한다() throws Exception {
+        InquiryResponse response = new InquiryResponse(1L, 100L, InquiryCategory.PAYMENT, InquiryStatus.UNHANDLED, "새 제목", "새 내용", List.of(), LocalDateTime.now(), null, null);
+        given(inquiryService.updateInquiry(eq(100L), eq(1L), any())).willReturn(response);
+
+        mockMvc.perform(patch("/api/inquiries/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"PAYMENT\",\"title\":\"새 제목\",\"content\":\"새 내용\"}")
+                        .with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("새 제목"));
+    }
+
+    @Test
+    void 이미_답변된_문의를_수정하면_409를_반환한다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.INQUIRY_ALREADY_HANDLED))
+                .given(inquiryService).updateInquiry(eq(100L), eq(1L), any());
+
+        mockMvc.perform(patch("/api/inquiries/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"PAYMENT\",\"title\":\"새 제목\",\"content\":\"새 내용\"}")
+                        .with(userId(100L)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INQUIRY_ALREADY_HANDLED"));
+    }
+
+    @Test
+    void 로그인하지_않으면_문의_수정시_401을_반환한다() throws Exception {
+        mockMvc.perform(patch("/api/inquiries/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"PAYMENT\",\"title\":\"새 제목\",\"content\":\"새 내용\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 본인_문의_삭제에_성공하면_200을_반환한다() throws Exception {
+        mockMvc.perform(delete("/api/inquiries/1").with(userId(100L)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 다른_사람의_문의를_삭제하면_403을_반환한다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.ACCESS_DENIED))
+                .given(inquiryService).deleteInquiry(eq(100L), eq(1L));
+
+        mockMvc.perform(delete("/api/inquiries/1").with(userId(100L)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 로그인하지_않으면_문의_삭제시_401을_반환한다() throws Exception {
+        mockMvc.perform(delete("/api/inquiries/1"))
+                .andExpect(status().isUnauthorized());
     }
 }
