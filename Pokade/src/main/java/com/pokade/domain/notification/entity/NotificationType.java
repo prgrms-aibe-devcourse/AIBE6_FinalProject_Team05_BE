@@ -27,5 +27,12 @@ public enum NotificationType {
     // #392: 등록해 둔 구매 입찰이 판매자의 즉시판매로 체결된 시점 - 입찰자는 아무 행동도 하지 않았는데
     // 거래가 시작되므로 알림이 없으면 알 방법이 없다. 수신자 관점이 "거래"가 아니라 "내 입찰"이라
     // TRADE_ 접두사를 쓰지 않는다.
-    BUY_OFFER_MATCHED
+    BUY_OFFER_MATCHED,
+
+    // 구매 입찰이 새로 등록된 시점 - 그 카드에 매물을 올려둔 판매자에게 간다. BUY_OFFER_MATCHED가
+    // "이미 팔렸다"를 알리는 사후 통보라면 이쪽은 "이 값에 팔 수 있다"를 알리는 사전 기회다.
+    // 입찰 계열끼리 나란히 읽히도록 BUY_OFFER_ 접두사를 공유하고, INQUIRY_RECEIVED와 같은 뜻으로
+    // (= 내가 처리할 것이 들어왔다) _RECEIVED를 쓴다.
+    // INQUIRY_RECEIVED와 마찬가지로 수신자가 여럿이다 - 한 입찰에 판매자 여러 명이 동시에 받는다.
+    BUY_OFFER_RECEIVED
 }

@@ -54,6 +54,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.pokade.global.event.BuyOfferCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -129,6 +132,9 @@ class PriceServiceTest {
 
     @Spy
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private PriceService priceService;
@@ -1403,5 +1409,33 @@ class PriceServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
+    }
+
+    @Test
+    @DisplayName("t69 결제승인 성공 시 저장된 구매입찰 그대로를 담은 BuyOfferCreatedEvent를 발행한다")
+    void t69() {
+        BuyOfferOrder order = pendingBuyOfferOrderOf(2L, 1L, 10L, 250000);
+        given(buyOfferOrderRepository.findByOrderId("bo-order-1")).willReturn(Optional.of(order));
+        // 실제 저장 시 PK가 채워지는 것을 재현한다 - 이벤트가 저장 전 인스턴스가 아니라 save() 결과를
+        // 쓰는지 확인하려면 둘이 구분돼야 한다(저장 전에는 id가 null이다).
+        given(buyOfferRepository.save(any(BuyOffer.class))).willAnswer(invocation -> {
+            BuyOffer saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 99L);
+            return saved;
+        });
+
+        priceService.confirmBuyOfferPurchase(2L, "pay_123", "bo-order-1", 253000);
+
+        ArgumentCaptor<BuyOfferCreatedEvent> captor = ArgumentCaptor.forClass(BuyOfferCreatedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        BuyOfferCreatedEvent event = captor.getValue();
+        assertThat(event.buyOfferId()).isEqualTo(99L);
+        assertThat(event.cardId()).isEqualTo(1L);
+        assertThat(event.variantId()).isEqualTo(10L);
+        assertThat(event.grade()).isEqualTo(ListingGrade.S);
+        assertThat(event.buyerId()).isEqualTo(2L);
+        // 이벤트의 price는 상품가만이어야 한다 - 배송비(3000)를 더한 결제 금액이 새어 들어가면
+        // 판매자에게 잘못된 값이 알림 문구로 나간다.
+        assertThat(event.price()).isEqualTo(250000);
     }
 }

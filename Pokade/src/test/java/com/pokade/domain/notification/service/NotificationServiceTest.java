@@ -636,4 +636,75 @@ class NotificationServiceTest {
         assertThat(captureEvent().userId()).isEqualTo(200L);
         then(sseEmitterStore).should(never()).findByUserId(any());
     }
+
+    // ===== 구매입찰 등록 알림(판매자 팬아웃) =====
+    // 수신자 선별(중복 제거/본인 제외/정지 판매자 제외)은 BuyOfferReceivedNoticeListener 책임이라
+    // 여기서는 검증하지 않는다 - 이 메서드는 넘겨받은 목록을 그대로 믿는 계약이다.
+    @Test
+    @DisplayName("입찰 등록 알림: 판매자 수만큼 saveAll로 한 번에 저장하고 각각 푸시 이벤트를 발행한다")
+    void createBuyOfferReceivedNotification_fansOutToEverySeller() {
+        // saveAll이 돌려주는 인스턴스로 이벤트를 만들어야 id가 채워진다 - 여기서는 인자를 그대로 되돌려준다.
+        given(notificationRepository.saveAll(anyList()))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.createBuyOfferReceivedNotification(
+                List.of(10L, 11L), 55L, "리자몽 ex", 150000, card());
+
+        ArgumentCaptor<List<Notification>> savedCaptor = ArgumentCaptor.forClass(List.class);
+        then(notificationRepository).should().saveAll(savedCaptor.capture());
+        // 저장은 판매자 수와 무관하게 saveAll 1회 - 개별 save로 새지 않았는지 함께 고정한다.
+        then(notificationRepository).should(never()).save(any());
+        assertThat(savedCaptor.getValue())
+                .extracting(Notification::getUserId, Notification::getType, Notification::getCardId)
+                .containsExactly(
+                        tuple(10L, NotificationType.BUY_OFFER_RECEIVED, 55L),
+                        tuple(11L, NotificationType.BUY_OFFER_RECEIVED, 55L));
+
+        ArgumentCaptor<NotificationPushEvent> eventCaptor = ArgumentCaptor.forClass(NotificationPushEvent.class);
+        then(eventPublisher).should(times(2)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).extracting(NotificationPushEvent::userId)
+                .containsExactly(10L, 11L);
+        // 커밋 전에 직접 쏘지 않고 이벤트만 발행한다(나머지 타입과 동일).
+        then(sseEmitterStore).should(never()).findByUserId(any());
+    }
+
+    @Test
+    @DisplayName("입찰 등록 알림: 판매자가 없으면 저장도 이벤트 발행도 하지 않는다")
+    void createBuyOfferReceivedNotification_withNoSeller_doesNothing() {
+        notificationService.createBuyOfferReceivedNotification(List.of(), 55L, "리자몽 ex", 150000, card());
+
+        then(notificationRepository).should(never()).saveAll(anyList());
+        then(eventPublisher).should(never()).publishEvent(any(NotificationPushEvent.class));
+    }
+
+    @Test
+    @DisplayName("입찰 등록 알림: 문구에 카드명과 천단위 콤마를 넣은 입찰가가 들어간다")
+    void createBuyOfferReceivedNotification_messageContainsCardNameAndPrice() {
+        given(notificationRepository.saveAll(anyList()))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.createBuyOfferReceivedNotification(
+                List.of(10L), 55L, "리자몽 ex", 150000, card());
+
+        ArgumentCaptor<List<Notification>> savedCaptor = ArgumentCaptor.forClass(List.class);
+        then(notificationRepository).should().saveAll(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().get(0).getMessage())
+                .contains("리자몽 ex")
+                .contains("150,000원")
+                .contains("즉시판매");
+    }
+
+    @Test
+    @DisplayName("입찰 등록 알림: 호출자가 넘긴 카드로 푸시 payload의 썸네일을 채운다")
+    void createBuyOfferReceivedNotification_fillsThumbnailFromGivenCard() {
+        given(notificationRepository.saveAll(anyList()))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.createBuyOfferReceivedNotification(
+                List.of(10L), 55L, "리자몽 ex", 150000, card());
+
+        // 카드를 넘겨받았으므로 푸시 시점에 다시 조회하지 않는다.
+        then(cardRepository).should(never()).findById(any());
+        assertThat(captureEvent().response().cardImageUrl()).isEqualTo("medium.png");
+    }
 }
