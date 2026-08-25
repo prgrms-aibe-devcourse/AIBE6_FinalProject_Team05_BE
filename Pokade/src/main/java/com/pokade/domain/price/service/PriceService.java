@@ -93,6 +93,8 @@ public class PriceService {
     private static final String RAW_PRICE_TYPE = "raw";
     private static final String RAW_GRADE = "";
     private static final String RAW_COMPANY = "";
+    // PSA10/PSA9/PSA8 등 공인 감정 등급의 card_prices 조회 키.
+    private static final String GRADED_PRICE_TYPE = "graded";
     // 구매입찰 결제 시 상품가에 더하는 고정 배송비(KRW) - TradeService.ready()의 즉시구매용 배송비와
     // 동일한 값/성격이며, 두 도메인이 각자 자기 상수로 갖는다(공유 상수 모듈은 아직 없음).
     private static final int SHIPPING_FEE = 3000;
@@ -182,12 +184,19 @@ public class PriceService {
                                 PriceTradeStatsRepository.CardPriceView::getCardId,
                                 PriceTradeStatsRepository.CardPriceView::getPrice));
 
-        // buyPrice/recentTradePrice가 둘 다 없는 카드용 fallback - Scrydex 동기화 비등급(raw) 시세.
-        // 우리 플랫폼 거래 이력이 없는 대다수 카드(직접 거래된 적 없는 카드)도 "가격 정보 없음" 대신 참고 시세를 보여주기 위함.
+        // buyPrice/recentTradePrice가 둘 다 없는 카드용 fallback. PSA10/PSA9/PSA8처럼 공인 인증
+        // 등급을 요청했으면 그 등급 자체의 감정 시세(card_prices의 graded 행, getGradeChart와 동일한
+        // toGradeKey 매핑)를 쓰고, 그 외(자체 AI등급 S/A/B, 등급 미지정)에는 기존처럼 Scrydex 동기화
+        // 비등급(raw) 시세를 쓴다. 우리 플랫폼 거래 이력이 없는 대다수 카드(직접 거래된 적 없는 카드)도
+        // "가격 정보 없음" 대신 참고 시세를 보여주기 위함.
+        GradeKey certifiedGradeKey = isCertifiedGrade(grade) ? toGradeKey(grade) : null;
+        String marketPriceType = certifiedGradeKey != null ? GRADED_PRICE_TYPE : RAW_PRICE_TYPE;
+        String marketGrade = certifiedGradeKey != null ? certifiedGradeKey.grade() : RAW_GRADE;
+        String marketCompany = certifiedGradeKey != null ? certifiedGradeKey.company() : RAW_COMPANY;
         Map<Long, CardPriceRepository.VariantMarketPriceView> marketPriceByVariant = variantIds.isEmpty()
                 ? Map.of()
                 : cardPriceRepository
-                        .findMarketPricesByVariantIds(variantIds, RAW_PRICE_TYPE, RAW_GRADE, RAW_COMPANY).stream()
+                        .findMarketPricesByVariantIds(variantIds, marketPriceType, marketGrade, marketCompany).stream()
                         .collect(Collectors.toMap(
                                 CardPriceRepository.VariantMarketPriceView::getVariantId,
                                 view -> view));
@@ -558,6 +567,10 @@ public class PriceService {
                 .orElseGet(() -> new PriceStatsResponse(BigDecimal.ZERO, null, 0L));
     }
 
+    private boolean isCertifiedGrade(ListingGrade grade) {
+        return grade == ListingGrade.PSA10 || grade == ListingGrade.PSA9 || grade == ListingGrade.PSA8;
+    }
+
     private GradeKey toGradeKey(ListingGrade grade) {
         return switch (grade) {
             case PSA10 -> new GradeKey("10", "PSA");
@@ -595,7 +608,7 @@ public class PriceService {
 
         GradeKey gradeKey = toGradeKey(grade);
         CardPrice cardPrice = cardPriceRepository
-                .findByVariantIdAndPriceTypeAndGradeAndCompany(resolvedVariantId, "graded", gradeKey.grade(), gradeKey.company())
+                .findByVariantIdAndPriceTypeAndGradeAndCompany(resolvedVariantId, GRADED_PRICE_TYPE, gradeKey.grade(), gradeKey.company())
                 .orElse(null);
 
         if (cardPrice == null || cardPrice.getMarket() == null) {
