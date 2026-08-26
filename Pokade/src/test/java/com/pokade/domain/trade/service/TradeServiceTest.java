@@ -1,6 +1,7 @@
 package com.pokade.domain.trade.service;
 
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.entity.ListingStatus;
 import com.pokade.domain.listing.repository.ListingRepository;
@@ -63,6 +64,9 @@ class TradeServiceTest {
 
     @Mock
     private CardRepository cardRepository;
+
+    @Mock
+    private CardNameKoResolver cardNameKoResolver;
 
     @Mock
     private UserAccessChecker userAccessChecker;
