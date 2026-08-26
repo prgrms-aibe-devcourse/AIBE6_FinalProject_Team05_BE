@@ -1,5 +1,7 @@
 package com.pokade.domain.admin.controller;
 
+import com.pokade.domain.admin.dto.response.AdminTradeResponse;
+import com.pokade.domain.admin.service.AdminTradeService;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.service.TradeService;
 import com.pokade.global.response.ApiResponse;
@@ -22,14 +24,21 @@ import java.util.List;
 public class AdminTradeController {
 
     private final TradeService tradeService;
+    private final AdminTradeService adminTradeService;
 
     @Operation(
             summary = "검수/배송 대기 거래 목록 조회",
             description = "발송됨(SHIPPED_TO_PLATFORM, 검수 대기)·검수됨(INSPECTED, 배송 대기) 거래를 접수순으로 조회합니다."
     )
     @GetMapping
-    public ApiResponse<List<TradeResponse>> getPendingTrades() {
-        return ApiResponse.ok(tradeService.getPendingTrades());
+    public ApiResponse<List<AdminTradeResponse>> getPendingTrades() {
+        return ApiResponse.ok(adminTradeService.getPendingTrades());
+    }
+
+    @Operation(summary = "거래 상세 조회", description = "거래 번호로 거래 상세(현재 진행 상황)를 조회합니다.")
+    @GetMapping("/{id}")
+    public ApiResponse<AdminTradeResponse> getTrade(@Parameter(description = "거래 ID") @PathVariable Long id) {
+        return ApiResponse.ok(adminTradeService.getTrade(id));
     }
 
     @Operation(summary = "검수 완료 처리", description = "발송된 거래를 검수 완료 처리합니다 (SHIPPED_TO_PLATFORM → INSPECTED).")
