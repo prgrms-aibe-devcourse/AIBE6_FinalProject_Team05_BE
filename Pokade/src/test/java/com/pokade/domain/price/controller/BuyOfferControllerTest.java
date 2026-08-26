@@ -44,6 +44,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -297,6 +298,41 @@ class BuyOfferControllerTest {
                         .with(userId(100L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("BUY_OFFER_ALREADY_MATCHED"));
+    }
+
+    @Test
+    void 구매입찰을_취소하면_200과_취소된_상태를_반환한다() throws Exception {
+        MyBuyOfferResponse response = new MyBuyOfferResponse(
+                5L, 1L, "리자몽", null, "img-1", 10L, 250000, ListingGrade.S, "CANCELLED", 3000, 0,
+                "홍길동", "010-9999-8888", "서울시 서초구", LocalDateTime.now());
+        given(priceService.cancelBuyOffer(5L, 100L)).willReturn(response);
+
+        mockMvc.perform(delete("/api/buy-offers/5")
+                        .with(userId(100L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+    }
+
+    @Test
+    void 본인이_아니면_취소시_403을_반환한다() throws Exception {
+        given(priceService.cancelBuyOffer(5L, 200L))
+                .willThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
+
+        mockMvc.perform(delete("/api/buy-offers/5")
+                        .with(userId(200L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void 이미_체결된_구매입찰을_취소하면_409를_반환한다() throws Exception {
+        given(priceService.cancelBuyOffer(5L, 100L))
+                .willThrow(new BusinessException(ErrorCode.BUY_OFFER_ALREADY_MATCHED));
+
+        mockMvc.perform(delete("/api/buy-offers/5")
+                        .with(userId(100L)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("BUY_OFFER_ALREADY_MATCHED"));
     }

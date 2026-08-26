@@ -141,4 +141,14 @@ public class BuyOffer {
         this.recipientPhone = recipientPhone;
         this.recipientAddress = recipientAddress;
     }
+
+    // 취소(환불) - ACTIVE가 아니면(이미 체결/취소) 거부한다. markMatched()/updateRecipient()와 달리
+    // 만료 여부는 확인하지 않는다 - 만료 자체는 자동 환불을 트리거하지 않으므로(별도 배치 없음),
+    // 유일한 환불 경로인 취소를 만료됐다는 이유로 막으면 그 돈을 영영 못 돌려받는다.
+    public void cancel() {
+        if (!"ACTIVE".equals(this.status)) {
+            throw new BusinessException(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
+        }
+        this.status = "CANCELLED";
+    }
 }

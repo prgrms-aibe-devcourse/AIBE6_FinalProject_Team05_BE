@@ -446,6 +446,26 @@ public class PriceService {
         return MyBuyOfferResponse.of(buyOffer, card, cardNameKo);
     }
 
+    // 마이페이지 "입찰" 주문서에서 결제 취소 - TradeService.cancelTrade()와 동일한 순서(상태 전이 먼저,
+    // 그다음 실제 환불)를 따른다. 토스 에스크로 결제가 있었으면 결제취소, 포인트를 미리 썼으면 환불.
+    // 포인트로 전액 충당한 경우 tossPaymentKey가 없어 토스 호출 자체를 건너뛴다.
+    @Transactional
+    public MyBuyOfferResponse cancelBuyOffer(Long buyOfferId, Long buyerId) {
+        BuyOffer buyOffer = getOwnedBuyOffer(buyOfferId, buyerId);
+        buyOffer.cancel();
+
+        if (buyOffer.getTossPaymentKey() != null) {
+            tossPaymentClient.cancelPayment(buyOffer.getTossPaymentKey(), "구매입찰 취소");
+        }
+        if (buyOffer.getPointsUsed() != null && buyOffer.getPointsUsed() > 0) {
+            pointService.refund(buyerId, buyOffer.getPointsUsed(), null);
+        }
+
+        Card card = cardRepository.findById(buyOffer.getCardId()).orElse(null);
+        String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+        return MyBuyOfferResponse.of(buyOffer, card, cardNameKo);
+    }
+
     private BuyOffer getOwnedBuyOffer(Long buyOfferId, Long buyerId) {
         BuyOffer buyOffer = buyOfferRepository.findById(buyOfferId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BUY_OFFER_NOT_FOUND));
