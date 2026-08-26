@@ -1,5 +1,6 @@
 package com.pokade.domain.trade.dto;
 
+import com.pokade.domain.listing.entity.ListingGrade;
 import com.pokade.domain.trade.entity.Trade;
 import com.pokade.domain.trade.entity.TradeStatus;
 
@@ -12,7 +13,11 @@ public record TradeResponse(
         Long sellerId,
         Long cardId,
         String cardName,
+        // 한글 매핑이 없으면 null(어설픈 오번역보다 안전하다는 팀 컨벤션, domain.ai/domain.portfolio와 동일).
+        // 표시할 땐 cardNameKo ?? cardName.
+        String cardNameKo,
         String cardImageUrl,
+        ListingGrade grade,
         Integer price,
         TradeStatus status,
         LocalDateTime shippedAt,
@@ -27,7 +32,8 @@ public record TradeResponse(
         Integer pointsUsed
 ) {
 
-    public static TradeResponse of(Trade trade, String cardName, String cardImageUrl, Integer pointsUsed) {
+    public static TradeResponse of(
+            Trade trade, String cardName, String cardNameKo, String cardImageUrl, Integer pointsUsed) {
         return new TradeResponse(
                 trade.getId(),
                 trade.getListing().getId(),
@@ -35,7 +41,9 @@ public record TradeResponse(
                 trade.getListing().getSellerId(),
                 trade.getListing().getCardId(),
                 cardName,
+                cardNameKo,
                 cardImageUrl,
+                trade.getListing().getGrade(),
                 trade.getPrice(),
                 trade.getStatus(),
                 trade.getShippedAt(),

@@ -78,7 +78,7 @@ class MyTradeControllerTest {
 
     private MyTradeResponse sampleResponse() {
         return new MyTradeResponse(
-                10L, 20L, 30L, "리자몽", "https://img/small.png",
+                10L, 20L, 30L, "리자몽", null, "https://img/small.png", null,
                 50000, TradeStatus.COMPLETED, TradeRole.BUY, 99L,
                 LocalDateTime.of(2026, 5, 10, 12, 0),
                 LocalDateTime.of(2026, 5, 12, 9, 0));
