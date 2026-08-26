@@ -31,7 +31,7 @@ public class AdminMetricsService {
     private static final List<CardDefinition> CARDS = List.of(
             new CardDefinition("totalVisits", "총 방문자 수",
                     "sum(increase(site_visits_total[" + TOTAL_WINDOW + "]))", "명",
-                    "오늘 증가", "increase(site_visits_total[24h])"),
+                    "오늘 증가", "sum(increase(site_visits_total[24h]))"),
             new CardDefinition("aiGradeTotal", "AI 등급진단 총 사용 수",
                     "sum(increase(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
                             + "\",method=\"POST\",status=\"200\"}[" + TOTAL_WINDOW + "]))", "회",
@@ -52,7 +52,7 @@ public class AdminMetricsService {
 
     // group이 같으면 스케일이 맞아 한 차트에 겹쳐 그릴 수 있다(FE가 구분); %1$s는 period.step으로 채워져 increase() 구간을 조회 단위에 맞춘다.
     private static final List<SeriesDefinition> SERIES = List.of(
-            new SeriesDefinition("visits", "방문 수", "increase(site_visits_total[%1$s])", "회", "activity"),
+            new SeriesDefinition("visits", "방문 수", "sum(increase(site_visits_total[%1$s]))", "회", "activity"),
             new SeriesDefinition("aiGrade", "AI 진단 사용 수",
                     "sum(increase(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
                             + "\",method=\"POST\",status=\"200\"}[%1$s]))", "회", "activity"),
