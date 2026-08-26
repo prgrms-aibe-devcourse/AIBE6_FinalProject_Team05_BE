@@ -69,6 +69,14 @@ jobs:
           script: |
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             IMAGE=ghcr.io/${{ github.repository_owner }}/pokade-backend:latest
+            IMAGE_BASE="${IMAGE%:latest}"
+
+            # 롤백용 백업 2세대 유지: backup-1(직전) -> backup-2(그 이전), 3세대는 자동 dangling 처리되어 prune된다.
+            docker image inspect "$IMAGE_BASE:backup-1" >/dev/null 2>&1 && \
+              docker tag "$IMAGE_BASE:backup-1" "$IMAGE_BASE:backup-2"
+            docker image inspect "$IMAGE" >/dev/null 2>&1 && \
+              docker tag "$IMAGE" "$IMAGE_BASE:backup-1"
+
             docker pull "$IMAGE"
 
             CURRENT_SLOT=$(cat ~/pokade-active-slot 2>/dev/null || echo "")
@@ -117,9 +125,13 @@ jobs:
 
             echo "$TARGET" > ~/pokade-active-slot
 
-            # 48시간 지난 미사용 이미지 정리 - EC2 로컬 디스크가 무한정 쌓이는 걸 방지.
+            # 미사용(dangling) 이미지 정리 - EC2 로컬 디스크가 무한정 쌓이는 걸 방지.
             # GHCR 쪽 정리(cleanup-old-images job)는 레지스트리만 청소하고 로컬 pull 이미지는
             # 안 지워서, 배포를 반복할수록 디스크가 가득 차 배포가 실패하는 문제가 있었다.
-            docker image prune -af --filter "until=48h" || true
+            # until=48h 필터를 쓰면 배포 주기(하루 여러 번)가 48시간보다 짧아 이미지가
+            # 지워지기 전에 계속 쌓였다. -a는 태그 없는(dangling) 이미지만 지우고 현재
+            # 실행 중인 이미지는 건드리지 않으므로 시간 제한 없이 매 배포마다 정리한다.
+            # backup-1/backup-2는 태그가 있어 dangling이 아니므로 이 prune에 영향받지 않는다.
+            docker image prune -af || true
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
