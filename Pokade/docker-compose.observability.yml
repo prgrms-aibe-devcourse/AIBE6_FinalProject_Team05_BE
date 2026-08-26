@@ -11,6 +11,16 @@ services:
     image: prom/prometheus:latest
     container_name: pokade-prometheus
     restart: unless-stopped
+    # 기본 보존 기간(15d)으로는 어드민 대시보드의 "총 방문자 수" 등 누적 카드가 재시작을 겪을 때마다
+    # sum(increase(...[90d])) 구간 밖으로 과거 데이터가 밀려 사실상 줄어드는 문제가 생긴다
+    # (AdminMetricsService.TOTAL_WINDOW 참고, 90d로 맞춰뒀으니 여기도 같이 바꿀 것). 나머지 플래그는
+    # 이미지 기본 CMD를 그대로 유지 - command를 지정하면 기본값이 전부 사라지므로 명시해야 한다.
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=90d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
