@@ -23,19 +23,23 @@ public class AdminMetricsService {
     static final String AI_GRADE_URI = "/api/ai/grade";
     static final String TRADE_CONFIRM_URI = "/api/trades/{id}/confirm";
 
+    // increase()는 카운터 리셋(BE 재시작)을 자동 보정해줘서 원시값과 달리 재시작에도 안 끊긴다.
+    // Prometheus 보존 기간(docker-compose.observability*.yml)과 맞춰뒀으니 같이 바꿀 것.
+    private static final String TOTAL_WINDOW = "90d";
+
     // 새 지표는 (필요 시 계측 후) 이 리스트에 한 줄만 추가하면 되고, 이미 자동 계측되는 지표는 uri 필터링만으로 추가 가능하다.
     private static final List<CardDefinition> CARDS = List.of(
-            // 카운터 원값 자체가 "누적" - 마지막 BE 재시작 이후로 쌓인 합계다(재시작 시 0으로 리셋됨).
-            new CardDefinition("totalVisits", "총 방문자 수", "site_visits_total", "명",
-                    "오늘 증가", "increase(site_visits_total[24h])"),
+            new CardDefinition("totalVisits", "총 방문자 수",
+                    "sum(increase(site_visits_total[" + TOTAL_WINDOW + "]))", "명",
+                    "오늘 증가", "sum(increase(site_visits_total[24h]))"),
             new CardDefinition("aiGradeTotal", "AI 등급진단 총 사용 수",
-                    "sum(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
-                            + "\",method=\"POST\",status=\"200\"})", "회",
+                    "sum(increase(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
+                            + "\",method=\"POST\",status=\"200\"}[" + TOTAL_WINDOW + "]))", "회",
                     "오늘 증가", "sum(increase(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
                             + "\",method=\"POST\",status=\"200\"}[24h]))"),
             new CardDefinition("tradesConfirmedTotal", "거래 확정 총 건수",
-                    "sum(http_server_requests_seconds_count{uri=\"" + TRADE_CONFIRM_URI
-                            + "\",method=\"PATCH\",status=\"200\"})", "건",
+                    "sum(increase(http_server_requests_seconds_count{uri=\"" + TRADE_CONFIRM_URI
+                            + "\",method=\"PATCH\",status=\"200\"}[" + TOTAL_WINDOW + "]))", "건",
                     "오늘 증가", "sum(increase(http_server_requests_seconds_count{uri=\"" + TRADE_CONFIRM_URI
                             + "\",method=\"PATCH\",status=\"200\"}[24h]))"),
             new CardDefinition("httpErrorRate24h", "HTTP 5xx 에러율(24h)",
@@ -48,7 +52,7 @@ public class AdminMetricsService {
 
     // group이 같으면 스케일이 맞아 한 차트에 겹쳐 그릴 수 있다(FE가 구분); %1$s는 period.step으로 채워져 increase() 구간을 조회 단위에 맞춘다.
     private static final List<SeriesDefinition> SERIES = List.of(
-            new SeriesDefinition("visits", "방문 수", "increase(site_visits_total[%1$s])", "회", "activity"),
+            new SeriesDefinition("visits", "방문 수", "sum(increase(site_visits_total[%1$s]))", "회", "activity"),
             new SeriesDefinition("aiGrade", "AI 진단 사용 수",
                     "sum(increase(http_server_requests_seconds_count{uri=\"" + AI_GRADE_URI
                             + "\",method=\"POST\",status=\"200\"}[%1$s]))", "회", "activity"),

@@ -21,6 +21,14 @@ services:
     image: prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
     container_name: pokade-prometheus
     restart: unless-stopped
+    # AdminMetricsService.TOTAL_WINDOW(90d)와 맞춰야 하는 값 - 같이 바꿀 것.
+    # command를 지정하면 이미지 기본 CMD가 전부 사라지므로 나머지 플래그도 함께 명시했다.
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=90d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
     volumes:
       - ./observability/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus

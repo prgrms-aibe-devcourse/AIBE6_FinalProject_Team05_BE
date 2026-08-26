@@ -2,6 +2,7 @@ package com.pokade.domain.trade.service;
 
 import com.pokade.domain.card.entity.Card;
 import com.pokade.domain.card.repository.CardRepository;
+import com.pokade.domain.card.support.CardNameKoResolver;
 import com.pokade.domain.listing.entity.Listing;
 import com.pokade.domain.listing.repository.ListingRepository;
 import com.pokade.domain.point.client.TossPaymentClient;
@@ -55,6 +56,7 @@ public class TradeService {
     private final TradeRepository tradeRepository;
     private final PaymentRepository paymentRepository;
     private final CardRepository cardRepository;
+    private final CardNameKoResolver cardNameKoResolver;
     private final UserAccessChecker userAccessChecker;
     private final UserRepository userRepository;
     private final TradeOrderRepository tradeOrderRepository;
@@ -72,6 +74,7 @@ public class TradeService {
         return TradeResponse.of(
                 trade,
                 card != null ? card.getName() : null,
+                card != null ? cardNameKoResolver.resolve(card) : null,
                 card != null ? card.getImageSmall() : null,
                 pointsUsed);
     }
@@ -331,8 +334,11 @@ public class TradeService {
         Map<Long, Card> cards = cardRepository.findAllById(cardIds).stream()
                 .collect(Collectors.toMap(Card::getId, Function.identity()));
 
-        return trades.map(trade ->
-                MyTradeResponse.of(trade, userId, cards.get(trade.getListing().getCardId())));
+        return trades.map(trade -> {
+            Card card = cards.get(trade.getListing().getCardId());
+            String cardNameKo = card != null ? cardNameKoResolver.resolve(card) : null;
+            return MyTradeResponse.of(trade, userId, card, cardNameKo);
+        });
     }
 
     @Transactional
