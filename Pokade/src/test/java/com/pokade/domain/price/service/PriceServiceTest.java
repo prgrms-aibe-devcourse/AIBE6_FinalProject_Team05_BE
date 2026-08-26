@@ -1438,4 +1438,46 @@ class PriceServiceTest {
         // 판매자에게 잘못된 값이 알림 문구로 나간다.
         assertThat(event.price()).isEqualTo(250000);
     }
+
+    @Test
+    @DisplayName("t70 ACTIVE 상태면 취소 시 토스 결제취소와 포인트 환불을 모두 처리한다")
+    void t70() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+        given(cardRepository.findById(1L)).willReturn(java.util.Optional.of(Card.builder().id(1L).name("리자몽").build()));
+
+        MyBuyOfferResponse response = priceService.cancelBuyOffer(7L, 1L);
+
+        assertThat(response.status()).isEqualTo("CANCELLED");
+        assertThat(buyOffer.getStatus()).isEqualTo("CANCELLED");
+        verify(tossPaymentClient).cancelPayment("pay_999", "구매입찰 취소");
+        verify(pointService).refund(1L, 1000, null);
+    }
+
+    @Test
+    @DisplayName("t71 본인이 아니면 취소 시 ACCESS_DENIED 예외가 발생한다")
+    void t71() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+
+        assertThatThrownBy(() -> priceService.cancelBuyOffer(7L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+        verifyNoInteractions(tossPaymentClient, pointService);
+    }
+
+    @Test
+    @DisplayName("t72 이미 체결된 구매입찰을 취소하면 BUY_OFFER_ALREADY_MATCHED 예외가 발생하고 환불도 일어나지 않는다")
+    void t72() {
+        BuyOffer buyOffer = activeBuyOfferOf(7L, 1L);
+        buyOffer.markMatched();
+        given(buyOfferRepository.findById(7L)).willReturn(java.util.Optional.of(buyOffer));
+
+        assertThatThrownBy(() -> priceService.cancelBuyOffer(7L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.BUY_OFFER_ALREADY_MATCHED);
+        verifyNoInteractions(tossPaymentClient, pointService);
+    }
 }

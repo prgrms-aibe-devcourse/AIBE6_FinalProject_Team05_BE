@@ -20,6 +20,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -106,6 +107,18 @@ public class BuyOfferController {
             @PathVariable Long buyOfferId
     ) {
         return ApiResponse.ok(priceService.getMyBuyOffer(buyOfferId, buyerId));
+    }
+
+    @Operation(
+            summary = "구매입찰 결제 취소",
+            description = "결제 완료(ACTIVE)된 구매입찰을 취소합니다. 토스 에스크로 결제취소 및/또는 포인트 환불을 처리합니다."
+    )
+    @DeleteMapping("/{buyOfferId}")
+    public ApiResponse<MyBuyOfferResponse> cancel(
+            @AuthenticationPrincipal Long buyerId,
+            @PathVariable Long buyOfferId
+    ) {
+        return ApiResponse.ok("구매입찰이 취소되었습니다.", priceService.cancelBuyOffer(buyOfferId, buyerId));
     }
 
     @Operation(
