@@ -59,15 +59,20 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           envs: OPENAI_API_KEY
-          # GHCR 로그인·이미지 pull·헬스체크가 실패하면 즉시 중단 — 기존 컨테이너와
+          # 이미지 pull·헬스체크가 실패하면 즉시 중단 — 기존 컨테이너와
           # nginx 설정을 건드리지 않은 채로 배포만 실패한다(기본값 false라 명시 필요).
           script_stop: true
-          # 임시 디버깅용 - docker login 직후 SSH 세션이 원인 불명으로 조기 종료되는
-          # 문제의 실제 원인(타임아웃/keepalive/네트워크 리셋 등)을 SSH 클라이언트
-          # 레벨 로그로 확인하기 위함. 원인 파악되면 제거할 것.
+          # 임시 디버깅용 - 배포 스크립트 시작 직후 SSH 세션이 원인 불명으로
+          # 조기 종료되는 문제의 실제 원인(타임아웃/keepalive/네트워크 리셋 등)을
+          # SSH 클라이언트 레벨 로그로 확인하기 위함. 원인 파악되면 제거할 것.
           debug: true
           script: |
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # GHCR 로그인은 매 배포마다 하지 않는다 — docker login은 자격증명을
+            # ~/.docker/config.json에 영구 저장하므로 EC2가 한 번만 로그인해두면
+            # 이후 pull엔 재로그인이 불필요하다. 매번 반복하면 SSH exec로 매번
+            # 전송되는 스크립트에 시크릿 처리 줄이 하나 더 늘어날 뿐이라 제거함.
+            # GHCR_PAT가 회전되면 EC2에서 수동으로 한 번만 다시 로그인해야 한다:
+            #   echo "$GHCR_PAT" | docker login ghcr.io -u <user> --password-stdin
             IMAGE=ghcr.io/${{ github.repository_owner }}/pokade-backend:latest
             IMAGE_BASE="${IMAGE%:latest}"
 
