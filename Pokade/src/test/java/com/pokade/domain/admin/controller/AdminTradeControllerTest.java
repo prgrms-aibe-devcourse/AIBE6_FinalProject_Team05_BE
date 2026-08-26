@@ -1,5 +1,7 @@
 package com.pokade.domain.admin.controller;
 
+import com.pokade.domain.admin.dto.response.AdminTradeResponse;
+import com.pokade.domain.admin.service.AdminTradeService;
 import com.pokade.domain.trade.dto.TradeResponse;
 import com.pokade.domain.trade.entity.TradeStatus;
 import com.pokade.domain.trade.service.TradeService;
@@ -48,6 +50,9 @@ class AdminTradeControllerTest {
     private TradeService tradeService;
 
     @MockitoBean
+    private AdminTradeService adminTradeService;
+
+    @MockitoBean
     private JwtTokenProvider jwtTokenProvider;
 
     @MockitoBean
@@ -86,21 +91,54 @@ class AdminTradeControllerTest {
                 LocalDateTime.now(), null, null, null, null, null, null, null, LocalDateTime.now(), null);
     }
 
+    private AdminTradeResponse adminTradeResponseOf(Long id, TradeStatus status) {
+        return AdminTradeResponse.of(tradeResponseOf(id, status), "구매자닉네임", "판매자닉네임");
+    }
+
     @Test
     void 검수_배송_대기_목록_조회에_성공하면_200을_반환한다() throws Exception {
-        given(tradeService.getPendingTrades())
-                .willReturn(List.of(tradeResponseOf(1L, TradeStatus.SHIPPED_TO_PLATFORM)));
+        given(adminTradeService.getPendingTrades())
+                .willReturn(List.of(adminTradeResponseOf(1L, TradeStatus.SHIPPED_TO_PLATFORM)));
 
         mockMvc.perform(get("/api/admin/trades").with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].status").value("SHIPPED_TO_PLATFORM"));
+                .andExpect(jsonPath("$.data[0].status").value("SHIPPED_TO_PLATFORM"))
+                .andExpect(jsonPath("$.data[0].buyerNickname").value("구매자닉네임"))
+                .andExpect(jsonPath("$.data[0].sellerNickname").value("판매자닉네임"));
     }
 
     @Test
     void 관리자가_아니면_대기_목록_조회시_403을_반환한다() throws Exception {
         mockMvc.perform(get("/api/admin/trades").with(user()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 거래_상세_조회에_성공하면_200과_닉네임을_반환한다() throws Exception {
+        given(adminTradeService.getTrade(1L))
+                .willReturn(adminTradeResponseOf(1L, TradeStatus.SHIPPED_TO_PLATFORM));
+
+        mockMvc.perform(get("/api/admin/trades/{id}", 1L).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.buyerNickname").value("구매자닉네임"))
+                .andExpect(jsonPath("$.data.sellerNickname").value("판매자닉네임"));
+    }
+
+    @Test
+    void 관리자가_아니면_거래_상세_조회시_403을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/admin/trades/{id}", 1L).with(user()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 존재하지_않는_거래를_상세조회하면_404를_반환한다() throws Exception {
+        willThrow(new BusinessException(ErrorCode.TRADE_NOT_FOUND))
+                .given(adminTradeService).getTrade(999L);
+
+        mockMvc.perform(get("/api/admin/trades/{id}", 999L).with(admin()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRADE_NOT_FOUND"));
     }
 
     @Test
