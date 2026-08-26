@@ -316,6 +316,14 @@ public class TradeService {
         return toResponse(trade);
     }
 
+    // 관리자 페이지에서 호출 — getTrade()와 달리 참여자(구매자/판매자) 확인을 하지 않는다.
+    // 인가(관리자 권한 확인)는 markInspected()/markDelivered()와 동일하게 호출하는 쪽(관리자 도메인)의 책임.
+    public TradeResponse getTradeForAdmin(Long tradeId) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRADE_NOT_FOUND));
+        return toResponse(trade);
+    }
+
     public Page<MyTradeResponse> getMyTrades(Long userId, MyTradeSearchCondition condition, Pageable pageable) {
         Page<Trade> trades = tradeRepository.findMyTrades(
                 userId,
