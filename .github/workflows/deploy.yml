@@ -83,10 +83,12 @@ jobs:
             IMAGE_BASE="${IMAGE%:latest}"
 
             # 롤백용 백업 2세대 유지: backup-1(직전) -> backup-2(그 이전), 3세대는 자동 dangling 처리되어 prune된다.
+            # script_stop(set -e) 아래에서 "cmd1 && cmd2"는 cmd1만 실패해도(=백업이 아직 없어도) 전체
+            # 스크립트가 죽는다 - 태그가 없는 첫 배포마다 여기서 계속 실패했다. || true로 무해화.
             docker image inspect "$IMAGE_BASE:backup-1" >/dev/null 2>&1 && \
-              docker tag "$IMAGE_BASE:backup-1" "$IMAGE_BASE:backup-2"
+              docker tag "$IMAGE_BASE:backup-1" "$IMAGE_BASE:backup-2" || true
             docker image inspect "$IMAGE" >/dev/null 2>&1 && \
-              docker tag "$IMAGE" "$IMAGE_BASE:backup-1"
+              docker tag "$IMAGE" "$IMAGE_BASE:backup-1" || true
 
             docker pull "$IMAGE"
 
