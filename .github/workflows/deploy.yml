@@ -58,7 +58,11 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: OPENAI_API_KEY
+          port: 22
+          # SSH 세션이 원인 불명으로 조기 종료되는 문제 조사 중 임시로 넉넉하게 늘림
+          # (기본값: timeout 30s, command_timeout 10m).
+          timeout: 60s
+          command_timeout: 15m
           # 이미지 pull·헬스체크가 실패하면 즉시 중단 — 기존 컨테이너와
           # nginx 설정을 건드리지 않은 채로 배포만 실패한다(기본값 false라 명시 필요).
           script_stop: true
@@ -67,6 +71,8 @@ jobs:
           # SSH 클라이언트 레벨 로그로 확인하기 위함. 원인 파악되면 제거할 것.
           debug: true
           script: |
+            #!/bin/bash
+            set -e
             # GHCR 로그인은 매 배포마다 하지 않는다 — docker login은 자격증명을
             # ~/.docker/config.json에 영구 저장하므로 EC2가 한 번만 로그인해두면
             # 이후 pull엔 재로그인이 불필요하다. 매번 반복하면 SSH exec로 매번
@@ -97,7 +103,6 @@ jobs:
               --env-file ~/AIBE6_FinalProject_Team05_BE/Pokade/.env \
               -e SPRING_PROFILES_ACTIVE=prod \
               -e TZ=Asia/Seoul \
-              -e OPENAI_API_KEY="$OPENAI_API_KEY" \
               -e REDIS_HOST=pokade-redis \
               -e MANAGEMENT_ADDRESS=0.0.0.0 \
               "$IMAGE"
@@ -143,5 +148,3 @@ jobs:
             # 실행 중인 이미지는 건드리지 않으므로 시간 제한 없이 매 배포마다 정리한다.
             # backup-1/backup-2는 태그가 있어 dangling이 아니므로 이 prune에 영향받지 않는다.
             docker image prune -af || true
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
